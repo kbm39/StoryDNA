@@ -1,0 +1,279 @@
+// Database row types. Kept in sync by hand with supabase/migrations.
+
+export type Provider = "openai" | "anthropic";
+export type Perspective = "commercial" | "craft" | "screen";
+export type IssueStatus = "outstanding" | "resolved";
+
+export interface Manuscript {
+  id: string;
+  title: string;
+  original_filename: string;
+  storage_path: string;
+  file_size: number | null;
+  word_count: number | null;
+  extracted_text: string | null;
+  status: string;
+  archived: boolean;
+  series_id: string | null;
+  series_order: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Series {
+  id: string;
+  title: string;
+  logline: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DocType = "synopsis" | "opening_critique" | "line_edit" | "continuity" | "marketing";
+
+export interface ManuscriptDocument {
+  id: string;
+  manuscript_id: string;
+  doc_type: DocType;
+  provider: Provider;
+  model: string | null;
+  content: string;
+  created_at: string;
+}
+
+export type SubmissionStatus =
+  | "querying"
+  | "no_response"
+  | "rejected"
+  | "partial_request"
+  | "full_request"
+  | "offer"
+  | "withdrawn";
+
+export interface AgentSubmission {
+  id: string;
+  manuscript_id: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agency: string | null;
+  status: SubmissionStatus;
+  queried_on: string | null;
+  responded_on: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DeckScope = "manuscript" | "series";
+
+export interface PitchDeck {
+  id: string;
+  manuscript_id: string | null;
+  series_id: string | null;
+  scope: DeckScope;
+  provider: Provider;
+  model: string | null;
+  title: string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface Review {
+  id: string;
+  manuscript_id: string;
+  provider: Provider;
+  perspective: Perspective;
+  model: string | null;
+  content: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Issue {
+  id: string;
+  manuscript_id: string;
+  review_id: string | null;
+  title: string;
+  description: string | null;
+  category: string | null;
+  source_provider: Provider | null;
+  status: IssueStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Suggestion {
+  id: string;
+  /** A suggestion hangs off EITHER an issue or an editorial comment. */
+  issue_id: string | null;
+  comment_id: string | null;
+  provider: Provider;
+  model: string | null;
+  content: string;
+  applied: boolean;
+  created_at: string;
+}
+
+export type CommentStance = "agree" | "disagree" | "partial";
+
+/** An uploaded editorial analysis (one per manuscript). */
+export interface EditorialAnalysis {
+  id: string;
+  manuscript_id: string;
+  file_name: string | null;
+  raw_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A discrete comment parsed out of an editorial analysis. */
+export interface EditorialComment {
+  id: string;
+  analysis_id: string;
+  manuscript_id: string;
+  ordinal: number;
+  quote: string | null;
+  comment: string;
+  category: string | null;
+  created_at: string;
+}
+
+/** One model's stance on a single editorial comment. */
+export interface CommentAssessment {
+  id: string;
+  comment_id: string;
+  provider: Provider;
+  model: string | null;
+  stance: CommentStance;
+  reasoning: string | null;
+  created_at: string;
+}
+
+export interface IssueVerdict {
+  id: string;
+  title?: string;
+  status: IssueStatus;
+  note: string;
+}
+
+export interface RevisionCheck {
+  id: string;
+  manuscript_id: string;
+  provider: Provider;
+  model: string | null;
+  grade: string | null;
+  summary: string | null;
+  resolved_count: number;
+  outstanding_count: number;
+  issue_verdicts: IssueVerdict[] | null;
+  created_at: string;
+}
+
+export interface QueryLetter {
+  id: string;
+  manuscript_id: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agency: string | null;
+  provider: Provider;
+  model: string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface MarketabilityReport {
+  id: string;
+  manuscript_id: string;
+  file_name: string | null;
+  raw_text: string;
+  summary: string | null;
+  provider: Provider | null;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Treatment {
+  id: string;
+  manuscript_id: string | null;
+  series_id: string | null;
+  provider: Provider;
+  model: string | null;
+  format: string;
+  content: string;
+  created_at: string;
+}
+
+// --- StoryDNA (V2) -----------------------------------------------------------
+
+export interface StoryDnaEntity {
+  name: string;
+  role?: string;
+  note?: string;
+}
+
+export interface StoryDnaTimelineAnchor {
+  label: string;
+  note?: string;
+}
+
+export interface StoryDnaProtagonist {
+  name: string;
+  role: string;
+  /** 0..1 */
+  confidence: number;
+  reasoning: string;
+}
+
+export interface StoryDnaQuestion {
+  key: string;
+  trait?: string;
+  text: string;
+}
+
+export interface StoryDnaData {
+  chapters_count: number;
+  major_characters: StoryDnaEntity[];
+  supporting_characters: StoryDnaEntity[];
+  locations: StoryDnaEntity[];
+  organizations: StoryDnaEntity[];
+  timeline_anchors: StoryDnaTimelineAnchor[];
+  protagonist: StoryDnaProtagonist;
+  first_question: StoryDnaQuestion;
+}
+
+export interface StoryDna {
+  id: string;
+  manuscript_id: string;
+  provider: Provider | null;
+  model: string | null;
+  status: string;
+  chapters_count: number | null;
+  protagonist_name: string | null;
+  data: StoryDnaData;
+  created_at: string;
+  updated_at: string;
+}
+
+export type InterviewAnswer = "yes" | "no" | "not_sure";
+
+export interface StoryDnaInterviewAnswer {
+  id: string;
+  manuscript_id: string;
+  character_name: string | null;
+  question_key: string;
+  question: string;
+  answer: InterviewAnswer;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Brainstorm {
+  id: string;
+  manuscript_id: string;
+  prompt: string;
+  provider: Provider;
+  model: string | null;
+  content: string;
+  selected: boolean;
+  created_at: string;
+}

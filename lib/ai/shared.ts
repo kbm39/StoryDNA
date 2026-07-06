@@ -5,6 +5,11 @@ import type {
   StoryDnaTimelineAnchor,
   StoryDnaProtagonist,
   StoryDnaQuestion,
+  Evidence,
+  AlignedText,
+  AlignedThemes,
+  AlignedEmotional,
+  ThemeProposal,
 } from "@/lib/types";
 
 export interface ReviewResult {
@@ -907,16 +912,21 @@ export function buildStoryDnaPrompt(manuscriptText: string, maxChars: number): s
   "locations": [{"name":"Real place from the text","note":"one short line"}],
   "organizations": [{"name":"Real org/institution from the text","note":"one short line"}],
   "timeline_anchors": [{"label":"a concrete time marker or key dated event","note":"one short line"}],
-  "protagonist": {"name":"Real Name","role":"Protagonist","confidence":<number 0..1>,"reasoning":"2-3 sentences on why THIS character is the primary protagonist — grounded in the text: POV, page presence, whose choices drive the plot, whose arc the story follows"},
-  "first_question": {"key":"protagonist_trait_intentional","trait":"the single most salient personality trait of the protagonist (e.g. 'emotionally restrained', 'fiercely loyal', 'quick to anger')","text":"<Protagonist name> appears <trait> throughout much of the manuscript. Is this an intentional personality trait?"}
+  "protagonist": {"name":"Real Name","role":"Protagonist","confidence":<number 0..1>,"reasoning":"2-3 sentences on why THIS character is the primary protagonist — grounded in the text: POV, page presence, whose choices drive the plot, whose arc the story follows","evidence":[{"quote":"<verbatim passage>","locator":"<where, optional>"}]},
+  "first_question": {"key":"protagonist_trait_intentional","trait":"the single most salient personality trait of the protagonist (e.g. 'emotionally restrained', 'fiercely loyal', 'quick to anger')","text":"<Protagonist name> appears <trait> throughout much of the manuscript. Is this an intentional personality trait?"},
+  "summary": {"text":"a 2-3 sentence plot summary of the story","evidence":[{"quote":"<verbatim passage>","locator":"<where, optional>"}]},
+  "themes": [{"name":"Theme (one or two words)","evidence":[{"quote":"<verbatim passage that expresses this theme>","locator":"<where, optional>"}]}],
+  "about": {"text":"what the story is REALLY about beneath the plot — its central message or preoccupation","evidence":[{"quote":"<verbatim passage>","locator":"<where, optional>"}]},
+  "emotional_promise": {"beginning":"the emotional experience the opening promises the reader","middle":"the emotional experience through the middle","ending":"the emotional experience at the climax/ending","after_finishing":"the lasting feeling the reader is left with","evidence":[{"quote":"<verbatim passage>","locator":"<where, optional>"}]}
 }
 
 Rules:
 - Use ONLY real names, places, and events from the manuscript. Invent nothing.
-- Keep lists tight and de-duplicated: major_characters ≤ 8, supporting_characters ≤ 15, locations ≤ 15, organizations ≤ 12, timeline_anchors ≤ 12.
+- Keep lists tight and de-duplicated: major_characters ≤ 8, supporting_characters ≤ 15, locations ≤ 15, organizations ≤ 12, timeline_anchors ≤ 12, themes 3–6.
 - "protagonist" is the SINGLE character the story most centers on — the one whose journey the book follows.
 - "first_question.text" MUST follow this template verbatim, substituting the real protagonist name and the salient trait: "<Name> appears <trait> throughout much of the manuscript. Is this an intentional personality trait?"
-- confidence reflects how clearly the text points to that protagonist (1 = unmistakable).${truncationNote(truncated, text.length)}
+- confidence reflects how clearly the text points to that protagonist (1 = unmistakable).
+- EVIDENCE IS REQUIRED for protagonist, summary, each theme, about, and emotional_promise. Every "quote" MUST be copied VERBATIM from the manuscript (an exact short passage, ≤ 25 words) — do NOT paraphrase, and never invent a quote. Give 1–3 pieces of evidence each. "locator" is a brief pointer (e.g. a chapter or scene) or an empty string. If you cannot find a real supporting quote for a conclusion, give fewer or none rather than fabricating.${truncationNote(truncated, text.length)}
 
 ---
 MANUSCRIPT:
@@ -954,6 +964,62 @@ function asAnchors(v: unknown, max: number): StoryDnaTimelineAnchor[] {
     .slice(0, max);
 }
 
+function asEvidence(v: unknown): Evidence[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      quote: typeof x.quote === "string" ? x.quote.trim() : "",
+      locator: typeof x.locator === "string" && x.locator.trim() ? x.locator.trim() : null,
+      verified: false,
+    }))
+    .filter((e) => e.quote)
+    .slice(0, 3);
+}
+
+function asText(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function alignedText(v: unknown): AlignedText {
+  const o = (v ?? {}) as Record<string, unknown>;
+  return {
+    proposed: asText(o.text),
+    response: null,
+    final: null,
+    note: null,
+    evidence: asEvidence(o.evidence),
+    updated_at: null,
+  };
+}
+
+function parseThemes(v: unknown): AlignedThemes {
+  const arr = Array.isArray(v) ? v : [];
+  const proposed: ThemeProposal[] = arr
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({ name: asText(x.name).slice(0, 60), evidence: asEvidence(x.evidence) }))
+    .filter((t) => t.name)
+    .slice(0, 6);
+  return { proposed, response: null, final: null, note: null, updated_at: null };
+}
+
+function parseEmotional(v: unknown): AlignedEmotional {
+  const o = (v ?? {}) as Record<string, unknown>;
+  return {
+    proposed: {
+      beginning: asText(o.beginning),
+      middle: asText(o.middle),
+      ending: asText(o.ending),
+      after_finishing: asText(o.after_finishing),
+    },
+    response: null,
+    final: null,
+    note: null,
+    evidence: asEvidence(o.evidence),
+    updated_at: null,
+  };
+}
+
 function normConfidence(v: unknown): number {
   let n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : 0.8;
   if (!isFinite(n)) n = 0.8;
@@ -989,7 +1055,10 @@ export function parseStoryDna(raw: string): StoryDnaData {
       typeof p.reasoning === "string" && p.reasoning.trim()
         ? p.reasoning.trim()
         : "Identified as the character the narrative most closely follows.",
+    evidence: asEvidence(p.evidence),
   };
+
+  const zeroScore = { value: 0, rationale: "" };
 
   const q = (parsed.first_question ?? {}) as Record<string, unknown>;
   const trait =
@@ -1018,6 +1087,16 @@ export function parseStoryDna(raw: string): StoryDnaData {
     timeline_anchors: asAnchors(parsed.timeline_anchors, 12),
     protagonist,
     first_question,
+    summary: alignedText(parsed.summary),
+    themes: parseThemes(parsed.themes),
+    about: alignedText(parsed.about),
+    emotional_promise: parseEmotional(parsed.emotional_promise),
+    confidence: {
+      story: { ...zeroScore },
+      theme: { ...zeroScore },
+      character: { ...zeroScore },
+      message: { ...zeroScore },
+    },
   };
 }
 

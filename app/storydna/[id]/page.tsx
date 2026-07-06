@@ -70,6 +70,7 @@ export default async function StoryDnaPage({
         manuscriptId={id}
         initialData={dna?.data ?? null}
         answerMap={answerMap}
+        initialFeedback={dna?.understanding_feedback ?? null}
       />
     </main>
   );

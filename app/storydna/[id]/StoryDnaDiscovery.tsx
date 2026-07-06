@@ -25,16 +25,21 @@ export default function StoryDnaDiscovery({
   manuscriptId,
   initialData,
   answerMap,
+  initialFeedback,
 }: {
   manuscriptId: string;
   initialData: StoryDnaData | null;
   answerMap: Record<string, InterviewAnswer>;
+  initialFeedback: "yes" | "mostly" | "no" | null;
 }) {
+  // Old rows (analyzed before the Understanding Report) lack `summary` — treat
+  // them as needing a fresh pass so the new sections populate.
+  const hasData = Boolean(initialData && initialData.summary);
   const [data, setData] = useState<StoryDnaData | null>(initialData);
-  const [reading, setReading] = useState(!initialData);
+  const [reading, setReading] = useState(!hasData);
   const [error, setError] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(initialData ? STEP_DEFS.length : 0);
-  const [cardShown, setCardShown] = useState(Boolean(initialData));
+  const [revealed, setRevealed] = useState(hasData ? STEP_DEFS.length : 0);
+  const [cardShown, setCardShown] = useState(hasData);
 
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [continued, setContinued] = useState(false);
@@ -56,7 +61,7 @@ export default function StoryDnaDiscovery({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    if (initialData) return; // already analyzed — everything shows immediately
+    if (hasData) return; // already analyzed — everything shows immediately
 
     runStoryDnaDiscovery(manuscriptId).then((r) => {
       setReading(false);
@@ -167,8 +172,12 @@ export default function StoryDnaDiscovery({
 
         return (
         <div className="animate-[fadeIn_0.6s_ease] space-y-5">
-          {/* StoryDNA Understanding Report — UI-only section, above the protagonist card */}
-          <UnderstandingReport />
+          {/* StoryDNA Understanding Report — above the protagonist card */}
+          <UnderstandingReport
+            manuscriptId={manuscriptId}
+            data={data}
+            initialFeedback={initialFeedback}
+          />
 
           <h2 className="text-center font-serif text-2xl font-semibold tracking-tight">
             I’ve identified the heart of your story.

@@ -222,6 +222,71 @@ export interface StoryDnaProtagonist {
   /** 0..1 */
   confidence: number;
   reasoning: string;
+  evidence?: Evidence[];
+}
+
+/** A verbatim manuscript passage supporting a conclusion (traceability). */
+export interface Evidence {
+  quote: string;
+  locator: string | null;
+  /** Set by deterministic verification against the manuscript text. */
+  verified: boolean;
+}
+
+/** The author's intent response to an interpretive conclusion. */
+export type AlignmentResponse = "confirmed" | "refined" | "augmented" | "realigned";
+
+/** An interpretive text conclusion held for Author Alignment. */
+export interface AlignedText {
+  proposed: string;
+  response: AlignmentResponse | null;
+  final: string | null;
+  note: string | null;
+  evidence: Evidence[];
+  updated_at: string | null;
+}
+
+export interface ThemeProposal {
+  name: string;
+  evidence: Evidence[];
+}
+
+export interface AlignedThemes {
+  proposed: ThemeProposal[];
+  response: AlignmentResponse | null;
+  /** Author's theme list if refined / augmented / realigned. */
+  final: string[] | null;
+  note: string | null;
+  updated_at: string | null;
+}
+
+export interface EmotionalPromise {
+  beginning: string;
+  middle: string;
+  ending: string;
+  after_finishing: string;
+}
+
+export interface AlignedEmotional {
+  proposed: EmotionalPromise;
+  response: AlignmentResponse | null;
+  final: EmotionalPromise | null;
+  note: string | null;
+  evidence: Evidence[];
+  updated_at: string | null;
+}
+
+export interface ConfidenceScore {
+  /** 0..100 */
+  value: number;
+  rationale: string;
+}
+
+export interface StoryConfidence {
+  story: ConfidenceScore;
+  theme: ConfidenceScore;
+  character: ConfidenceScore;
+  message: ConfidenceScore;
 }
 
 export interface StoryDnaQuestion {
@@ -231,6 +296,7 @@ export interface StoryDnaQuestion {
 }
 
 export interface StoryDnaData {
+  // Objective facts — canonical on discovery.
   chapters_count: number;
   major_characters: StoryDnaEntity[];
   supporting_characters: StoryDnaEntity[];
@@ -239,6 +305,12 @@ export interface StoryDnaData {
   timeline_anchors: StoryDnaTimelineAnchor[];
   protagonist: StoryDnaProtagonist;
   first_question: StoryDnaQuestion;
+  // Interpretive conclusions — proposed until Author Alignment.
+  summary: AlignedText;
+  themes: AlignedThemes;
+  about: AlignedText;
+  emotional_promise: AlignedEmotional;
+  confidence: StoryConfidence;
 }
 
 export interface StoryDna {
@@ -250,6 +322,9 @@ export interface StoryDna {
   chapters_count: number | null;
   protagonist_name: string | null;
   data: StoryDnaData;
+  understanding_feedback: "yes" | "mostly" | "no" | null;
+  understanding_feedback_note: string | null;
+  alignment_status: "pending" | "aligned";
   created_at: string;
   updated_at: string;
 }

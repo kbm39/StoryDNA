@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { runStoryDnaDiscovery, saveInterviewAnswer } from "@/app/actions/storydna";
+import UnderstandingReport from "./UnderstandingReport";
 import type { InterviewAnswer, StoryDnaData } from "@/lib/types";
 
 const REVEAL_MS = 620;
@@ -166,6 +167,9 @@ export default function StoryDnaDiscovery({
 
         return (
         <div className="animate-[fadeIn_0.6s_ease] space-y-5">
+          {/* StoryDNA Understanding Report — UI-only section, above the protagonist card */}
+          <UnderstandingReport />
+
           <h2 className="text-center font-serif text-2xl font-semibold tracking-tight">
             I’ve identified the heart of your story.
           </h2>

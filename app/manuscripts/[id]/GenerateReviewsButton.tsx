@@ -44,7 +44,7 @@ export default function GenerateReviewsButton({
           disabled={pending}
           className="rounded-md border border-emerald-600/60 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
         >
-          {label("openai", hasCommercial)} OpenAI
+          {label("openai", hasCommercial)} Literary Agent
         </button>
         <button
           type="button"

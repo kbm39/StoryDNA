@@ -3,16 +3,29 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getManuscriptText } from "@/lib/reviews";
-import {
-  generateCommercialReview,
-  generateScreenReview as generateScreenOpenAI,
-} from "@/lib/ai/openai";
+import { getStoryDna } from "@/lib/storydna";
+import { generateScreenReview as generateScreenOpenAI } from "@/lib/ai/openai";
 import {
   generateCraftReview,
+  generateAgentReview,
   generateScreenReview as generateScreenClaude,
 } from "@/lib/ai/anthropic";
-import type { Perspective, Provider } from "@/lib/types";
+import type { AuthorIntent, Perspective, Provider, StoryDna } from "@/lib/types";
 import type { ReviewResult } from "@/lib/ai/shared";
+
+/** Build a review's author-intent context from the manuscript's StoryDNA (if any). */
+function intentFromDna(dna: StoryDna | null): AuthorIntent | null {
+  if (!dna?.data?.summary) return null;
+  const d = dna.data;
+  const emo = d.emotional_promise.final ?? d.emotional_promise.proposed;
+  return {
+    confirmed: dna.alignment_status === "aligned",
+    summary: d.summary.final ?? d.summary.proposed,
+    about: d.about.final ?? d.about.proposed,
+    themes: d.themes.final ?? d.themes.proposed.map((t) => t.name),
+    emotionalPromise: `Beginning: ${emo.beginning}; Middle: ${emo.middle}; Ending: ${emo.ending}; After: ${emo.after_finishing}`,
+  };
+}
 
 export interface GenerateReviewsResult {
   ok: boolean;
@@ -49,7 +62,11 @@ async function saveReview(
     perspective,
     model: result.model,
     content: result.content,
-    metadata: { truncated: result.truncated, chars_sent: result.charsSent },
+    metadata: {
+      truncated: result.truncated,
+      chars_sent: result.charsSent,
+      review_meta: result.reviewMeta ?? null,
+    },
   });
   if (error) throw new Error(error.message);
 }
@@ -71,12 +88,16 @@ export async function generateReviews(
     return { ok: false, errors: ["This manuscript has no extracted text to review."] };
   }
 
+  // The Literary Agent Review (commercial) reads the whole manuscript and is
+  // grounded in the confirmed StoryDNA author intent when available.
+  const intent = intentFromDna(await getStoryDna(manuscriptId));
+
   const results = await Promise.all(
     providers.map(async (provider) => {
       try {
         const res =
           provider === "openai"
-            ? await generateCommercialReview(text)
+            ? await generateAgentReview(text, intent)
             : await generateCraftReview(text);
         return { provider, res, error: null as string | null };
       } catch (e) {

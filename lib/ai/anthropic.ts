@@ -1,7 +1,13 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Agent } from "@/lib/agentfinder";
-import type { StoryDnaData } from "@/lib/types";
+import type { StoryDnaData, AuthorIntent } from "@/lib/types";
+import {
+  buildReviewPrompt,
+  buildReviewMeta,
+  LITERARY_AGENT,
+  type ReviewerDefinition,
+} from "@/lib/ai/review-engine";
 import {
   clampManuscript,
   truncationNote,
@@ -122,6 +128,56 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty response.");
   return { content, model: response.model || MODEL, truncated, charsSent: clamped.length };
+}
+
+/**
+ * StoryDNA Review Engine runner (Claude). Every reviewer flows through this:
+ * it reads the WHOLE manuscript in one pass (no lossy summarization), assembles
+ * the reviewer's prompt from its definition, and returns the report plus the
+ * honest transparency/compliance metadata. Streamed (long output).
+ */
+export async function generateReview(
+  def: ReviewerDefinition,
+  text: string,
+  intent: AuthorIntent | null,
+): Promise<ReviewResult> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+  const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: def.maxTokens,
+    thinking: { type: "adaptive" },
+    system: def.system,
+    messages: [
+      {
+        role: "user",
+        content: `${buildReviewPrompt(def, intent)}${truncationNote(truncated, clamped.length)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+      },
+    ],
+  });
+  const response = await stream.finalMessage();
+
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty response.");
+
+  const model = response.model || MODEL;
+  const reviewMeta = buildReviewMeta(def, {
+    model,
+    originalChars: text.length,
+    sentChars: clamped.length,
+    intent,
+  });
+  return { content, model, truncated, charsSent: clamped.length, reviewMeta };
+}
+
+/** Literary Agent Review V2 — the flagship reviewer on the shared engine. */
+export function generateAgentReview(
+  text: string,
+  intent: AuthorIntent | null,
+): Promise<ReviewResult> {
+  return generateReview(LITERARY_AGENT, text, intent);
 }
 
 /** Write a personalized query letter to an agent. */

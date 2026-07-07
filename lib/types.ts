@@ -88,6 +88,65 @@ export interface Review {
   created_at: string;
 }
 
+// --- Literary Agent Review V2: transparency + author intent ------------------
+
+export type ConstitutionalStatus = "compliant" | "partially_compliant" | "not_compliant";
+
+export interface ReviewCoverage {
+  words_analyzed: number;
+  full_text: boolean;
+  /** percent of the manuscript actually processed */
+  percent: number;
+  /** full text / chapter-segmented / notes-based / summary-based */
+  basis: string;
+  /** null until we do explicit chapter/segment traversal */
+  chapters_reviewed: string | null;
+}
+
+export type ComplianceItemStatus = "met" | "partial" | "unmet";
+
+export interface ComplianceItem {
+  requirement: string;
+  status: ComplianceItemStatus;
+  note: string | null;
+}
+
+/** Overall Constitutional Compliance score + its supporting checklist. */
+export interface ComplianceReport {
+  /** 0..100 */
+  score: number;
+  status: ConstitutionalStatus;
+  summary: string;
+  items: ComplianceItem[];
+}
+
+/** Honest disclosure of what kind of review was performed. */
+export interface ReviewMeta {
+  constitution_version: string;
+  reviewer: string;
+  perspective: string;
+  scope: string;
+  depth: string;
+  coverage: ReviewCoverage;
+  model: string;
+  author_intent_applied: boolean;
+  author_intent_source: string;
+  /** Evidence is cited in the report. */
+  evidence_present: boolean;
+  /** Evidence has been deterministically checked against the manuscript. */
+  evidence_machine_verified: boolean;
+  compliance: ComplianceReport;
+}
+
+/** Confirmed (or proposed) StoryDNA understanding fed into a review as intent. */
+export interface AuthorIntent {
+  confirmed: boolean;
+  summary: string;
+  about: string;
+  themes: string[];
+  emotionalPromise: string;
+}
+
 export interface Issue {
   id: string;
   manuscript_id: string;

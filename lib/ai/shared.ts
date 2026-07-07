@@ -10,6 +10,8 @@ import type {
   AlignedThemes,
   AlignedEmotional,
   ThemeProposal,
+  ReviewMeta,
+  AuthorIntent,
 } from "@/lib/types";
 
 export interface ReviewResult {
@@ -17,6 +19,8 @@ export interface ReviewResult {
   model: string;
   truncated: boolean;
   charsSent: number;
+  /** Set by the Literary Agent Review V2 (transparency disclosure). */
+  reviewMeta?: ReviewMeta;
 }
 
 /**
@@ -78,6 +82,25 @@ End with a single letter grade (A+ to F) for streaming-adaptation potential, on 
 Be concrete and reference specifics from the text. Keep it sharp, not padded.
 
 ${STORY_GROUNDING}`;
+
+// --- Literary Agent Review V2: shared author-intent block --------------------
+
+/** Trusted author-intent block (from confirmed/proposed StoryDNA understanding). */
+export function buildAuthorIntentBlock(intent: AuthorIntent | null): string {
+  if (!intent) {
+    return `AUTHOR INTENT: No StoryDNA author intent is available for this manuscript. Assess the story on its own terms, and note in your Story Assessment that intended-story-vs-execution could not be evaluated (no confirmed author intent on file).`;
+  }
+  const status = intent.confirmed
+    ? "The author has CONFIRMED this understanding (StoryDNA Author Intent Review complete), so treat it as the author's stated intent."
+    : "This is StoryDNA's proposed understanding, NOT yet author-confirmed — treat it as a strong hypothesis of intent, not settled fact.";
+  return `AUTHOR INTENT (from StoryDNA). ${status}
+- Intended summary: ${intent.summary || "—"}
+- What the author's story is really about: ${intent.about || "—"}
+- Intended themes: ${intent.themes.length ? intent.themes.join(", ") : "—"}
+- Intended emotional promise: ${intent.emotionalPromise || "—"}
+
+In your Story Assessment AND Final Recommendation, explicitly judge whether the manuscript EXECUTES this intended story — where the writing delivers the intent and where it falls short — kept separate from whether the book is commercially strong.`;
+}
 
 // --- Query letter generation -------------------------------------------------
 export const QUERY_LETTER_SYSTEM = `You are an author writing a professional, personalized query letter to a literary agent. You write tight, compelling queries in standard industry format — a hook, a concise pitch, the book's metadata, and a brief bio. You are specific and never generic, you tailor the letter to the agent, and you follow their submission requirements.

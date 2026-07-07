@@ -25,7 +25,13 @@ import { DOC_SPECS, type DocType } from "@/lib/ai/shared";
 import type { ManuscriptDocument } from "@/lib/types";
 import { listAgentOptions, type AgentOption } from "@/lib/agentfinder";
 import { TREATMENT_FORMAT_LABEL, type TreatmentFormat } from "@/lib/ai/shared";
-import type { Review, RevisionCheck } from "@/lib/types";
+import type {
+  Review,
+  RevisionCheck,
+  ReviewMeta,
+  ComplianceItemStatus,
+  ConstitutionalStatus,
+} from "@/lib/types";
 import GenerateReviewsButton from "./GenerateReviewsButton";
 import ExtractIssuesButton from "./ExtractIssuesButton";
 import AddIssueForm from "./AddIssueForm";
@@ -121,6 +127,91 @@ function DocSection({
   );
 }
 
+const STATUS_STYLE: Record<ConstitutionalStatus, { label: string; cls: string }> = {
+  compliant: { label: "Compliant", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" },
+  partially_compliant: { label: "Partially compliant", cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200" },
+  not_compliant: { label: "Not compliant", cls: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300" },
+};
+
+function MetaRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div>
+      <dt className="inline text-black/45 dark:text-white/45">{k}: </dt>
+      <dd className="inline font-medium text-black/70 dark:text-white/70">{v}</dd>
+    </div>
+  );
+}
+
+const COMPLIANCE_ICON: Record<ComplianceItemStatus, { icon: string; cls: string }> = {
+  met: { icon: "✓", cls: "text-emerald-600 dark:text-emerald-400" },
+  partial: { icon: "◑", cls: "text-amber-600 dark:text-amber-400" },
+  unmet: { icon: "○", cls: "text-black/30 dark:text-white/30" },
+};
+
+/** Review Transparency header — honest disclosure of what review was performed. */
+function TransparencyHeader({ meta }: { meta: ReviewMeta }) {
+  const s = STATUS_STYLE[meta.compliance.status];
+  return (
+    <div className="mb-4 rounded-lg border border-black/10 bg-black/[.02] p-3 text-xs dark:border-white/10 dark:bg-white/[.03]">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-sans font-semibold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">
+          Review Transparency
+        </span>
+        <span className={`rounded-full px-2 py-0.5 font-semibold ${s.cls}`}>
+          {s.label} · {meta.compliance.score}%
+        </span>
+      </div>
+      <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-black/35 dark:text-white/35">
+        Reviewed under StoryDNA Constitution v{meta.constitution_version}
+      </p>
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+        <MetaRow k="Reviewer" v={meta.reviewer} />
+        <MetaRow k="Perspective" v={meta.perspective} />
+        <MetaRow k="Scope" v={meta.scope} />
+        <MetaRow k="Depth" v={meta.depth} />
+        <MetaRow
+          k="Coverage"
+          v={`${meta.coverage.words_analyzed.toLocaleString()} words · ${meta.coverage.percent}%`}
+        />
+        <MetaRow k="Basis" v={meta.coverage.basis} />
+        <MetaRow k="Model" v={meta.model} />
+        <MetaRow
+          k="Author intent"
+          v={meta.author_intent_applied ? meta.author_intent_source : "Not applied"}
+        />
+        <MetaRow k="Evidence present" v={meta.evidence_present ? "Yes" : "No"} />
+        <MetaRow k="Machine-verified" v={meta.evidence_machine_verified ? "Yes" : "Not yet"} />
+      </dl>
+
+      <div className="mt-3 border-t border-black/10 pt-2 dark:border-white/10">
+        <p className="mb-1 font-sans font-semibold uppercase tracking-[0.12em] text-black/45 dark:text-white/45">
+          Constitutional Compliance
+        </p>
+        <ul className="space-y-0.5">
+          {meta.compliance.items.map((it) => {
+            const ic = COMPLIANCE_ICON[it.status];
+            return (
+              <li key={it.requirement} className="flex gap-1.5">
+                <span className={`shrink-0 ${ic.cls}`}>{ic.icon}</span>
+                <span className="text-black/70 dark:text-white/70">
+                  {it.requirement}
+                  {it.note && (
+                    <span className="text-black/40 dark:text-white/40"> — {it.note}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <p className="mt-2 text-[11px] italic leading-snug text-black/45 dark:text-white/45">
+        {meta.compliance.summary}
+      </p>
+    </div>
+  );
+}
+
 function ReviewColumn({
   heading,
   subheading,
@@ -134,6 +225,8 @@ function ReviewColumn({
   review: Review | undefined;
   manuscriptId: string;
 }) {
+  const rawMeta = review?.metadata?.review_meta as ReviewMeta | undefined;
+  const meta = rawMeta?.compliance ? rawMeta : undefined;
   const truncated = Boolean(review?.metadata?.truncated);
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-black/10 bg-paper shadow-sm dark:border-white/15 dark:bg-white/5">
@@ -158,11 +251,15 @@ function ReviewColumn({
       <div className="px-5 py-4">
         {review ? (
           <>
-            {truncated && (
-              <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                Based on a truncated portion of the manuscript (it exceeded the model’s
-                context limit).
-              </p>
+            {meta ? (
+              <TransparencyHeader meta={meta} />
+            ) : (
+              truncated && (
+                <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                  Based on a truncated portion of the manuscript (it exceeded the model’s
+                  context limit).
+                </p>
+              )
             )}
             <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold">
               <ReactMarkdown>{review.content}</ReactMarkdown>
@@ -330,8 +427,8 @@ export default async function ManuscriptPage({
 
         <div className="grid gap-5 md:grid-cols-2">
           <ReviewColumn
-            heading="Literary-agent view"
-            subheading="OpenAI · commercial"
+            heading="Literary Agent · Acquisitions Memo"
+            subheading="Commercial Acquisitions"
             accent="text-emerald-700 dark:text-emerald-400"
             review={commercial}
             manuscriptId={id}

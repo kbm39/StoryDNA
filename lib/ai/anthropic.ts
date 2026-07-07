@@ -4,6 +4,7 @@ import type { Agent } from "@/lib/agentfinder";
 import type { StoryDnaData, AuthorIntent } from "@/lib/types";
 import {
   buildReviewPrompt,
+  buildSystemPrompt,
   buildReviewMeta,
   LITERARY_AGENT,
   type ReviewerDefinition,
@@ -149,7 +150,7 @@ export async function generateReview(
     model: MODEL,
     max_tokens: def.maxTokens,
     thinking: { type: "adaptive" },
-    system: def.system,
+    system: buildSystemPrompt(def),
     messages: [
       {
         role: "user",

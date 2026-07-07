@@ -73,36 +73,241 @@ export interface OutputContract {
   rules: string[];
 }
 
+// --- Milestone 3: full self-describing reviewer ------------------------------
+
+export type ReviewDepth = "quick_insight" | "professional" | "exhaustive";
+export type ReviewScope =
+  | "book"
+  | "chapter"
+  | "scene"
+  | "dialogue"
+  | "character"
+  | "series";
+
+/** The human character behind the perspective — makes each reviewer distinct. */
+export interface ReviewerPersonality {
+  archetype: string;
+  traits: string[];
+  directness: "low" | "moderate" | "high" | "very_high";
+  warmth: "low" | "moderate" | "high";
+  humor: "none" | "dry" | "warm";
+  voiceNotes: string;
+}
+
+/** A body of professional knowledge the reviewer commands. */
+export interface KnowledgeDomain {
+  name: string;
+  /** Referenceable standards / sources (e.g. "ATLS", "Publishers Marketplace"). */
+  authorities: string[];
+  keyConcepts: string[];
+  /** Mistakes lay writers make in this domain — what to watch for. */
+  commonErrors: string[];
+}
+
+export interface EvidenceRules {
+  required: boolean;
+  quoteMaxWords: number;
+  requireLocator: boolean;
+  /** Deterministic verification against the manuscript (future capability). */
+  requireVerification: boolean;
+  evidenceTypes: string[];
+  unverifiedHandling: "flag" | "drop" | "downgrade_confidence";
+}
+
+/** Global constitution the engine enforces, plus reviewer-specific rules. */
+export interface ConstitutionSpec {
+  inherits: string;
+  additionalRules: string[];
+}
+
+export interface RecommendationValue {
+  value: string;
+  meaning: string;
+}
+
+/** The reviewer's own verdict vocabulary (generalizes Decision/Risk). */
+export interface RecommendationSpec {
+  field: string;
+  values: RecommendationValue[];
+  risk?: { field: string; values: string[] };
+}
+
+export type ConfidenceScale = "letter_grade" | "score_0_100" | "credibility_bands";
+
+export interface ConfidenceModel {
+  scale: ConfidenceScale;
+  method: "weighted_categories";
+  /** Partial coverage caps confidence. */
+  coverageWeighted: boolean;
+  /** 0..1 — how much unverified evidence lowers confidence. */
+  evidencePenalty: number;
+}
+
+export interface RevisionType {
+  key: string;
+  label: string;
+  description: string;
+}
+
+export interface ReviewerAuthorQuestion {
+  key: string;
+  question: string;
+  whenToAsk: string;
+  answerType: "yes_no" | "text" | "choice";
+}
+
+export type DependencyKey =
+  | "story_understanding"
+  | "character_dna"
+  | "canon"
+  | "marketability"
+  | "prior_reviews";
+
+export interface ReviewerDependency {
+  key: DependencyKey;
+  required: boolean;
+  usage: string;
+}
+
+/**
+ * Signals the Board Assembler combines when recommending a reviewer. Per the
+ * frozen design, selection is HYBRID — no single signal decides; genre, entities,
+ * terminology, content, Story Understanding, and author preferences all weigh in.
+ */
+export type TriggerSignal =
+  | "genre"
+  | "theme"
+  | "entity_type"
+  | "terminology"
+  | "content"
+  | "story_understanding"
+  | "author_preference"
+  | "always";
+
+export interface TriggerCondition {
+  key: string;
+  description: string;
+  signal: TriggerSignal;
+  match: string;
+  weight: number;
+}
+
+export interface Prerequisite {
+  key: string;
+  description: string;
+  requires: string;
+  onUnmet: "block" | "skip" | "degrade";
+}
+
+export interface ReviewerPriority {
+  tier: "core" | "standard" | "specialist";
+  base: number;
+  runOrder?: number;
+}
+
+export interface DepthCost {
+  seconds: number;
+  tokens: number;
+  usd: number;
+  mode: "sync" | "async";
+}
+
+export interface EstimatedCost {
+  perDepth: Partial<Record<ReviewDepth, DepthCost>>;
+  scalesWith: "word_count";
+}
+
+export interface FailureCondition {
+  key: string;
+  condition: string;
+  severity: "abort" | "degrade" | "warn";
+  disclosure: string;
+}
+
+/**
+ * How a reviewer adapts over time. INERT in v1 — stored future-ready, but
+ * `enabled: false` means no reviewer changes behavior automatically until the
+ * learning model is validated.
+ */
+export interface ReviewerLearning {
+  enabled: boolean;
+  learnsFrom: string[];
+  memoryScope: "manuscript" | "series" | "author" | "global";
+  adjustments: string[];
+}
+
 /**
  * A fully self-describing reviewer. A Domain Specialist supplies all of this
  * and needs no custom engine code: its mission, expertise boundaries,
  * evaluation framework (categories + question library), and output contract.
  */
 export interface ReviewerDefinition {
+  // Identity & voice
   id: string;
+  /** Reviewer Name. */
   reviewer: string;
   perspective: string;
   /** Depth label shown in transparency (e.g. "Professional Review"). */
   depth: string;
   /** One-line charge: what this reviewer exists to decide/deliver. */
   mission: string;
-  /** What it judges, and what it must defer to other specialists. */
-  expertise: ExpertiseBoundaries;
-  /** System persona. */
+  /** System persona (role). */
   system: string;
-  /** Opening instruction line. */
-  intro: string;
-  /** The analytical lenses + question library the reviewer reasons through. */
-  evaluationFramework: EvaluationFramework;
-  /** The exact report the reviewer must produce. */
-  outputContract: OutputContract;
+  /** The human character behind the perspective. */
+  personality: ReviewerPersonality;
   /** Closing tone directive. */
   tone: string;
+  /** Opening instruction line. */
+  intro: string;
+
+  // Expertise & knowledge
+  /** Professional knowledge base (standards + common errors). */
+  knowledgeDomains: KnowledgeDomain[];
+  /** What it judges, and what it must defer to other specialists. */
+  expertise: ExpertiseBoundaries;
+
+  // Evaluation
+  /** The analytical lenses + question library the reviewer reasons through. */
+  evaluationFramework: EvaluationFramework;
+  evidenceRules: EvidenceRules;
+  constitution: ConstitutionSpec;
   /** Append the anti-invention grounding rule. */
   grounding: boolean;
+
+  // Output
+  /** The exact report the reviewer must produce. */
+  outputContract: OutputContract;
+  recommendation: RecommendationSpec;
+  confidenceModel: ConfidenceModel;
+  revisionTypes: RevisionType[];
+  authorQuestions: ReviewerAuthorQuestion[];
+
+  // Applicability & board assembly
+  scopeCompatibility: ReviewScope[];
+  supportedDepths: ReviewDepth[];
+  triggers: TriggerCondition[];
+  /** Core reviewers run regardless of triggers. */
+  alwaysRecommended: boolean;
+  prerequisites: Prerequisite[];
+  priority: ReviewerPriority;
+  dependencies: ReviewerDependency[];
+  estimatedCost: EstimatedCost;
+  failureConditions: FailureCondition[];
+  learning: ReviewerLearning;
+
+  // Runtime
   /** Output token budget. */
   maxTokens: number;
+  /** What the engine actually does for this reviewer today (drives compliance). */
   capabilities: ReviewerCapabilities;
+}
+
+/** Compose the system prompt from the reviewer's persona + personality. */
+export function buildSystemPrompt(def: ReviewerDefinition): string {
+  const p = def.personality;
+  return `${def.system}\n\nYOUR PROFESSIONAL CHARACTER — stay in this voice throughout: You are ${p.archetype}.${
+    p.traits.length ? ` You are ${p.traits.join(", ")}.` : ""
+  } ${p.voiceNotes} (Directness: ${p.directness}; warmth: ${p.warmth}; humor: ${p.humor}.)`;
 }
 
 /** Assemble the full user prompt for a reviewer entirely from its definition. */
@@ -110,6 +315,17 @@ export function buildReviewPrompt(def: ReviewerDefinition, intent: AuthorIntent 
   const mission = `YOUR MISSION\n${def.mission}`;
 
   const expertise = `YOUR EXPERTISE — stay within it:\n- In scope: ${def.expertise.inScope.join("; ")}\n- Out of scope (do NOT assess these — another reviewer owns them): ${def.expertise.outOfScope.join("; ")}`;
+
+  const knowledge = def.knowledgeDomains.length
+    ? `\n\nYOUR KNOWLEDGE — apply these professional standards, and catch the common errors lay writers make:\n${def.knowledgeDomains
+        .map(
+          (k) =>
+            `• ${k.name}${k.authorities.length ? ` — standards: ${k.authorities.join(", ")}` : ""}${
+              k.commonErrors.length ? `\n   watch for: ${k.commonErrors.join("; ")}` : ""
+            }`,
+        )
+        .join("\n")}`
+    : "";
 
   const framework = `EVALUATION FRAMEWORK — reason through these categories and their questions as you read (they inform your judgment; you need not answer each explicitly):\n${def.evaluationFramework.categories
     .map(
@@ -131,14 +347,21 @@ export function buildReviewPrompt(def: ReviewerDefinition, intent: AuthorIntent 
         .join("\n")}`
     : "";
 
-  const rules = def.outputContract.rules.length
-    ? `\n\nRULES:\n${def.outputContract.rules.map((r) => `- ${r}`).join("\n")}`
+  const evidence = def.evidenceRules.required
+    ? `\n\nEVIDENCE RULES: Support your major claims. Quotes ≤ ${def.evidenceRules.quoteMaxWords} words${
+        def.evidenceRules.requireLocator ? ", with a chapter/locator" : ""
+      }. Acceptable evidence: ${def.evidenceRules.evidenceTypes.join(", ")}. If evidence is weak or missing, ${
+        def.evidenceRules.unverifiedHandling === "flag" ? "say so explicitly rather than inventing one" : def.evidenceRules.unverifiedHandling
+      }.`
     : "";
+
+  const allRules = [...def.outputContract.rules, ...def.constitution.additionalRules];
+  const rules = allRules.length ? `\n\nRULES:\n${allRules.map((r) => `- ${r}`).join("\n")}` : "";
 
   const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
   const grounding = def.grounding ? `\n\n${STORY_GROUNDING}` : "";
 
-  return `${mission}\n\n${expertise}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${rules}\n\n${def.tone}${intentBlock}${grounding}`;
+  return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${intentBlock}${grounding}`;
 }
 
 const WEIGHT: Record<ComplianceItem["status"], number> = { met: 1, partial: 0.5, unmet: 0 };
@@ -434,5 +657,125 @@ export const LITERARY_AGENT: ReviewerDefinition = {
     evidencePresent: true,
     evidenceVerified: false,
     usesAuthorIntent: true,
+  },
+
+  // --- Milestone 3 self-describing fields ---
+  personality: {
+    archetype: "a senior literary agent who has sold hundreds of books",
+    traits: ["blunt", "commercially sharp", "protective of your reputation", "allergic to hype"],
+    directness: "high",
+    warmth: "moderate",
+    humor: "dry",
+    voiceNotes:
+      "You speak like an industry insider briefing colleagues — plain, decisive, and specific, never gushing.",
+  },
+  knowledgeDomains: [
+    {
+      name: "Trade fiction acquisitions",
+      authorities: ["Publishers Marketplace deal data", "current category bestseller lists"],
+      keyConcepts: ["comparable titles", "category conventions", "hook", "positioning", "advance ranges"],
+      commonErrors: [
+        "comps that are too old, too big, or from the wrong category",
+        "no clear shelf/category",
+        "a soft or missing hook",
+        "an opening that doesn't actually start the story",
+      ],
+    },
+    {
+      name: "Query & submission market",
+      authorities: ["agent submission norms", "editor wishlists"],
+      keyConcepts: ["what editors are buying", "agent-list fit", "submission readiness"],
+      commonErrors: ["querying before the manuscript is ready", "misjudged genre or audience"],
+    },
+  ],
+  evidenceRules: {
+    required: true,
+    quoteMaxWords: 25,
+    requireLocator: true,
+    requireVerification: false,
+    evidenceTypes: ["verbatim passage from the manuscript"],
+    unverifiedHandling: "flag",
+  },
+  constitution: {
+    inherits: "storydna-1.0",
+    additionalRules: [
+      "Never promise a sale; assess likelihood candidly.",
+      "Distinguish fixable craft issues from fundamental market problems.",
+    ],
+  },
+  recommendation: {
+    field: "Decision",
+    values: [
+      { value: "REQUEST", meaning: "You would request more/the full and pursue representation." },
+      { value: "PASS", meaning: "Not for you; decline." },
+      { value: "REVISE & RESUBMIT", meaning: "Promising but not ready; invite a revision." },
+    ],
+    risk: { field: "Decision Risk", values: ["Low", "Moderate", "High"] },
+  },
+  confidenceModel: {
+    scale: "letter_grade",
+    method: "weighted_categories",
+    coverageWeighted: true,
+    evidencePenalty: 0.1,
+  },
+  revisionTypes: [
+    { key: "tighten_opening", label: "Tighten the opening", description: "Start closer to the story; cut throat-clearing." },
+    { key: "raise_stakes", label: "Raise the stakes", description: "Sharpen what's at risk and why it matters." },
+    { key: "reposition_comps", label: "Reposition / comps", description: "Fix category and comparable-title positioning." },
+    { key: "deepen_character", label: "Deepen character", description: "Increase protagonist agency and dimensionality." },
+    { key: "fix_pacing", label: "Fix pacing", description: "Address sag or rushed sequences." },
+    { key: "strengthen_ending", label: "Strengthen the ending", description: "Make the payoff land and feel earned." },
+  ],
+  authorQuestions: [
+    { key: "target_category", question: "What category/shelf do you picture this on?", whenToAsk: "If the category is ambiguous", answerType: "text" },
+    { key: "comps", question: "Which recent books do you see as comps?", whenToAsk: "If positioning is unclear", answerType: "text" },
+    { key: "series_intent", question: "Is this a standalone or the start of a series?", whenToAsk: "If the ending leaves threads open", answerType: "choice" },
+  ],
+  scopeCompatibility: ["book", "chapter", "scene", "character"],
+  supportedDepths: ["professional"],
+  triggers: [
+    {
+      key: "seeking_representation",
+      description: "Every manuscript being prepared for agents/publishers gets a literary-agent read.",
+      signal: "always",
+      match: "*",
+      weight: 100,
+    },
+  ],
+  alwaysRecommended: true,
+  prerequisites: [
+    {
+      key: "has_text",
+      description: "Manuscript must have extracted text to review.",
+      requires: "manuscript.extracted_text present",
+      onUnmet: "block",
+    },
+  ],
+  priority: { tier: "core", base: 100, runOrder: 10 },
+  dependencies: [
+    {
+      key: "story_understanding",
+      required: false,
+      usage: "Uses confirmed StoryDNA author intent to judge execution-vs-intent (degrades gracefully if absent).",
+    },
+  ],
+  estimatedCost: {
+    // Rough, sync full-text pass on Claude Opus; scales with manuscript length.
+    perDepth: { professional: { seconds: 90, tokens: 20000, usd: 0.6, mode: "sync" } },
+    scalesWith: "word_count",
+  },
+  failureConditions: [
+    { key: "no_text", condition: "No extracted manuscript text", severity: "abort", disclosure: "Cannot review without manuscript text." },
+    { key: "truncated", condition: "Manuscript exceeds the model input limit", severity: "degrade", disclosure: "Only part of the manuscript was read; coverage is partial." },
+  ],
+  learning: {
+    // INERT in v1 — stored future-ready; does not change behavior yet.
+    enabled: false,
+    learnsFrom: ["author_alignment", "suggestion_accepts", "feedback", "corrections"],
+    memoryScope: "author",
+    adjustments: [
+      "Treat confirmed author intent as ground truth.",
+      "Down-weight revision types the author has repeatedly rejected.",
+    ],
   },
 };

@@ -68,13 +68,7 @@ type LocalAlign = {
 };
 
 function StatusChip({ response }: { response: AlignmentResponse | null }) {
-  if (!response) {
-    return (
-      <span className="rounded-full border border-dashed border-black/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/45 dark:border-white/25 dark:text-white/45">
-        Proposed
-      </span>
-    );
-  }
+  if (!response) return null;
   const s = STATUS_CHIP[response];
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${s.cls}`}>
@@ -95,7 +89,7 @@ function EvidenceReveal({ evidence }: { evidence: Evidence[] }) {
         onClick={() => setOpen((v) => !v)}
         className="text-xs font-medium text-accent hover:underline"
       >
-        {open ? "Hide evidence" : `Why? (${evidence.length})`}
+        {open ? "Hide supporting evidence" : "Why does StoryDNA believe this?"}
       </button>
       {open && (
         <ul className="mt-2 space-y-1.5">
@@ -305,8 +299,8 @@ export default function UnderstandingReport({
           )}
         </div>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-black/55 dark:text-white/55">
-          Before I review your manuscript, I want to make sure I understand the story you’re trying
-          to tell. Confirm or correct each interpretation below — the facts I found are already saved.
+          Before I review your manuscript, I want to make sure I understand the story you intended to
+          write. Confirm or correct each interpretation below — the facts I found are already saved.
         </p>
       </div>
 
@@ -314,16 +308,40 @@ export default function UnderstandingReport({
         {/* Story Summary */}
         <section>
           <SectionHeading response={align.summary.response}>Story Summary</SectionHeading>
+          <p className="mb-2 text-[11px] italic text-black/40 dark:text-white/40">
+            StoryDNA’s current interpretation.
+          </p>
           <p className="text-sm leading-relaxed text-black/80 dark:text-white/80">{summaryText}</p>
           <div className="mt-2">
             <EvidenceReveal evidence={data.summary.evidence} />
           </div>
           {renderAlignmentBar("summary")}
+          <p className="mt-3 text-xs italic text-black/45 dark:text-white/45">
+            This understanding will guide every editorial recommendation that follows.
+          </p>
         </section>
 
-        {/* Primary Themes */}
+        {/* What the story is about */}
         <section className="border-t border-black/5 pt-5 dark:border-white/10">
-          <SectionHeading response={align.themes.response}>Primary Themes</SectionHeading>
+          <SectionHeading response={align.about.response}>
+            StoryDNA Believes Your Story Is About
+          </SectionHeading>
+          <p className="mb-2 text-[11px] italic text-black/40 dark:text-white/40">
+            StoryDNA’s current interpretation.
+          </p>
+          <p className="text-sm leading-relaxed text-black/80 dark:text-white/80">{aboutText}</p>
+          <div className="mt-2">
+            <EvidenceReveal evidence={data.about.evidence} />
+          </div>
+          {renderAlignmentBar("about")}
+        </section>
+
+        {/* Themes */}
+        <section className="border-t border-black/5 pt-5 dark:border-white/10">
+          <SectionHeading response={align.themes.response}>Themes StoryDNA Found</SectionHeading>
+          <p className="mb-2 text-[11px] italic text-black/40 dark:text-white/40">
+            StoryDNA’s current interpretation.
+          </p>
           <div className="flex flex-wrap gap-2">
             {themeNames.map((theme) => (
               <span
@@ -349,21 +367,12 @@ export default function UnderstandingReport({
           {renderAlignmentBar("themes")}
         </section>
 
-        {/* What the story is about */}
-        <section className="border-t border-black/5 pt-5 dark:border-white/10">
-          <SectionHeading response={align.about.response}>
-            StoryDNA Believes Your Story Is About
-          </SectionHeading>
-          <p className="text-sm leading-relaxed text-black/80 dark:text-white/80">{aboutText}</p>
-          <div className="mt-2">
-            <EvidenceReveal evidence={data.about.evidence} />
-          </div>
-          {renderAlignmentBar("about")}
-        </section>
-
         {/* Emotional Promise */}
         <section className="border-t border-black/5 pt-5 dark:border-white/10">
           <SectionHeading response={align.emotional_promise.response}>Emotional Promise</SectionHeading>
+          <p className="mb-2 text-[11px] italic text-black/40 dark:text-white/40">
+            StoryDNA’s current interpretation.
+          </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {EMO_STAGES.map((stage) => (
               <div
@@ -385,7 +394,9 @@ export default function UnderstandingReport({
 
         {/* StoryDNA Confidence — real, evidence-derived */}
         <section className="border-t border-black/5 pt-5 dark:border-white/10">
-          <SectionHeading response={null}>StoryDNA Confidence</SectionHeading>
+          <SectionHeading response={null}>
+            {allAligned ? "StoryDNA Confidence" : "Preliminary Confidence"}
+          </SectionHeading>
           <div className="space-y-3">
             {[
               { label: "Story Understanding", score: data.confidence.story },

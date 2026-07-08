@@ -123,6 +123,18 @@ export async function generateReviews(
   return { ok: errors.length === 0, errors: errors.length ? errors : undefined };
 }
 
+/**
+ * Run the V2 Literary Agent Review (Commercial Acquisitions) on the current
+ * manuscript. Thin wrapper over the existing commercial path — same Review
+ * Engine, same reviewer definition, same storage slot; NOT a separate system.
+ * The prior Literary Agent review is replaced only after this succeeds.
+ */
+export async function runLiteraryAgentReview(
+  manuscriptId: string,
+): Promise<GenerateReviewsResult> {
+  return generateReviews(manuscriptId, ["openai"]);
+}
+
 /** Generate (or regenerate) the producer's-read (TV/film) review from the chosen provider(s). */
 export async function generateScreenReviews(
   manuscriptId: string,

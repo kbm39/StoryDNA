@@ -262,6 +262,81 @@ export interface Treatment {
   created_at: string;
 }
 
+// --- Manuscript Intake -------------------------------------------------------
+
+export type ManuscriptRelation = "standalone" | "existing_series" | "new_series";
+export type ManuscriptType =
+  | "main_novel"
+  | "prequel"
+  | "sequel"
+  | "novella"
+  | "lead_magnet"
+  | "short_story";
+export type ManuscriptStage =
+  | "first_draft"
+  | "early_revision"
+  | "advanced_revision"
+  | "query_ready"
+  | "publisher_submission"
+  | "producer_submission"
+  | "final_proof";
+export type ReviewObjective =
+  | "agent_submission"
+  | "producer_review"
+  | "developmental"
+  | "character_consistency"
+  | "dialogue"
+  | "reality_check"
+  | "final_proof"
+  | "knowledge_only";
+export type Optimization =
+  | "best_book"
+  | "most_commercial"
+  | "most_faithful"
+  | "best_adaptation"
+  | "balanced";
+export type FeedbackStyle =
+  | "brutally_honest"
+  | "protect_voice"
+  | "prioritize_commercial"
+  | "challenge_assumptions"
+  | "real_agent";
+
+export interface ManuscriptIntake {
+  id: string;
+  manuscript_id: string;
+  relation: ManuscriptRelation | null;
+  series_id: string | null;
+  series_name: string | null;
+  book_number: number | null;
+  order_type: string | null;
+  published_order: number | null;
+  story_order: number | null;
+  manuscript_type: ManuscriptType | null;
+  manuscript_stage: ManuscriptStage | null;
+  load_canon: boolean;
+  load_characters: boolean;
+  load_timeline: boolean;
+  load_story_memory: boolean;
+  load_author_intent: boolean;
+  load_editorial_decisions: boolean;
+  load_reviewer_feedback: boolean;
+  objectives: string[];
+  optimization: string | null;
+  feedback_style: string[];
+  recommend_specialists: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthorProfile {
+  id: string;
+  feedback_style: string[];
+  optimization: string | null;
+  updated_at: string;
+}
+
 // --- StoryDNA (V2) -----------------------------------------------------------
 
 export interface StoryDnaEntity {

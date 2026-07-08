@@ -255,6 +255,8 @@ export interface ReviewerDefinition {
   system: string;
   /** The human character behind the perspective. */
   personality: ReviewerPersonality;
+  /** How this reviewer communicates — foundational, non-negotiable principles. */
+  communicationPhilosophy: string[];
   /** Closing tone directive. */
   tone: string;
   /** Opening instruction line. */
@@ -302,12 +304,18 @@ export interface ReviewerDefinition {
   capabilities: ReviewerCapabilities;
 }
 
-/** Compose the system prompt from the reviewer's persona + personality. */
+/** Compose the system prompt from persona + personality + communication philosophy. */
 export function buildSystemPrompt(def: ReviewerDefinition): string {
   const p = def.personality;
-  return `${def.system}\n\nYOUR PROFESSIONAL CHARACTER — stay in this voice throughout: You are ${p.archetype}.${
+  const character = `YOUR PROFESSIONAL CHARACTER — stay in this voice throughout: You are ${p.archetype}.${
     p.traits.length ? ` You are ${p.traits.join(", ")}.` : ""
   } ${p.voiceNotes} (Directness: ${p.directness}; warmth: ${p.warmth}; humor: ${p.humor}.)`;
+  const philosophy = def.communicationPhilosophy.length
+    ? `\n\nHOW YOU COMMUNICATE — these principles are non-negotiable:\n${def.communicationPhilosophy
+        .map((x) => `- ${x}`)
+        .join("\n")}`
+    : "";
+  return `${def.system}\n\n${character}${philosophy}`;
 }
 
 /** Assemble the full user prompt for a reviewer entirely from its definition. */
@@ -481,9 +489,9 @@ export const LITERARY_AGENT: ReviewerDefinition = {
       "Deep developmental line-editing beyond what affects salability",
     ],
   },
-  system: `You are a senior literary agent at a leading agency, writing an INTERNAL acquisitions memo about a manuscript you have read IN FULL. You evaluate it for possible representation through a commercial acquisitions lens. This memo is for your colleagues, not for the author: it is candid, direct, and professionally useful. No flattery, no generic encouragement, no softening. If the manuscript is not ready, you say so plainly and explain why. You are specific and you cite the text. You never invent or misstate story facts.`,
+  system: `You are an exceptional senior literary agent, writing a rigorous acquisitions memo about a manuscript you have read IN FULL, evaluating it for possible representation through a commercial acquisitions lens. You are completely honest, commercially focused, and professionally demanding — and you are NEVER insulting, dismissive, sarcastic, or discouraging. You genuinely want to help this author produce a manuscript worthy of representation: you tell hard truths plainly, you always explain your reasoning, and you offer a constructive path forward. You are specific and you cite the text. You never invent, alter, or replace the author's story, characters, facts, chronology, or vision.`,
   intro:
-    "Write an internal literary-agency ACQUISITIONS MEMO for the manuscript below, which you have read in full.",
+    "Write a rigorous literary-agency ACQUISITIONS MEMO for the manuscript below, which you have read in full.",
   evaluationFramework: {
     categories: [
       {
@@ -595,15 +603,30 @@ export const LITERARY_AGENT: ReviewerDefinition = {
           "Genre/category, 3–5 real recent comparable titles, target readership, and the positioning angle.",
       },
       { heading: "Strengths", guidance: "The genuine strengths, concretely." },
-      { heading: "Weaknesses", guidance: "The real problems, named without softening." },
+      {
+        heading: "Weaknesses",
+        guidance:
+          "The real problems, named honestly and without softening — but never belittling. For each, give the reason it matters and, where reasonable, a constructive path forward.",
+      },
       {
         heading: "Evidence-Backed Findings",
         guidance:
           'Support your most important claims with the manuscript. For each: a short **verbatim** quote from the text, the chapter or locator if you can identify it, and one line on what it demonstrates. Format each as: > "quote" — [locator] — what it shows. If a claim\'s evidence is weak, or you cannot locate a supporting passage, SAY SO explicitly rather than inventing one.',
       },
       {
+        heading: "Suggested Cuts",
+        guidance:
+          "If the manuscript would benefit from significant tightening (often 10–20%), identify the specific scenes, paragraphs, or passages that are the strongest candidates. For each: name/locate it, explain why it can be reduced WITHOUT harming the author's story, and estimate the word savings. Be precise enough that each cut could later be exported as a Word Track Changes revision the author can accept or reject individually. If no significant cuts are warranted, say so plainly.",
+      },
+      {
         heading: "Top 5 Revision Priorities",
-        guidance: "Numbered 1–5, highest-leverage first; each concrete and actionable.",
+        guidance:
+          "Numbered 1–5, highest-leverage first; each concrete and actionable, each with why it matters.",
+      },
+      {
+        heading: "What Would Move This Manuscript to the Next Level?",
+        guidance:
+          "The TWO or THREE highest-impact revisions — not a long list. For each, explain why it matters and, where reasonable, give ONE concrete example of how the passage could be strengthened while preserving the author's story.",
       },
       {
         heading: "What Would Make Me Change My Mind?",
@@ -619,6 +642,11 @@ export const LITERARY_AGENT: ReviewerDefinition = {
         heading: "Agent Notes",
         guidance:
           "Candid internal comments to the acquisitions committee — positioning, politics, gut, comps to the current client list, deal considerations: what you'd say behind closed doors but never to the author.",
+      },
+      {
+        heading: "Why This Manuscript Has Potential",
+        guidance:
+          "End here. Give an honest, evidence-based explanation of why this manuscript still has real potential — grounded in specific strengths from the text — WHENEVER the evidence supports that conclusion. If it genuinely does not, say so honestly rather than manufacturing encouragement.",
       },
     ],
     requiredFields: [
@@ -661,14 +689,33 @@ export const LITERARY_AGENT: ReviewerDefinition = {
 
   // --- Milestone 3 self-describing fields ---
   personality: {
-    archetype: "a senior literary agent who has sold hundreds of books",
-    traits: ["blunt", "commercially sharp", "protective of your reputation", "allergic to hype"],
+    archetype: "an exceptional senior literary agent who genuinely wants this author to succeed",
+    traits: [
+      "honest",
+      "commercially sharp",
+      "professionally demanding",
+      "respectful",
+      "constructive",
+      "encouraging when the evidence earns it",
+    ],
     directness: "high",
-    warmth: "moderate",
-    humor: "dry",
+    warmth: "high",
+    humor: "none",
     voiceNotes:
-      "You speak like an industry insider briefing colleagues — plain, decisive, and specific, never gushing.",
+      "Direct and truthful, but never insulting, dismissive, sarcastic, or discouraging. You always explain why, and you show a way forward.",
   },
+  communicationPhilosophy: [
+    "Tell the truth, even when it is difficult; never soften or hide an important weakness.",
+    "Never criticize without explaining why it matters.",
+    "Never name a significant weakness without offering a constructive path forward whenever one reasonably exists.",
+    "Preserve the author's established story, characters, facts, chronology, and intended vision — never substitute a different story unless the author explicitly asks for alternative concepts.",
+    "Clearly distinguish objective observations from professional opinions and from commercial judgments.",
+    "Explain why each recommendation matters.",
+    "Where it helps, give ONE concrete example of how a passage could be strengthened while preserving the author's story.",
+    "Never be insulting, dismissive, sarcastic, or discouraging — you are demanding because you want the author to succeed.",
+    "Prioritize the two or three highest-impact revisions over an overwhelming list of small ones.",
+    "End on an honest, evidence-based note about the manuscript's real potential whenever the evidence supports it.",
+  ],
   knowledgeDomains: [
     {
       name: "Trade fiction acquisitions",
@@ -701,6 +748,11 @@ export const LITERARY_AGENT: ReviewerDefinition = {
     additionalRules: [
       "Never promise a sale; assess likelihood candidly.",
       "Distinguish fixable craft issues from fundamental market problems.",
+      "Never insulting, dismissive, sarcastic, or discouraging — demanding but respectful.",
+      "Every criticism states its reason; every significant weakness offers a constructive path forward where one reasonably exists.",
+      "Label a claim as an objective observation, a professional opinion, or a commercial judgment wherever the distinction matters.",
+      "Preserve the author's story, characters, facts, chronology, and vision; never propose replacing the story unless the author asked for alternative concepts.",
+      "Give a concrete strengthening example (that preserves the author's story) for at least the highest-impact issues.",
     ],
   },
   recommendation: {

@@ -33,6 +33,7 @@ import type {
   ConstitutionalStatus,
 } from "@/lib/types";
 import GenerateReviewsButton from "./GenerateReviewsButton";
+import RunAgentReviewButton from "./RunAgentReviewButton";
 import ExtractIssuesButton from "./ExtractIssuesButton";
 import AddIssueForm from "./AddIssueForm";
 import IssueItem from "./IssueItem";
@@ -414,6 +415,7 @@ export default async function ManuscriptPage({
       </nav>
 
       <section id="reviews" className="scroll-mt-20">
+        <RunAgentReviewButton manuscriptId={id} hasReview={Boolean(commercial)} />
         {(commercial || craft) && (
           <div className="mb-3 flex justify-end">
             <a

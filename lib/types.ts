@@ -262,6 +262,105 @@ export interface Treatment {
   created_at: string;
 }
 
+// --- Revision Engine (Literary Agent V3) -------------------------------------
+
+export type RevisionType =
+  | "delete"
+  | "tighten"
+  | "rewrite"
+  | "clarify"
+  | "reorder"
+  | "expand"
+  | "combine"
+  | "split"
+  | "move"
+  | "replace_dialogue"
+  | "replace_description"
+  | "replace_exposition"
+  | "comment_only";
+export type RiskLevel = "low" | "medium" | "high";
+export type ImpactLevel = "low" | "medium" | "high";
+export type RevisionDifficulty = "easy" | "medium" | "difficult" | "major_rewrite";
+export type RevisionStatus =
+  | "proposed"
+  | "accepted"
+  | "rejected"
+  | "modified"
+  | "skipped"
+  | "deferred"
+  | "implemented"
+  | "re_reviewed";
+export type ResolutionStatus = "open" | "in_progress" | "resolved" | "verified";
+export type ExportMode = "track_change" | "comment";
+
+export interface RevisionImpacts {
+  pacing: number;
+  clarity: number;
+  commercial_readiness: number;
+  emotional_impact: number;
+  voice_preservation: number;
+  submission_readiness: number;
+}
+
+export interface EditorialIssue {
+  id: string;
+  manuscript_id: string;
+  review_id: string | null;
+  text: string;
+  area: string | null;
+  severity: RiskLevel | null;
+  source_section: string | null;
+  success_criterion: string | null;
+  owning_reviewer: string;
+  resolution_status: ResolutionStatus;
+  verified_at: string | null;
+  verification_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RevisionCandidate {
+  id: string;
+  manuscript_id: string;
+  issue_id: string | null;
+  phase_id: string | null;
+  type: RevisionType;
+  original: string;
+  revised: string;
+  locator: string | null;
+  word_savings: number | null;
+  reason: string | null;
+  confidence: number | null;
+  confidence_reason: string | null;
+  difficulty: RevisionDifficulty | null;
+  story_risk: RiskLevel | null;
+  voice_risk: RiskLevel | null;
+  commercial_impact: ImpactLevel | null;
+  reader_impact: ImpactLevel | null;
+  grade_delta: number | null;
+  consequence_if_unchanged: string | null;
+  dependencies: string | null;
+  impacts: RevisionImpacts | null;
+  export_mode: ExportMode;
+  verified: boolean;
+  status: RevisionStatus;
+  created_at: string;
+}
+
+export type AuthorEditDisposition = "accepted" | "rejected" | "modified" | "skipped";
+
+/** Author's recorded response to a revision candidate (intent only — no manuscript mutation). */
+export interface AuthorEditResponse {
+  id: string;
+  candidate_id: string;
+  manuscript_id: string;
+  disposition: AuthorEditDisposition;
+  author_modified_text: string | null;
+  author_note: string | null;
+  responded_at: string;
+  updated_at: string;
+}
+
 // --- Manuscript Intake -------------------------------------------------------
 
 export type ManuscriptRelation = "standalone" | "existing_series" | "new_series";

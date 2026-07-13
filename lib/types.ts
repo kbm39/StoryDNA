@@ -16,8 +16,30 @@ export interface Manuscript {
   archived: boolean;
   series_id: string | null;
   series_order: number | null;
+  /** FK to the active content snapshot (Phase 1 schema; read paths unchanged until Phase 2). */
+  current_version_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Immutable manuscript content snapshot (Phase 1). */
+export interface ManuscriptVersion {
+  id: string;
+  manuscript_id: string;
+  version_number: number;
+  label: string | null;
+  source_filename: string;
+  storage_path: string;
+  file_size: number | null;
+  extracted_text: string | null;
+  word_count: number | null;
+  character_count: number | null;
+  content_hash: string;
+  uploaded_at: string;
+  notes: string | null;
+  supersedes_version_id: string | null;
+  is_current: boolean;
+  created_at: string;
 }
 
 export interface Series {
@@ -80,6 +102,8 @@ export interface PitchDeck {
 export interface Review {
   id: string;
   manuscript_id: string;
+  /** Content snapshot this review belongs to (Phase 1; optional until Phase 2 queries use it). */
+  manuscript_version_id?: string | null;
   provider: Provider;
   perspective: Perspective;
   model: string | null;
@@ -307,6 +331,7 @@ export interface RevisionImpacts {
 export interface EditorialIssue {
   id: string;
   manuscript_id: string;
+  manuscript_version_id?: string | null;
   review_id: string | null;
   text: string;
   area: string | null;
@@ -324,6 +349,7 @@ export interface EditorialIssue {
 export interface RevisionCandidate {
   id: string;
   manuscript_id: string;
+  manuscript_version_id?: string | null;
   issue_id: string | null;
   phase_id: string | null;
   type: RevisionType;
@@ -356,6 +382,7 @@ export interface AuthorEditResponse {
   id: string;
   candidate_id: string;
   manuscript_id: string;
+  manuscript_version_id?: string | null;
   disposition: AuthorEditDisposition;
   author_modified_text: string | null;
   author_note: string | null;

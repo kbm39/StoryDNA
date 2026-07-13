@@ -5,7 +5,7 @@
  *   node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply
  */
 import pg from "pg";
-import { countManuscriptWords } from "../lib/word-count";
+import { countManuscriptWords } from "../lib/word-count.ts";
 
 const APPLY = process.argv.includes("--apply");
 

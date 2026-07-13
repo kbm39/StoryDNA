@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test lib/**/*.test.ts",
+    "backfill:word-count": "node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

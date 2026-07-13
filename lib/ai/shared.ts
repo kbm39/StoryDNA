@@ -13,6 +13,7 @@ import type {
   ReviewMeta,
   AuthorIntent,
 } from "@/lib/types";
+import { manuscriptWordsInCharSlice } from "@/lib/word-count";
 
 export interface ReviewResult {
   content: string;
@@ -36,10 +37,25 @@ export function clampManuscript(
   return { text: text.slice(0, maxChars), truncated: true };
 }
 
-export function truncationNote(truncated: boolean, charsSent: number): string {
+export function truncationNote(truncated: boolean, sentWordCount: number): string {
   if (!truncated) return "";
-  const approxWords = Math.round(charsSent / 6).toLocaleString();
-  return `\n\nNOTE: The manuscript was longer than the context limit, so you are seeing only the first ~${approxWords} words. Assess what you can and say so where the cutoff limits your read.`;
+  return `\n\nNOTE: The manuscript was longer than the context limit, so you are seeing only the first ~${sentWordCount.toLocaleString()} words. Assess what you can and say so where the cutoff limits your read.`;
+}
+
+/** Truncation note using canonical word count proportional to characters sent. */
+export function truncationNoteForManuscript(
+  truncated: boolean,
+  fullText: string,
+  sentChars: number,
+): string {
+  if (!truncated) return "";
+  return truncationNote(true, manuscriptWordsInCharSlice(fullText, sentChars));
+}
+
+/** Authoritative manuscript length for AI prompts — never estimate from tokens or pages. */
+export function authoritativeWordCountBlock(wordCount: number | null | undefined): string {
+  if (wordCount == null || wordCount <= 0) return "";
+  return `\n\nMANUSCRIPT STATISTICS (authoritative — use this exact figure; do NOT estimate length from pages, tokens, or reading time):\n- Word count: ${wordCount.toLocaleString()} words`;
 }
 
 /**
@@ -610,8 +626,9 @@ ${scene}`;
 
   if (manuscriptText && manuscriptText.trim()) {
     const { text, truncated } = clampManuscript(manuscriptText, maxChars);
-    prompt += `\n\nFor reference, here is the manuscript so your ideas fit its world, characters, and voice:${truncationNote(
+    prompt += `\n\nFor reference, here is the manuscript so your ideas fit its world, characters, and voice:${truncationNoteForManuscript(
       truncated,
+      manuscriptText,
       text.length,
     )}\n\n---\nMANUSCRIPT:\n\n${text}`;
   }
@@ -650,7 +667,7 @@ Produce concrete find-and-replace edits that implement this fix. Rules:
 - Return an empty "edits" array ONLY when there is genuinely no in-place text change possible at all (e.g. "reorder these chapters" with no specific wording given). If only SOME parts are structural, still return edits for the parts that aren't, and mention the rest in "note".
 
 Respond with ONLY a JSON object, no surrounding prose:
-{"edits":[{"find":"<verbatim original passage>","replace":"<revised passage>"}],"note":"optional caveat or empty string"}${truncationNote(truncated, text.length)}
+{"edits":[{"find":"<verbatim original passage>","replace":"<revised passage>"}],"note":"optional caveat or empty string"}${truncationNoteForManuscript(truncated, manuscriptText, text.length)}
 
 ---
 MANUSCRIPT:
@@ -731,7 +748,7 @@ export function buildRecheckPrompt(
 Respond with ONLY a JSON object, no surrounding prose:
 {"verdicts":[{"id":"<the exact issue id>","status":"resolved"|"outstanding","note":"one sentence"}],"grade":"<A+ to F>","summary":"2-4 sentences on what improved and what still needs work"}
 
-Use the exact id strings provided. Only include verdicts for the issues listed.${truncationNote(truncated, text.length)}
+Use the exact id strings provided. Only include verdicts for the issues listed.${truncationNoteForManuscript(truncated, manuscriptText, text.length)}
 
 OUTSTANDING ISSUES:
 ${issueList}
@@ -787,7 +804,7 @@ ${issue}
 Propose 2–4 concrete, specific ways to address this single issue in the manuscript below. Be actionable, not vague. Where a fix means changing particular wording, show a short before → after example — and the "before" MUST be text copied verbatim from the manuscript, not an invented or paraphrased line. Use Markdown with a brief intro and a list.
 
 ${STORY_GROUNDING}
-Only reference characters, scenes, and events that actually appear in the material. If the manuscript text you were given doesn't contain the passage an idea would touch (e.g. you're working from section notes), describe the fix in general terms instead of quoting a line you can't see.${truncationNote(truncated, clamped.length)}
+Only reference characters, scenes, and events that actually appear in the material. If the manuscript text you were given doesn't contain the passage an idea would touch (e.g. you're working from section notes), describe the fix in general terms instead of quoting a line you can't see.${truncationNoteForManuscript(truncated, manuscriptText, clamped.length)}
 
 ---
 MANUSCRIPT:
@@ -881,7 +898,7 @@ Extra rule for this task: your reasoning must not fabricate textual evidence. Do
 Respond with ONLY a JSON object, no surrounding prose:
 {"assessments":[{"id":"<the exact id>","stance":"agree"|"disagree"|"partial","reasoning":"one or two sentences"}]}
 
-Use the exact id strings provided, one assessment per comment.${truncationNote(truncated, text.length)}
+Use the exact id strings provided, one assessment per comment.${truncationNoteForManuscript(truncated, manuscriptText, text.length)}
 
 EDITORIAL COMMENTS TO JUDGE:
 ${list}
@@ -949,7 +966,7 @@ Rules:
 - "protagonist" is the SINGLE character the story most centers on — the one whose journey the book follows.
 - "first_question.text" MUST follow this template verbatim, substituting the real protagonist name and the salient trait: "<Name> appears <trait> throughout much of the manuscript. Is this an intentional personality trait?"
 - confidence reflects how clearly the text points to that protagonist (1 = unmistakable).
-- EVIDENCE IS REQUIRED for protagonist, summary, each theme, about, and emotional_promise. Every "quote" MUST be copied VERBATIM from the manuscript (an exact short passage, ≤ 25 words) — do NOT paraphrase, and never invent a quote. Give 1–3 pieces of evidence each. "locator" is a brief pointer (e.g. a chapter or scene) or an empty string. If you cannot find a real supporting quote for a conclusion, give fewer or none rather than fabricating.${truncationNote(truncated, text.length)}
+- EVIDENCE IS REQUIRED for protagonist, summary, each theme, about, and emotional_promise. Every "quote" MUST be copied VERBATIM from the manuscript (an exact short passage, ≤ 25 words) — do NOT paraphrase, and never invent a quote. Give 1–3 pieces of evidence each. "locator" is a brief pointer (e.g. a chapter or scene) or an empty string. If you cannot find a real supporting quote for a conclusion, give fewer or none rather than fabricating.${truncationNoteForManuscript(truncated, manuscriptText, text.length)}
 
 ---
 MANUSCRIPT:

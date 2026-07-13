@@ -1,5 +1,6 @@
 import "server-only";
-import { STORY_GROUNDING, buildAuthorIntentBlock } from "@/lib/ai/shared";
+import { STORY_GROUNDING, buildAuthorIntentBlock, authoritativeWordCountBlock } from "@/lib/ai/shared";
+import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
 import type {
   AuthorIntent,
   ComplianceItem,
@@ -333,7 +334,11 @@ export function buildSystemPrompt(def: ReviewerDefinition): string {
 }
 
 /** Assemble the full user prompt for a reviewer entirely from its definition. */
-export function buildReviewPrompt(def: ReviewerDefinition, intent: AuthorIntent | null): string {
+export function buildReviewPrompt(
+  def: ReviewerDefinition,
+  intent: AuthorIntent | null,
+  options?: { wordCount?: number | null },
+): string {
   const mission = `YOUR MISSION\n${def.mission}`;
 
   const expertise = `YOUR EXPERTISE — stay within it:\n- In scope: ${def.expertise.inScope.join("; ")}\n- Out of scope (do NOT assess these — another reviewer owns them): ${def.expertise.outOfScope.join("; ")}`;
@@ -382,8 +387,9 @@ export function buildReviewPrompt(def: ReviewerDefinition, intent: AuthorIntent 
 
   const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
   const grounding = def.grounding ? `\n\n${STORY_GROUNDING}` : "";
+  const wordCountBlock = authoritativeWordCountBlock(options?.wordCount);
 
-  return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${intentBlock}${grounding}`;
+  return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${wordCountBlock}${intentBlock}${grounding}`;
 }
 
 const WEIGHT: Record<ComplianceItem["status"], number> = { met: 1, partial: 0.5, unmet: 0 };
@@ -397,11 +403,23 @@ function bandFor(score: number): ConstitutionalStatus {
 /** Deterministic Review Transparency + Constitutional Compliance for a run. */
 export function buildReviewMeta(
   def: ReviewerDefinition,
-  args: { model: string; originalChars: number; sentChars: number; intent: AuthorIntent | null },
+  args: {
+    model: string;
+    originalChars: number;
+    sentChars: number;
+    intent: AuthorIntent | null;
+    manuscriptText: string;
+  },
 ): ReviewMeta {
   const fullText = args.sentChars >= args.originalChars;
   const percent =
     args.originalChars > 0 ? Math.round((args.sentChars / args.originalChars) * 100) : 100;
+  const wordCountTotal = countManuscriptWords(args.manuscriptText);
+  const wordsAnalyzed = manuscriptWordsInCharSlice(
+    args.manuscriptText,
+    args.sentChars,
+    wordCountTotal,
+  );
   const cap = def.capabilities;
 
   const items: ComplianceItem[] = [
@@ -457,7 +475,7 @@ export function buildReviewMeta(
     scope: fullText ? "Entire manuscript" : `Partial — first ~${percent}% (model input limit)`,
     depth: def.depth,
     coverage: {
-      words_analyzed: Math.round(args.sentChars / 6),
+      words_analyzed: wordsAnalyzed,
       full_text: fullText,
       percent,
       basis: fullText ? "Full text (read in one pass)" : "Full text, truncated to model limit",
@@ -920,9 +938,15 @@ export function buildRevisionCandidatesPrompt(
   def: ReviewerDefinition,
   reviewMemo: string,
   intent: AuthorIntent | null,
+  options?: { wordCount?: number | null },
 ): string {
   const perms = def.revisionPermissions;
   const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
+  const wordCountBlock = authoritativeWordCountBlock(options?.wordCount);
+  const lengthAuthority =
+    options?.wordCount != null && options.wordCount > 0
+      ? `\n\nTOTAL MANUSCRIPT LENGTH — If your acquisitions memo above states a different total word count, treat the authoritative statistics as correct. Do NOT estimate, restate, or rely on memo length figures for total manuscript size. Per-candidate "word_savings" values estimate words saved by that specific edit only — never total manuscript length.`
+      : "";
   return `You are the ${def.reviewer}. You already wrote the acquisitions memo below about this manuscript. Now turn its ACTIONABLE criticisms into trackable Editorial Issues and concrete Revision Candidates, grounded in the manuscript that follows.
 
 YOUR REVISION PERMISSIONS — stay strictly within them:
@@ -964,7 +988,7 @@ Output STRICT, VALID JSON. EVERY string value must be wrapped in double quotes �
 Rules:
 - Every "original" MUST be verbatim from the manuscript. Preserve the author's story, characters, facts, chronology, canon, and vision — never introduce new story content.
 - Keep it focused: the highest-impact issues and candidates, not dozens of trivial ones.
-- Structural moves (reorder/move/combine/split) and pure advice use "comment_only" with the anchor passage as "original".${intentBlock}
+- Structural moves (reorder/move/combine/split) and pure advice use "comment_only" with the anchor passage as "original".${wordCountBlock}${lengthAuthority}${intentBlock}
 
 ${STORY_GROUNDING}
 

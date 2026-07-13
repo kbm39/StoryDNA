@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import mammoth from "mammoth";
 import { getSupabaseAdmin, MANUSCRIPTS_BUCKET } from "@/lib/supabase/server";
+import { countManuscriptWords } from "@/lib/word-count";
 import { getManuscriptText } from "@/lib/reviews";
 import { listIssues } from "@/lib/issues";
 import { recheckIssues as recheckOpenAI } from "@/lib/ai/openai";
@@ -26,11 +27,6 @@ export interface RecheckResult {
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
-}
-
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
 /** Replace a manuscript's text/file with a revised .docx (issues stay attached). */
@@ -72,7 +68,7 @@ export async function uploadRevision(
       original_filename: file.name,
       storage_path: storagePath,
       file_size: file.size,
-      word_count: countWords(extractedText),
+      word_count: countManuscriptWords(extractedText),
       extracted_text: extractedText,
     })
     .eq("id", manuscriptId);

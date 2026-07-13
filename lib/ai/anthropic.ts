@@ -15,6 +15,7 @@ import {
 import {
   clampManuscript,
   truncationNote,
+  authoritativeWordCountBlock,
   STORY_GROUNDING,
   QUERY_LETTER_SYSTEM,
   buildQueryLetterPrompt,
@@ -58,6 +59,7 @@ import {
   type RecheckParsed,
   type EditsParsed,
 } from "@/lib/ai/shared";
+import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Claude Opus 4.8 has a 1M-token context window, so a whole novel fits. The
@@ -88,6 +90,8 @@ export async function generateCraftReview(text: string): Promise<ReviewResult> {
   }
 
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
+  const wordCountTotal = countManuscriptWords(text);
+  const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
   const client = new Anthropic();
 
   const response = await client.messages.create({
@@ -98,7 +102,7 @@ export async function generateCraftReview(text: string): Promise<ReviewResult> {
     messages: [
       {
         role: "user",
-        content: `${INSTRUCTIONS}${truncationNote(truncated, clamped.length)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -114,6 +118,8 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
 
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
+  const wordCountTotal = countManuscriptWords(text);
+  const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
   const client = new Anthropic();
 
   const response = await client.messages.create({
@@ -124,7 +130,7 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
     messages: [
       {
         role: "user",
-        content: `${SCREEN_INSTRUCTIONS}${truncationNote(truncated, clamped.length)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${SCREEN_INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -148,6 +154,8 @@ export async function generateReview(
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
+  const wordCountTotal = countManuscriptWords(text);
+  const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -157,7 +165,7 @@ export async function generateReview(
     messages: [
       {
         role: "user",
-        content: `${buildReviewPrompt(def, intent)}${truncationNote(truncated, clamped.length)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${buildReviewPrompt(def, intent, { wordCount: wordCountTotal })}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -172,6 +180,7 @@ export async function generateReview(
     originalChars: text.length,
     sentChars: clamped.length,
     intent,
+    manuscriptText: text,
   });
   return { content, model, truncated, charsSent: clamped.length, reviewMeta };
 }
@@ -198,6 +207,7 @@ export async function generateRevisionCandidates(
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped } = clampManuscript(text, MAX_INPUT_CHARS);
+  const wordCountTotal = countManuscriptWords(text);
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -207,7 +217,7 @@ export async function generateRevisionCandidates(
     messages: [
       {
         role: "user",
-        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent, { wordCount: wordCountTotal })}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -352,6 +362,7 @@ export async function generateTreatment(
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
 
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
+  const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length);
   const client = new Anthropic();
 
   // Comprehensive series-bible treatments are long. Adaptive thinking shares the
@@ -365,7 +376,7 @@ export async function generateTreatment(
     messages: [
       {
         role: "user",
-        content: `${buildTreatmentInstructions(format)}${truncationNote(truncated, clamped.length)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${buildTreatmentInstructions(format)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });

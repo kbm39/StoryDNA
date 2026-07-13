@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import mammoth from "mammoth";
 import { getSupabaseAdmin, MANUSCRIPTS_BUCKET } from "@/lib/supabase/server";
+import { countManuscriptWords } from "@/lib/word-count";
 import { getManuscriptText } from "@/lib/reviews";
 import { applyEditsToDocx } from "@/lib/docx-edit";
 import { proposeEdits as proposeOpenAI } from "@/lib/ai/openai";
@@ -28,11 +29,6 @@ export interface ApplyEditsResult {
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
-}
-
-function countWords(text: string): number {
-  const t = text.trim();
-  return t ? t.split(/\s+/).length : 0;
 }
 
 /** Ask the suggestion's model to turn it into concrete find/replace edits. */
@@ -136,7 +132,7 @@ export async function applyEditsToManuscript(
     .update({
       storage_path: newPath,
       extracted_text: newText,
-      word_count: countWords(newText),
+      word_count: countManuscriptWords(newText),
       file_size: edited.byteLength,
     })
     .eq("id", manuscriptId);

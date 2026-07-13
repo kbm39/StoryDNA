@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import mammoth from "mammoth";
 import { getSupabaseAdmin, MANUSCRIPTS_BUCKET } from "@/lib/supabase/server";
+import { countManuscriptWords } from "@/lib/word-count";
 
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -62,12 +63,6 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
 }
 
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
-}
-
 /** Server action: validate a .docx, extract its text, store the file + a row. */
 export async function uploadManuscript(
   _prevState: UploadState,
@@ -121,7 +116,7 @@ export async function uploadManuscript(
     original_filename: file.name,
     storage_path: storagePath,
     file_size: file.size,
-    word_count: countWords(extractedText),
+    word_count: countManuscriptWords(extractedText),
     extracted_text: extractedText,
     status: "uploaded",
   });

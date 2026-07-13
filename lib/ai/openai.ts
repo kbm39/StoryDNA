@@ -4,6 +4,7 @@ import type { Agent } from "@/lib/agentfinder";
 import type { StoryDnaData } from "@/lib/types";
 import {
   clampManuscript,
+  authoritativeWordCountBlock,
   STORY_GROUNDING,
   QUERY_LETTER_SYSTEM,
   buildQueryLetterPrompt,
@@ -50,6 +51,7 @@ import {
   type RecheckParsed,
   type EditsParsed,
 } from "@/lib/ai/shared";
+import { countManuscriptWords } from "@/lib/word-count";
 
 // Configurable so you can point at whatever model your account has access to.
 // gpt-4o is a safe, widely-available default; bump OPENAI_MODEL for a stronger
@@ -152,6 +154,7 @@ export async function generateCommercialReview(text: string): Promise<ReviewResu
     throw new Error("OPENAI_API_KEY is not set.");
   }
   const client = openaiClient();
+  const wordCountLine = authoritativeWordCountBlock(countManuscriptWords(text));
   const context = await openAiContext(
     client,
     text,
@@ -162,7 +165,7 @@ export async function generateCommercialReview(text: string): Promise<ReviewResu
     model: MODEL,
     messages: [
       { role: "system", content: SYSTEM },
-      { role: "user", content: `${INSTRUCTIONS}\n\n---\nMANUSCRIPT:\n\n${context}` },
+      { role: "user", content: `${INSTRUCTIONS}${wordCountLine}\n\n---\nMANUSCRIPT:\n\n${context}` },
     ],
   });
 
@@ -175,6 +178,7 @@ export async function generateCommercialReview(text: string): Promise<ReviewResu
 export async function generateScreenReview(text: string): Promise<ReviewResult> {
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set.");
   const client = openaiClient();
+  const wordCountLine = authoritativeWordCountBlock(countManuscriptWords(text));
   const context = await openAiContext(
     client,
     text,
@@ -185,7 +189,7 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
     model: MODEL,
     messages: [
       { role: "system", content: SCREEN_SYSTEM },
-      { role: "user", content: `${SCREEN_INSTRUCTIONS}\n\n---\nMANUSCRIPT:\n\n${context}` },
+      { role: "user", content: `${SCREEN_INSTRUCTIONS}${wordCountLine}\n\n---\nMANUSCRIPT:\n\n${context}` },
     ],
   });
 

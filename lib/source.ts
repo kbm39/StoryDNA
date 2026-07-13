@@ -1,6 +1,7 @@
 import "server-only";
 import { listTreatments } from "@/lib/treatments";
 import { getManuscriptText, listReviews } from "@/lib/reviews";
+import { activeCommercialReview } from "@/lib/review-selection";
 import { getSeries, listSeriesBooks } from "@/lib/series";
 import { clampManuscript } from "@/lib/ai/shared";
 
@@ -39,7 +40,7 @@ export async function seriesSource(seriesId: string): Promise<SeriesSource | nul
     let body: string = treatments[0]?.content?.trim() ?? "";
     if (!body) {
       const reviews = await listReviews(b.id);
-      body = reviews.find((r) => r.perspective === "commercial")?.content?.trim() ?? "";
+      body = activeCommercialReview(reviews)?.content?.trim() ?? "";
     }
     if (!body) {
       const text = await getManuscriptText(b.id);

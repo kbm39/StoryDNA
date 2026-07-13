@@ -85,6 +85,8 @@ export interface Review {
   model: string | null;
   content: string;
   metadata: Record<string, unknown> | null;
+  /** active = current review for this perspective; superseded = retained history */
+  lifecycle_status?: "active" | "superseded";
   created_at: string;
 }
 

@@ -6,6 +6,7 @@ import { getManuscriptText } from "@/lib/reviews";
 import { getStoryDna } from "@/lib/storydna";
 import { locatePassage } from "@/lib/manuscript-context";
 import { generateRevisionCandidates } from "@/lib/ai/anthropic";
+import { generateAgentReview } from "@/lib/ai/anthropic";
 import { LITERARY_AGENT, type ParsedIssue } from "@/lib/ai/review-engine";
 import type { AuthorIntent, RevisionStatus, RevisionType } from "@/lib/types";
 
@@ -38,6 +39,16 @@ export interface GenerateRevisionsResult {
   candidates?: number;
   warnings?: string[];
   replacedPriorGeneration?: boolean;
+}
+
+export interface FreshEditorialGenerationResult {
+  ok: boolean;
+  error?: string;
+  warnings?: string[];
+  oldReviewId?: string | null;
+  newReviewId?: string;
+  issueCount?: number;
+  candidateCount?: number;
 }
 
 function intentFromDna(
@@ -256,6 +267,7 @@ export async function generateAgentRevisions(
     .select("id, content")
     .eq("manuscript_id", manuscriptId)
     .eq("perspective", "commercial")
+    .eq("lifecycle_status", "active")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -325,4 +337,124 @@ export async function generateAgentRevisions(
       warnings,
     };
   }
+}
+
+/**
+ * Fresh versioned editorial run: new Literary Agent review + atomic issue/candidate replacement.
+ * AI generation runs first; DB changes happen only after both succeed via publish_commercial_review_generation.
+ * Preserves superseded commercial reviews. Never touches manuscript text or author responses.
+ */
+export async function runFreshEditorialGeneration(
+  manuscriptId: string,
+): Promise<FreshEditorialGenerationResult> {
+  if (!manuscriptId) return { ok: false, error: "Missing manuscript id." };
+
+  const text = await getManuscriptText(manuscriptId);
+  if (!text || !text.trim()) {
+    return { ok: false, error: "This manuscript has no extracted text." };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const genStatus = await getRevisionGenerationStatus(manuscriptId);
+  if (genStatus.hasAuthorResponses) {
+    return {
+      ok: false,
+      error: `Cannot regenerate: ${genStatus.authorResponseCount} author response${
+        genStatus.authorResponseCount === 1 ? " has" : "s have"
+      } already been recorded in Suggested Edits.`,
+    };
+  }
+
+  const { data: oldActive } = await supabase
+    .from("reviews")
+    .select("id")
+    .eq("manuscript_id", manuscriptId)
+    .eq("perspective", "commercial")
+    .eq("lifecycle_status", "active")
+    .maybeSingle();
+
+  const intent = intentFromDna(await getStoryDna(manuscriptId));
+
+  let reviewResult;
+  try {
+    reviewResult = await generateAgentReview(text, intent);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  let issues: ParsedIssue[];
+  let warnings: string[];
+  try {
+    ({ issues, warnings } = await generateRevisionCandidates(
+      LITERARY_AGENT,
+      reviewResult.content,
+      text,
+      intent,
+    ));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  if (issues.length === 0) {
+    return {
+      ok: false,
+      error:
+        warnings.length > 0
+          ? `No usable revision candidates were produced. ${warnings.join(" ")}`
+          : "No revision candidates were produced from the review.",
+      warnings,
+    };
+  }
+
+  const payload = buildReplacementPayload(issues, text);
+
+  const { data, error } = await supabase.rpc("publish_commercial_review_generation", {
+    p_manuscript_id: manuscriptId,
+    p_provider: "openai",
+    p_model: reviewResult.model,
+    p_content: reviewResult.content,
+    p_metadata: {
+      truncated: reviewResult.truncated,
+      chars_sent: reviewResult.charsSent,
+      review_meta: reviewResult.reviewMeta ?? null,
+    },
+    p_payload: payload,
+  });
+
+  if (error) {
+    const msg = error.message ?? "Publish failed.";
+    if (msg.includes("AUTHOR_RESPONSES_PRESENT")) {
+      return {
+        ok: false,
+        error:
+          "Cannot regenerate: author responses were recorded while generation was in progress. No changes were saved.",
+      };
+    }
+    if (msg.includes("publish_commercial_review_generation")) {
+      return {
+        ok: false,
+        error:
+          "Database migration required. Apply supabase/migrations/0018_review_lifecycle.sql.",
+      };
+    }
+    return { ok: false, error: msg, warnings };
+  }
+
+  const result = data as {
+    review_id?: string;
+    issue_count?: number;
+    candidate_count?: number;
+  } | null;
+
+  revalidatePath(`/manuscripts/${manuscriptId}`);
+  revalidatePath("/suggested-edits");
+
+  return {
+    ok: true,
+    warnings,
+    oldReviewId: oldActive?.id ?? null,
+    newReviewId: result?.review_id,
+    issueCount: result?.issue_count ?? 0,
+    candidateCount: result?.candidate_count ?? 0,
+  };
 }

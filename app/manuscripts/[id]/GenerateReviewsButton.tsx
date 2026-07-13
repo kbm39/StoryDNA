@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { generateReviews } from "@/app/actions/reviews";
-import type { Provider } from "@/lib/types";
+import {
+  getRevisionGenerationStatus,
+  runFreshEditorialGeneration,
+} from "@/app/actions/agent-revisions";
 
 export default function GenerateReviewsButton({
   manuscriptId,
@@ -13,22 +17,52 @@ export default function GenerateReviewsButton({
   hasCommercial: boolean;
   hasCraft: boolean;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<string[]>([]);
-  const [running, setRunning] = useState<Provider[] | null>(null);
+  const [running, setRunning] = useState<"openai" | "anthropic" | "both" | null>(null);
 
-  function run(providers: Provider[]) {
+  function run(mode: "openai" | "anthropic" | "both") {
     setErrors([]);
-    setRunning(providers);
+    setRunning(mode);
     startTransition(async () => {
-      const result = await generateReviews(manuscriptId, providers);
-      setErrors(result.errors ?? []);
+      const errs: string[] = [];
+
+      if (mode === "openai" || mode === "both") {
+        const status = await getRevisionGenerationStatus(manuscriptId);
+        if (status.hasAuthorResponses) {
+          errs.push(
+            `Cannot regenerate Literary Agent review: ${status.authorResponseCount} author response${
+              status.authorResponseCount === 1 ? " has" : "s have"
+            } already been recorded in Suggested Edits.`,
+          );
+          setErrors(errs);
+          setRunning(null);
+          return;
+        }
+
+        const literary = await runFreshEditorialGeneration(manuscriptId);
+        if (!literary.ok) {
+          errs.push(literary.error ?? "Literary Agent generation failed.");
+          setErrors(errs);
+          setRunning(null);
+          return;
+        }
+      }
+
+      if (mode === "anthropic" || mode === "both") {
+        const craft = await generateReviews(manuscriptId, ["anthropic"]);
+        if (!craft.ok) errs.push(...(craft.errors ?? []));
+      }
+
+      setErrors(errs);
       setRunning(null);
+      if (errs.length === 0) router.refresh();
     });
   }
 
-  const label = (provider: Provider, has: boolean) =>
-    pending && running?.length === 1 && running[0] === provider
+  const label = (mode: "openai" | "anthropic", has: boolean) =>
+    pending && (running === mode || running === "both")
       ? "…"
       : has
         ? "Regenerate"
@@ -40,7 +74,7 @@ export default function GenerateReviewsButton({
         <span className="text-xs text-black/50 dark:text-white/50">Reviews:</span>
         <button
           type="button"
-          onClick={() => run(["openai"])}
+          onClick={() => run("openai")}
           disabled={pending}
           className="rounded-md border border-emerald-600/60 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
         >
@@ -48,7 +82,7 @@ export default function GenerateReviewsButton({
         </button>
         <button
           type="button"
-          onClick={() => run(["anthropic"])}
+          onClick={() => run("anthropic")}
           disabled={pending}
           className="rounded-md border border-indigo-600/60 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-300 dark:hover:bg-accent-hover/10"
         >
@@ -56,16 +90,20 @@ export default function GenerateReviewsButton({
         </button>
         <button
           type="button"
-          onClick={() => run(["openai", "anthropic"])}
+          onClick={() => run("both")}
           disabled={pending}
           className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pending && running?.length === 2 ? "Generating…" : "Both"}
+          {pending && running === "both" ? "Generating…" : "Both"}
         </button>
       </div>
       {pending && (
         <span className="text-xs text-black/50 dark:text-white/50">
-          Reading the full manuscript — this can take a minute.
+          {running === "anthropic"
+            ? "Reading the full manuscript — this can take a minute."
+            : running === "both"
+              ? "Publishing Literary Agent atomically, then generating Claude review…"
+              : "Publishing Literary Agent review and revision candidates atomically — up to several minutes…"}
         </span>
       )}
       {errors.length > 0 && (

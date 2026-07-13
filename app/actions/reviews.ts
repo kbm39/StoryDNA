@@ -3,29 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getManuscriptText } from "@/lib/reviews";
-import { getStoryDna } from "@/lib/storydna";
 import { generateScreenReview as generateScreenOpenAI } from "@/lib/ai/openai";
 import {
   generateCraftReview,
-  generateAgentReview,
   generateScreenReview as generateScreenClaude,
 } from "@/lib/ai/anthropic";
-import type { AuthorIntent, Perspective, Provider, StoryDna } from "@/lib/types";
+import type { Perspective, Provider } from "@/lib/types";
 import type { ReviewResult } from "@/lib/ai/shared";
-
-/** Build a review's author-intent context from the manuscript's StoryDNA (if any). */
-function intentFromDna(dna: StoryDna | null): AuthorIntent | null {
-  if (!dna?.data?.summary) return null;
-  const d = dna.data;
-  const emo = d.emotional_promise.final ?? d.emotional_promise.proposed;
-  return {
-    confirmed: dna.alignment_status === "aligned",
-    summary: d.summary.final ?? d.summary.proposed,
-    about: d.about.final ?? d.about.proposed,
-    themes: d.themes.final ?? d.themes.proposed.map((t) => t.name),
-    emotionalPromise: `Beginning: ${emo.beginning}; Middle: ${emo.middle}; Ending: ${emo.ending}; After: ${emo.after_finishing}`,
-  };
-}
+import { runFreshEditorialGeneration } from "@/app/actions/agent-revisions";
 
 export interface GenerateReviewsResult {
   ok: boolean;
@@ -48,14 +33,20 @@ async function saveReview(
   perspective: Perspective,
   result: ReviewResult,
 ): Promise<void> {
+  if (perspective === "commercial") {
+    throw new Error(
+      "Commercial (Literary Agent) reviews must be published via runFreshEditorialGeneration — not saveReview.",
+    );
+  }
+
   const supabase = getSupabaseAdmin();
-  // Replace any prior review from this provider + perspective for this manuscript.
   await supabase
     .from("reviews")
     .delete()
     .eq("manuscript_id", manuscriptId)
     .eq("provider", provider)
     .eq("perspective", perspective);
+
   const { error } = await supabase.from("reviews").insert({
     manuscript_id: manuscriptId,
     provider,
@@ -67,14 +58,14 @@ async function saveReview(
       chars_sent: result.charsSent,
       review_meta: result.reviewMeta ?? null,
     },
+    lifecycle_status: "active",
   });
   if (error) throw new Error(error.message);
 }
 
 /**
- * Generate (or regenerate) the chosen editorial reviews for a manuscript.
- * Pass only the providers you want to (re)run — each is saved independently,
- * so regenerating one never discards the other.
+ * Generate (or regenerate) craft (developmental) reviews only.
+ * Literary Agent (commercial) reviews use runFreshEditorialGeneration — not this path.
  */
 export async function generateReviews(
   manuscriptId: string,
@@ -82,23 +73,29 @@ export async function generateReviews(
 ): Promise<GenerateReviewsResult> {
   if (!manuscriptId) return { ok: false, errors: ["Missing manuscript id."] };
   if (providers.length === 0) return { ok: false, errors: ["Pick at least one model."] };
+  if (providers.includes("openai")) {
+    return {
+      ok: false,
+      errors: [
+        "Literary Agent (commercial) reviews must be run via the Literary Agent button — they publish atomically with revision candidates.",
+      ],
+    };
+  }
+
+  const craftProviders = providers.filter((p) => p === "anthropic");
+  if (craftProviders.length === 0) {
+    return { ok: false, errors: ["No supported providers selected."] };
+  }
 
   const text = await getManuscriptText(manuscriptId);
   if (!text || !text.trim()) {
     return { ok: false, errors: ["This manuscript has no extracted text to review."] };
   }
 
-  // The Literary Agent Review (commercial) reads the whole manuscript and is
-  // grounded in the confirmed StoryDNA author intent when available.
-  const intent = intentFromDna(await getStoryDna(manuscriptId));
-
   const results = await Promise.all(
-    providers.map(async (provider) => {
+    craftProviders.map(async (provider) => {
       try {
-        const res =
-          provider === "openai"
-            ? await generateAgentReview(text, intent)
-            : await generateCraftReview(text);
+        const res = await generateCraftReview(text);
         return { provider, res, error: null as string | null };
       } catch (e) {
         return { provider, res: null, error: e instanceof Error ? e.message : String(e) };
@@ -124,15 +121,17 @@ export async function generateReviews(
 }
 
 /**
- * Run the V2 Literary Agent Review (Commercial Acquisitions) on the current
- * manuscript. Thin wrapper over the existing commercial path — same Review
- * Engine, same reviewer definition, same storage slot; NOT a separate system.
- * The prior Literary Agent review is replaced only after this succeeds.
+ * Run the Literary Agent review + revision candidates via the atomic publish path.
+ * @deprecated Prefer runFreshEditorialGeneration directly; kept for any legacy callers.
  */
 export async function runLiteraryAgentReview(
   manuscriptId: string,
 ): Promise<GenerateReviewsResult> {
-  return generateReviews(manuscriptId, ["openai"]);
+  const result = await runFreshEditorialGeneration(manuscriptId);
+  if (!result.ok) {
+    return { ok: false, errors: [result.error ?? "Literary Agent generation failed."] };
+  }
+  return { ok: true };
 }
 
 /** Generate (or regenerate) the producer's-read (TV/film) review from the chosen provider(s). */

@@ -1,4 +1,5 @@
 import { getManuscriptMeta, listReviews } from "@/lib/reviews";
+import { activeCommercialReview } from "@/lib/review-selection";
 import { buildReviewsDocx, safeReviewsName, type ReviewSection } from "@/lib/export";
 
 const DOCX_MIME =
@@ -16,7 +17,7 @@ export async function GET(
   }
 
   const reviews = await listReviews(id);
-  const commercial = reviews.find((r) => r.perspective === "commercial");
+  const commercial = activeCommercialReview(reviews);
   const craft = reviews.find((r) => r.perspective === "craft");
   const screen = reviews.filter((r) => r.perspective === "screen");
   const providerLabel: Record<string, string> = { openai: "OpenAI", anthropic: "Claude" };

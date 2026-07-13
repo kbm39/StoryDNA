@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runLiteraryAgentReview } from "@/app/actions/reviews";
+import { useRouter } from "next/navigation";
 import {
-  generateAgentRevisions,
   getRevisionGenerationStatus,
+  runFreshEditorialGeneration,
   type RevisionGenerationStatus,
 } from "@/app/actions/agent-revisions";
 
 const BLOCKED_MSG = (count: number) =>
-  `Cannot regenerate revision candidates: ${count} author response${
+  `Cannot regenerate: ${count} author response${
     count === 1 ? " has" : "s have"
   } already been recorded in Suggested Edits. Regenerating would invalidate those decisions. Complete or clear the author-review workflow first.`;
 
-/** Runs the Literary Agent review, then generates linked revision candidates when allowed. */
+/** Runs the Literary Agent review and revision candidates in one atomic publish. */
 export default function RunAgentReviewButton({
   manuscriptId,
   hasReview,
@@ -23,16 +23,17 @@ export default function RunAgentReviewButton({
   hasReview: boolean;
   generationStatus: RevisionGenerationStatus;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [errors, setErrors] = useState<string[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "review" | "candidates">("idle");
+  const [running, setRunning] = useState(false);
   const [status, setStatus] = useState(initialStatus);
 
   const blockedByAuthorResponses = status.hasAuthorResponses;
   const willReplacePrior =
     !blockedByAuthorResponses &&
-    (status.existingIssueCount > 0 || status.existingCandidateCount > 0);
+    (hasReview || status.existingIssueCount > 0 || status.existingCandidateCount > 0);
 
   function run() {
     if (blockedByAuthorResponses) return;
@@ -44,45 +45,33 @@ export default function RunAgentReviewButton({
       setStatus(fresh);
       if (fresh.hasAuthorResponses) {
         setErrors([BLOCKED_MSG(fresh.authorResponseCount)]);
-        setPhase("idle");
+        setRunning(false);
         return;
       }
 
-      setPhase("review");
-      const r = await runLiteraryAgentReview(manuscriptId);
-      if (!r.ok) {
-        setErrors(r.errors ?? []);
-        setPhase("idle");
-        return;
-      }
+      setRunning(true);
+      const result = await runFreshEditorialGeneration(manuscriptId);
+      setRunning(false);
 
-      const recheck = await getRevisionGenerationStatus(manuscriptId);
-      setStatus(recheck);
-      if (recheck.hasAuthorResponses) {
-        setErrors([BLOCKED_MSG(recheck.authorResponseCount)]);
-        setPhase("idle");
-        return;
-      }
-
-      setPhase("candidates");
-      const c = await generateAgentRevisions(manuscriptId);
-      setPhase("idle");
-      if (!c.ok) {
-        if (c.error) setErrors([c.error]);
+      if (!result.ok) {
+        if (result.error) setErrors([result.error]);
         return;
       }
 
       const parts = [
-        `Generated ${c.issues ?? 0} issue${c.issues === 1 ? "" : "s"} and ${c.candidates ?? 0} candidate${c.candidates === 1 ? "" : "s"}.`,
+        `Published new Literary Agent review with ${result.issueCount ?? 0} issue${
+          result.issueCount === 1 ? "" : "s"
+        } and ${result.candidateCount ?? 0} candidate${result.candidateCount === 1 ? "" : "s"}.`,
       ];
-      if (c.replacedPriorGeneration) {
-        parts.push("Prior generated issues and candidates were replaced.");
+      if (result.oldReviewId) {
+        parts.push("Prior review superseded; generated issues and candidates replaced.");
       }
-      if (c.warnings?.length) {
-        parts.push(c.warnings.join(" "));
+      if (result.warnings?.length) {
+        parts.push(result.warnings.join(" "));
       }
       setSuccess(parts.join(" "));
       setStatus(await getRevisionGenerationStatus(manuscriptId));
+      router.refresh();
     });
   }
 
@@ -101,13 +90,11 @@ export default function RunAgentReviewButton({
           ? `Regeneration blocked — ${status.authorResponseCount} author response${
               status.authorResponseCount === 1 ? " has" : "s have"
             } been recorded in Suggested Edits.`
-          : phase === "review"
-            ? "Reading the full manuscript under StoryDNA Constitution v1.0 — up to a minute…"
-            : phase === "candidates"
-              ? "Turning the review's criticisms into revision candidates…"
-              : willReplacePrior
-                ? "Checks for author responses first, then runs the memo and atomically replaces prior generated issues and candidates."
-                : "Checks for author responses first, then runs the memo and generates linked revision candidates below."}
+          : running
+            ? "Reading the full manuscript, generating revision candidates, then publishing atomically — up to several minutes…"
+            : willReplacePrior
+              ? "Checks for author responses first, then publishes a new memo and atomically replaces the prior review generation."
+              : "Checks for author responses first, then publishes the memo and linked revision candidates."}
       </span>
       {blockedByAuthorResponses && (
         <p className="w-full text-sm text-amber-800 dark:text-amber-200">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { getManuscriptMeta, listReviews } from "@/lib/reviews";
+import { activeCommercialReview } from "@/lib/review-selection";
 import { listIssues } from "@/lib/issues";
 import { listSuggestionsForIssues, groupByIssue } from "@/lib/suggestions";
 import { listRevisionChecks } from "@/lib/revisions";
@@ -341,7 +342,7 @@ export default async function ManuscriptPage({
   }
   const brainstormRounds = groupByPrompt(brainstorms);
   const suggestionsByIssue = groupByIssue(suggestions);
-  const commercial = reviews.find((r) => r.perspective === "commercial");
+  const commercial = activeCommercialReview(reviews);
   const craft = reviews.find((r) => r.perspective === "craft");
   const screenReviews = reviews.filter((r) => r.perspective === "screen");
   const outstandingIssues = issues

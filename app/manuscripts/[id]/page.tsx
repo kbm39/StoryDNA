@@ -34,6 +34,9 @@ import type {
 } from "@/lib/types";
 import GenerateReviewsButton from "./GenerateReviewsButton";
 import RunAgentReviewButton from "./RunAgentReviewButton";
+import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
+import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions";
+import { getRevisionGenerationStatus } from "@/app/actions/agent-revisions";
 import ExtractIssuesButton from "./ExtractIssuesButton";
 import AddIssueForm from "./AddIssueForm";
 import IssueItem from "./IssueItem";
@@ -323,6 +326,11 @@ export default async function ManuscriptPage({
   const currentSeries = manuscript.series_id
     ? allSeries.find((s) => s.id === manuscript.series_id) ?? null
     : null;
+  const [editorialIssues, revisionCandidates, revisionGenStatus] = await Promise.all([
+    getEditorialIssues(id),
+    getRevisionCandidates(id),
+    getRevisionGenerationStatus(id),
+  ]);
   const groupedDocs = groupDocuments(documents);
   // External PKagentfinder DB — never let it break the page.
   let agents: AgentOption[] = [];
@@ -415,7 +423,11 @@ export default async function ManuscriptPage({
       </nav>
 
       <section id="reviews" className="scroll-mt-20">
-        <RunAgentReviewButton manuscriptId={id} hasReview={Boolean(commercial)} />
+        <RunAgentReviewButton
+          manuscriptId={id}
+          hasReview={Boolean(commercial)}
+          generationStatus={revisionGenStatus}
+        />
         {(commercial || craft) && (
           <div className="mb-3 flex justify-end">
             <a
@@ -448,6 +460,14 @@ export default async function ManuscriptPage({
           <div className="mt-4">
             <GradeLegend />
           </div>
+        )}
+
+        {editorialIssues.length > 0 && (
+          <RevisionCandidatesPreview
+            issues={editorialIssues}
+            candidates={revisionCandidates}
+            manuscriptId={id}
+          />
         )}
       </section>
 

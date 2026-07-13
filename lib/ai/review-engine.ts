@@ -5,6 +5,7 @@ import type {
   ComplianceItem,
   ConstitutionalStatus,
   ReviewMeta,
+  RevisionType,
 } from "@/lib/types";
 
 /**
@@ -43,6 +44,16 @@ export interface ReviewerCapabilities {
 export interface ExpertiseBoundaries {
   inScope: string[];
   outOfScope: string[];
+}
+
+/** What kinds of revisions a reviewer is permitted to propose. */
+export interface RevisionPermissions {
+  mayRevise: RevisionType[];
+  mayComment: boolean;
+  /** Some specialists may only comment, never rewrite prose. */
+  commentOnly: boolean;
+  contentScope: string[];
+  prohibitions: string[];
 }
 
 /** One lens of the evaluation framework, with its guiding question library. */
@@ -143,7 +154,8 @@ export interface ConfidenceModel {
   evidencePenalty: number;
 }
 
-export interface RevisionType {
+/** A catalog entry describing a kind of revision this reviewer tends to suggest. */
+export interface RevisionTypeSpec {
   key: string;
   label: string;
   description: string;
@@ -257,6 +269,8 @@ export interface ReviewerDefinition {
   personality: ReviewerPersonality;
   /** How this reviewer communicates — foundational, non-negotiable principles. */
   communicationPhilosophy: string[];
+  /** What kinds of revisions this reviewer may propose. */
+  revisionPermissions: RevisionPermissions;
   /** Closing tone directive. */
   tone: string;
   /** Opening instruction line. */
@@ -281,7 +295,7 @@ export interface ReviewerDefinition {
   outputContract: OutputContract;
   recommendation: RecommendationSpec;
   confidenceModel: ConfidenceModel;
-  revisionTypes: RevisionType[];
+  revisionTypes: RevisionTypeSpec[];
   authorQuestions: ReviewerAuthorQuestion[];
 
   // Applicability & board assembly
@@ -716,6 +730,36 @@ export const LITERARY_AGENT: ReviewerDefinition = {
     "Prioritize the two or three highest-impact revisions over an overwhelming list of small ones.",
     "End on an honest, evidence-based note about the manuscript's real potential whenever the evidence supports it.",
   ],
+  revisionPermissions: {
+    mayRevise: [
+      "delete",
+      "tighten",
+      "rewrite",
+      "clarify",
+      "reorder",
+      "move",
+      "expand",
+      "replace_exposition",
+      "replace_description",
+      "replace_dialogue",
+      "comment_only",
+    ],
+    mayComment: true,
+    commentOnly: false,
+    contentScope: [
+      "hooks",
+      "openings",
+      "chapter endings",
+      "commercial pacing",
+      "exposition",
+      "overall tightening",
+      "structure",
+    ],
+    prohibitions: [
+      "never invent or alter story facts, characters, chronology, or canon",
+      "never replace the author's story with a different one unless explicitly asked",
+    ],
+  },
   knowledgeDomains: [
     {
       name: "Trade fiction acquisitions",
@@ -831,3 +875,231 @@ export const LITERARY_AGENT: ReviewerDefinition = {
     ],
   },
 };
+
+// --- Revision candidate generation (Phase 2) ---------------------------------
+
+export interface ParsedCandidate {
+  type: string;
+  original: string;
+  revised: string;
+  locator: string;
+  word_savings: number;
+  reason: string;
+  confidence: number;
+  confidence_reason: string;
+  difficulty: string;
+  story_risk: string;
+  voice_risk: string;
+  commercial_impact: string;
+  reader_impact: string;
+  grade_delta: number;
+  consequence_if_unchanged: string;
+  dependencies: string;
+  impacts: {
+    pacing: number;
+    clarity: number;
+    commercial_readiness: number;
+    emotional_impact: number;
+    voice_preservation: number;
+    submission_readiness: number;
+  };
+}
+
+export interface ParsedIssue {
+  key: string;
+  text: string;
+  area: string;
+  severity: string;
+  source_section: string;
+  success_criterion: string;
+  candidates: ParsedCandidate[];
+}
+
+/** Prompt: turn the reviewer's own memo criticisms into linked, grounded issues + candidates. */
+export function buildRevisionCandidatesPrompt(
+  def: ReviewerDefinition,
+  reviewMemo: string,
+  intent: AuthorIntent | null,
+): string {
+  const perms = def.revisionPermissions;
+  const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
+  return `You are the ${def.reviewer}. You already wrote the acquisitions memo below about this manuscript. Now turn its ACTIONABLE criticisms into trackable Editorial Issues and concrete Revision Candidates, grounded in the manuscript that follows.
+
+YOUR REVISION PERMISSIONS — stay strictly within them:
+- Revision types you may propose: ${perms.mayRevise.join(", ")}.
+- Content you may touch: ${perms.contentScope.join("; ")}.
+- ${perms.commentOnly ? "You may ONLY comment, never rewrite prose." : "You may edit prose within your scope."}
+- You must NOT: ${perms.prohibitions.join("; ")}.
+
+For EACH significant, actionable criticism in your memo, create one Editorial Issue with:
+- "key": a short unique slug.
+- "text": the criticism in one or two sentences.
+- "area": opening | middle | ending | character | dialogue | pacing | prose | commercial | structure | other.
+- "severity": low | medium | high.
+- "source_section": which memo section it came from.
+- "success_criterion": a concrete, checkable description of what "fixed" looks like (the acceptance test a re-review would use).
+- "candidates": 0 or more SPECIFIC revision candidates that localize the criticism into the actual text. A high-level criticism (e.g. "the middle sags") should become several specific candidates across the relevant chapters. Guidance-only issues have NO candidates — return an empty array rather than inventing an edit.
+
+For EACH candidate:
+- "type": one of your permitted revision types.
+- "original": a passage copied VERBATIM from the manuscript (exact text within a single paragraph). REQUIRED and real — never invent or paraphrase it.
+- "revised": the suggested replacement. Empty string for a pure deletion or a comment_only note.
+- "locator": chapter/scene if identifiable.
+- "word_savings": approximate words saved (0 if none).
+- "reason": why this change matters.
+- "confidence": 0–100; "confidence_reason": one line.
+- "difficulty": easy | medium | difficult | major_rewrite.
+- "story_risk" / "voice_risk": low | medium | high.
+- "commercial_impact" / "reader_impact": low | medium | high.
+- "grade_delta": small integer estimate of how much this moves representation readiness (honest estimate).
+- "consequence_if_unchanged": what happens if the author leaves it as-is.
+- "dependencies": a note if this change affects other passages (e.g. "removes a setup referenced in Ch. 14 & 18"); empty string if none.
+- "impacts": { "pacing", "clarity", "commercial_readiness", "emotional_impact", "voice_preservation", "submission_readiness" } — each an integer from -2 to +2 estimating the effect of ACCEPTING this change.
+
+Respond with ONLY a JSON object, no surrounding prose:
+{"issues":[{"key":"...","text":"...","area":"...","severity":"...","source_section":"...","success_criterion":"...","candidates":[{...}]}]}
+
+Output STRICT, VALID JSON. EVERY string value must be wrapped in double quotes — e.g. "difficulty": "medium" and "type": "tighten", NEVER "difficulty": medium. Numbers are unquoted.
+
+Rules:
+- Every "original" MUST be verbatim from the manuscript. Preserve the author's story, characters, facts, chronology, canon, and vision — never introduce new story content.
+- Keep it focused: the highest-impact issues and candidates, not dozens of trivial ones.
+- Structural moves (reorder/move/combine/split) and pure advice use "comment_only" with the anchor passage as "original".${intentBlock}
+
+${STORY_GROUNDING}
+
+---
+YOUR ACQUISITIONS MEMO:
+${reviewMemo}
+
+(The full manuscript follows below.)`;
+}
+
+function rcStr(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+function rcInt(v: unknown, lo: number, hi: number): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : 0;
+  if (!isFinite(n)) return 0;
+  return Math.max(lo, Math.min(hi, Math.round(n)));
+}
+
+/** Quote bareword enum values the model sometimes emits (e.g. "difficulty":medium). */
+function repairEnumValues(s: string): string {
+  const keys = [
+    "type",
+    "area",
+    "severity",
+    "difficulty",
+    "story_risk",
+    "voice_risk",
+    "commercial_impact",
+    "reader_impact",
+  ];
+  let out = s;
+  for (const k of keys) {
+    out = out.replace(new RegExp(`("${k}"\\s*:\\s*)([A-Za-z_][A-Za-z0-9_]*)`, "g"), '$1"$2"');
+  }
+  return out;
+}
+
+export interface ParseRevisionCandidatesResult {
+  issues: ParsedIssue[];
+  warnings: string[];
+}
+
+/** Defensively parse the revision-candidate JSON. */
+export function parseRevisionCandidates(raw: string): ParseRevisionCandidatesResult {
+  const warnings: string[] = [];
+  let jsonStr = raw.trim();
+  const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) jsonStr = fence[1].trim();
+  if (!jsonStr.startsWith("{") && !jsonStr.startsWith("[")) {
+    const start = jsonStr.indexOf("{");
+    const end = jsonStr.lastIndexOf("}");
+    if (start !== -1 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    try {
+      parsed = JSON.parse(repairEnumValues(jsonStr));
+      warnings.push("Repaired unquoted enum values in model JSON.");
+    } catch {
+      throw new Error("Could not parse revision-candidate JSON from the model response.");
+    }
+  }
+  const arr = Array.isArray(parsed) ? parsed : (parsed as { issues?: unknown }).issues;
+  if (!Array.isArray(arr)) {
+    throw new Error("Model response did not include an issues array.");
+  }
+
+  let skippedIssues = 0;
+  let skippedCandidates = 0;
+
+  const issues = arr
+    .filter((x) => x && typeof x === "object" && rcStr((x as Record<string, unknown>).text))
+    .map((x: Record<string, unknown>) => {
+      const cands = Array.isArray(x.candidates) ? x.candidates : [];
+      const candidates: ParsedCandidate[] = cands
+        .filter((c: unknown): c is Record<string, unknown> => !!c && typeof c === "object")
+        .map((c: Record<string, unknown>) => {
+          const im = (c.impacts ?? {}) as Record<string, unknown>;
+          return {
+            type: rcStr(c.type) || "comment_only",
+            original: rcStr(c.original),
+            revised: rcStr(c.revised),
+            locator: rcStr(c.locator),
+            word_savings: rcInt(c.word_savings, 0, 100000),
+            reason: rcStr(c.reason),
+            confidence: rcInt(c.confidence, 0, 100),
+            confidence_reason: rcStr(c.confidence_reason),
+            difficulty: rcStr(c.difficulty) || "medium",
+            story_risk: rcStr(c.story_risk) || "low",
+            voice_risk: rcStr(c.voice_risk) || "low",
+            commercial_impact: rcStr(c.commercial_impact) || "medium",
+            reader_impact: rcStr(c.reader_impact) || "medium",
+            grade_delta: rcInt(c.grade_delta, 0, 20),
+            consequence_if_unchanged: rcStr(c.consequence_if_unchanged),
+            dependencies: rcStr(c.dependencies),
+            impacts: {
+              pacing: rcInt(im.pacing, -2, 2),
+              clarity: rcInt(im.clarity, -2, 2),
+              commercial_readiness: rcInt(im.commercial_readiness, -2, 2),
+              emotional_impact: rcInt(im.emotional_impact, -2, 2),
+              voice_preservation: rcInt(im.voice_preservation, -2, 2),
+              submission_readiness: rcInt(im.submission_readiness, -2, 2),
+            },
+          };
+        })
+        .filter((c) => {
+          if (!c.original) {
+            skippedCandidates += 1;
+            return false;
+          }
+          return true;
+        });
+      return {
+        key: rcStr(x.key),
+        text: rcStr(x.text),
+        area: rcStr(x.area) || "other",
+        severity: rcStr(x.severity) || "medium",
+        source_section: rcStr(x.source_section),
+        success_criterion: rcStr(x.success_criterion),
+        candidates,
+      };
+    });
+
+  skippedIssues = arr.length - issues.length;
+  if (skippedIssues > 0) {
+    warnings.push(`Skipped ${skippedIssues} issue(s) missing required text.`);
+  }
+  if (skippedCandidates > 0) {
+    warnings.push(
+      `Skipped ${skippedCandidates} candidate(s) missing a verbatim original passage.`,
+    );
+  }
+
+  return { issues, warnings };
+}

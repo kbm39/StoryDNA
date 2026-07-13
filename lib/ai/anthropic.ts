@@ -6,8 +6,11 @@ import {
   buildReviewPrompt,
   buildSystemPrompt,
   buildReviewMeta,
+  buildRevisionCandidatesPrompt,
+  parseRevisionCandidates,
   LITERARY_AGENT,
   type ReviewerDefinition,
+  type ParsedIssue,
 } from "@/lib/ai/review-engine";
 import {
   clampManuscript,
@@ -179,6 +182,41 @@ export function generateAgentReview(
   intent: AuthorIntent | null,
 ): Promise<ReviewResult> {
   return generateReview(LITERARY_AGENT, text, intent);
+}
+
+/**
+ * Revision Engine (Phase 2): turn a reviewer's memo criticisms into linked,
+ * grounded Editorial Issues + Revision Candidates. Claude reads the whole
+ * manuscript so every candidate's `original` can be a verbatim passage.
+ */
+export async function generateRevisionCandidates(
+  def: ReviewerDefinition,
+  reviewMemo: string,
+  text: string,
+  intent: AuthorIntent | null,
+): Promise<{ issues: ParsedIssue[]; model: string; warnings: string[] }> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+  const { text: clamped } = clampManuscript(text, MAX_INPUT_CHARS);
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: 16000,
+    system:
+      "You convert your own editorial review into structured, grounded revision candidates. Output only the JSON object requested.",
+    messages: [
+      {
+        role: "user",
+        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+      },
+    ],
+  });
+  const response = await stream.finalMessage();
+
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty response.");
+  const { issues, warnings } = parseRevisionCandidates(content);
+  return { issues, model: response.model || MODEL, warnings };
 }
 
 /** Write a personalized query letter to an agent. */

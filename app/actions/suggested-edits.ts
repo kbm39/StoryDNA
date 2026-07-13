@@ -39,6 +39,10 @@ function validateInput(input: SubmitAuthorResponseInput): string | null {
  * - Candidate must belong to the supplied manuscript_id (cross-pairing rejected).
  * - All fields validated server-side before insert/update.
  *
+ * Concurrency: uses PostgreSQL advisory lock via upsert_author_edit_response RPC
+ * (same lock namespace as replace_editorial_generation) so author responses and
+ * editorial replacement cannot race.
+ *
  * Source of truth: writes `author_edit_responses` only. Does NOT update
  * `revision_candidates.status` — that field is editorial lifecycle state
  * (see lib/author-response-status.ts). Does not alter manuscript text.
@@ -50,64 +54,37 @@ export async function submitAuthorResponse(
   if (validationError) return { ok: false, error: validationError };
 
   const supabase = getSupabaseAdmin();
-
-  const { data: candidate, error: candErr } = await supabase
-    .from("revision_candidates")
-    .select("id, manuscript_id, original, revised")
-    .eq("id", input.candidateId)
-    .eq("manuscript_id", input.manuscriptId)
-    .maybeSingle();
-
-  if (candErr) return { ok: false, error: candErr.message };
-  if (!candidate) return { ok: false, error: "Suggestion not found." };
-
-  const now = new Date().toISOString();
   const authorModifiedText =
     input.disposition === "modified" ? (input.authorModifiedText?.trim() ?? null) : null;
   const authorNote = input.authorNote?.trim() || null;
 
-  const { data: existing, error: lookupErr } = await supabase
-    .from("author_edit_responses")
-    .select("id")
-    .eq("candidate_id", input.candidateId)
-    .maybeSingle();
+  const { error } = await supabase.rpc("upsert_author_edit_response", {
+    p_candidate_id: input.candidateId,
+    p_manuscript_id: input.manuscriptId,
+    p_disposition: input.disposition,
+    p_author_modified_text: authorModifiedText,
+    p_author_note: authorNote,
+  });
 
-  if (lookupErr) {
-    if (lookupErr.message.includes("author_edit_responses")) {
+  if (error) {
+    if (
+      error.message.includes("author_edit_responses") ||
+      error.message.includes("upsert_author_edit_response")
+    ) {
       return {
         ok: false,
         error:
-          "Database migration required. Apply supabase/migrations/0016_author_edit_responses.sql.",
+          "Database migration required. Apply supabase/migrations/0017_replace_editorial_generation.sql.",
         migrationRequired: true,
       };
     }
-    return { ok: false, error: lookupErr.message };
-  }
-
-  const row = {
-    candidate_id: input.candidateId,
-    manuscript_id: input.manuscriptId,
-    disposition: input.disposition,
-    author_modified_text: authorModifiedText,
-    author_note: authorNote,
-    updated_at: now,
-    ...(existing ? {} : { responded_at: now }),
-  };
-
-  const { error: upsertErr } = existing
-    ? await supabase.from("author_edit_responses").update(row).eq("id", existing.id)
-    : await supabase.from("author_edit_responses").insert(row);
-
-  if (upsertErr) {
-    if (upsertErr.message.includes("author_edit_responses")) {
-      return {
-        ok: false,
-        error:
-          "Database migration required. Apply supabase/migrations/0016_author_edit_responses.sql.",
-        migrationRequired: true,
-      };
+    if (error.message.includes("CANDIDATE_MANUSCRIPT_MISMATCH")) {
+      return { ok: false, error: "Suggestion not found for this manuscript." };
     }
-    return { ok: false, error: upsertErr.message };
+    if (error.message.includes("CANDIDATE_NOT_FOUND")) {
+      return { ok: false, error: "Suggestion not found." };
+    }
+    return { ok: false, error: error.message };
   }
 
   revalidatePath("/suggested-edits");

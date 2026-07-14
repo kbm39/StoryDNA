@@ -60,6 +60,9 @@ import {
   type EditsParsed,
 } from "@/lib/ai/shared";
 import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
+import { buildReviewStatistics, type ReviewStatistics } from "@/lib/review-statistics";
+import { buildWordCountRepairPrompt } from "@/lib/word-count-validation";
+import { buildProseGradeRepairPrompt, type ProseGradeMatch } from "@/lib/prose-grade-validation";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Claude Opus 4.8 has a 1M-token context window, so a whole novel fits. The
@@ -92,6 +95,7 @@ export async function generateCraftReview(text: string): Promise<ReviewResult> {
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
   const wordCountTotal = countManuscriptWords(text);
   const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
+  const fullText = !truncated;
   const client = new Anthropic();
 
   const response = await client.messages.create({
@@ -102,7 +106,7 @@ export async function generateCraftReview(text: string): Promise<ReviewResult> {
     messages: [
       {
         role: "user",
-        content: `${INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal, sentWordCount, fullText)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -120,6 +124,7 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
   const wordCountTotal = countManuscriptWords(text);
   const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
+  const fullText = !truncated;
   const client = new Anthropic();
 
   const response = await client.messages.create({
@@ -130,7 +135,7 @@ export async function generateScreenReview(text: string): Promise<ReviewResult> 
     messages: [
       {
         role: "user",
-        content: `${SCREEN_INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${SCREEN_INSTRUCTIONS}${authoritativeWordCountBlock(wordCountTotal, sentWordCount, fullText)}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -150,12 +155,21 @@ export async function generateReview(
   def: ReviewerDefinition,
   text: string,
   intent: AuthorIntent | null,
+  statistics?: ReviewStatistics | null,
 ): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped, truncated } = clampManuscript(text, MAX_INPUT_CHARS);
   const wordCountTotal = countManuscriptWords(text);
   const sentWordCount = manuscriptWordsInCharSlice(text, clamped.length, wordCountTotal);
+  const stats =
+    statistics ??
+    buildReviewStatistics({
+      manuscriptId: "",
+      extractedText: text,
+      sentChars: clamped.length,
+      storedWordCount: wordCountTotal,
+    });
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -165,7 +179,7 @@ export async function generateReview(
     messages: [
       {
         role: "user",
-        content: `${buildReviewPrompt(def, intent, { wordCount: wordCountTotal })}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${buildReviewPrompt(def, intent, { statistics: stats })}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });
@@ -189,8 +203,102 @@ export async function generateReview(
 export function generateAgentReview(
   text: string,
   intent: AuthorIntent | null,
+  statistics?: ReviewStatistics | null,
 ): Promise<ReviewResult> {
-  return generateReview(LITERARY_AGENT, text, intent);
+  return generateReview(LITERARY_AGENT, text, intent, statistics);
+}
+
+/** One automatic repair pass for statistics or prose-grade validation failures. */
+export async function repairCommercialReviewValidation(args: {
+  reviewContent: string;
+  canonicalWordCount: number;
+  calculatedLetterGrade: string;
+  manuscriptScore: number;
+  wordCountContradiction?: string;
+  proseGradeConflict?: ProseGradeMatch;
+}): Promise<ReviewResult> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+
+  const sections: string[] = [
+    "The acquisitions memo below failed StoryDNA validation. Apply ALL corrections below in one pass.",
+  ];
+
+  if (args.wordCountContradiction) {
+    sections.push(
+      buildWordCountRepairPrompt({
+        canonicalWordCount: args.canonicalWordCount,
+        contradiction: {
+          quotation: args.wordCountContradiction,
+          claimedWords: 0,
+          approximate: false,
+          shorthand: false,
+          reason: "",
+        },
+        reviewContent: "",
+      }).replace(/\n---\nMEMO TO CORRECT:\n\n$/, ""),
+    );
+  }
+
+  if (args.proseGradeConflict) {
+    sections.push(
+      buildProseGradeRepairPrompt({
+        calculatedLetterGrade: args.calculatedLetterGrade,
+        manuscriptScore: args.manuscriptScore,
+        conflict: args.proseGradeConflict,
+        reviewContent: "",
+      }).replace(/\n---\nMEMO TO CORRECT:\n\n$/, ""),
+    );
+  }
+
+  const prompt = `${sections.join("\n\n")}\n\n---\nMEMO TO CORRECT:\n\n${args.reviewContent}`;
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: LITERARY_AGENT.maxTokens,
+    thinking: { type: "adaptive" },
+    system: buildSystemPrompt(LITERARY_AGENT),
+    messages: [{ role: "user", content: prompt }],
+  });
+  const response = await stream.finalMessage();
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty repair response.");
+  const model = response.model || MODEL;
+  return { content, model, truncated: false, charsSent: content.length };
+}
+
+/** @deprecated Use repairCommercialReviewValidation */
+export async function repairCommercialReviewWordCount(args: {
+  reviewContent: string;
+  canonicalWordCount: number;
+  contradictionQuotation: string;
+}): Promise<ReviewResult> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+  const prompt = buildWordCountRepairPrompt({
+    canonicalWordCount: args.canonicalWordCount,
+    contradiction: {
+      quotation: args.contradictionQuotation,
+      claimedWords: 0,
+      approximate: false,
+      shorthand: false,
+      reason: "",
+    },
+    reviewContent: args.reviewContent,
+  });
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: LITERARY_AGENT.maxTokens,
+    thinking: { type: "adaptive" },
+    system: buildSystemPrompt(LITERARY_AGENT),
+    messages: [{ role: "user", content: prompt }],
+  });
+  const response = await stream.finalMessage();
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty repair response.");
+  const model = response.model || MODEL;
+  return { content, model, truncated: false, charsSent: content.length };
 }
 
 /**
@@ -203,11 +311,20 @@ export async function generateRevisionCandidates(
   reviewMemo: string,
   text: string,
   intent: AuthorIntent | null,
+  statistics?: ReviewStatistics | null,
 ): Promise<{ issues: ParsedIssue[]; model: string; warnings: string[] }> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped } = clampManuscript(text, MAX_INPUT_CHARS);
   const wordCountTotal = countManuscriptWords(text);
+  const stats =
+    statistics ??
+    buildReviewStatistics({
+      manuscriptId: "",
+      extractedText: text,
+      sentChars: clamped.length,
+      storedWordCount: wordCountTotal,
+    });
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -217,7 +334,7 @@ export async function generateRevisionCandidates(
     messages: [
       {
         role: "user",
-        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent, { wordCount: wordCountTotal })}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent, { statistics: stats })}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
       },
     ],
   });

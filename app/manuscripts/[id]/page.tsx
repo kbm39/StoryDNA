@@ -36,6 +36,7 @@ import type {
 import GenerateReviewsButton from "./GenerateReviewsButton";
 import RunAgentReviewButton from "./RunAgentReviewButton";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
+import { ReviewGradingPanel, memoContentForDisplay } from "./ReviewGradingPanel";
 import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions";
 import { getRevisionGenerationStatus } from "@/app/actions/agent-revisions";
 import ExtractIssuesButton from "./ExtractIssuesButton";
@@ -233,6 +234,8 @@ function ReviewColumn({
   const rawMeta = review?.metadata?.review_meta as ReviewMeta | undefined;
   const meta = rawMeta?.compliance ? rawMeta : undefined;
   const truncated = Boolean(review?.metadata?.truncated);
+  const displayContent = review ? memoContentForDisplay(review.content) : "";
+  const showGrading = review?.perspective === "commercial";
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-black/10 bg-paper shadow-sm dark:border-white/15 dark:bg-white/5">
       <div className="flex items-start justify-between gap-2 border-b border-black/10 px-5 py-3 dark:border-white/10">
@@ -256,6 +259,7 @@ function ReviewColumn({
       <div className="px-5 py-4">
         {review ? (
           <>
+            {showGrading && <ReviewGradingPanel review={review} />}
             {meta ? (
               <TransparencyHeader meta={meta} />
             ) : (
@@ -267,7 +271,7 @@ function ReviewColumn({
               )
             )}
             <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold">
-              <ReactMarkdown>{review.content}</ReactMarkdown>
+              <ReactMarkdown>{displayContent}</ReactMarkdown>
             </div>
           </>
         ) : (

@@ -14,6 +14,7 @@ import type {
   AuthorIntent,
 } from "@/lib/types";
 import { manuscriptWordsInCharSlice } from "@/lib/word-count";
+import { statisticsBlockForPrompt } from "@/lib/review-statistics";
 
 export interface ReviewResult {
   content: string;
@@ -52,10 +53,14 @@ export function truncationNoteForManuscript(
   return truncationNote(true, manuscriptWordsInCharSlice(fullText, sentChars));
 }
 
-/** Authoritative manuscript length for AI prompts — never estimate from tokens or pages. */
-export function authoritativeWordCountBlock(wordCount: number | null | undefined): string {
+/** Authoritative manuscript length for AI prompts — delegates to shared statistics block. */
+export function authoritativeWordCountBlock(
+  wordCount: number | null | undefined,
+  wordsAnalyzed?: number,
+  fullText?: boolean,
+): string {
   if (wordCount == null || wordCount <= 0) return "";
-  return `\n\nMANUSCRIPT STATISTICS (authoritative — use this exact figure; do NOT estimate length from pages, tokens, or reading time):\n- Word count: ${wordCount.toLocaleString()} words`;
+  return statisticsBlockForPrompt({ wordCount, wordsAnalyzed, fullText });
 }
 
 /**

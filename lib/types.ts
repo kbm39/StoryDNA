@@ -112,6 +112,21 @@ export interface Review {
   /** active = current review for this perspective; superseded = retained history */
   lifecycle_status?: "active" | "superseded";
   created_at: string;
+  /** Validated commercial rubric total (NULL = legacy / unverified). */
+  manuscript_score?: number | null;
+  manuscript_letter_grade?: string | null;
+  craft_score?: number | null;
+  acquisition_readiness_score?: number | null;
+  grading_formula_version?: string | null;
+  grade_status?: string | null;
+  review_reliability_status?: string | null;
+  canonical_word_count?: number | null;
+  words_analyzed?: number | null;
+  statistics_validation_status?: string | null;
+  evidence_completeness_status?: string | null;
+  arithmetic_validation_status?: string | null;
+  rubric_breakdown?: import("@/lib/commercial-fiction-rubric").CommercialRubricPayload | null;
+  grading_metadata?: Record<string, unknown> | null;
 }
 
 // --- Literary Agent Review V2: transparency + author intent ------------------

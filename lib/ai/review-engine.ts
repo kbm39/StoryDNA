@@ -1,5 +1,7 @@
 import "server-only";
 import { STORY_GROUNDING, buildAuthorIntentBlock, authoritativeWordCountBlock } from "@/lib/ai/shared";
+import { commercialRubricOutputContract } from "@/lib/commercial-fiction-rubric";
+import { authoritativeStatisticsBlock, type ReviewStatistics } from "@/lib/review-statistics";
 import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
 import type {
   AuthorIntent,
@@ -337,7 +339,7 @@ export function buildSystemPrompt(def: ReviewerDefinition): string {
 export function buildReviewPrompt(
   def: ReviewerDefinition,
   intent: AuthorIntent | null,
-  options?: { wordCount?: number | null },
+  options?: { wordCount?: number | null; statistics?: ReviewStatistics | null },
 ): string {
   const mission = `YOUR MISSION\n${def.mission}`;
 
@@ -387,9 +389,12 @@ export function buildReviewPrompt(
 
   const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
   const grounding = def.grounding ? `\n\n${STORY_GROUNDING}` : "";
-  const wordCountBlock = authoritativeWordCountBlock(options?.wordCount);
+  const wordCountBlock = options?.statistics
+    ? authoritativeStatisticsBlock(options.statistics)
+    : authoritativeWordCountBlock(options?.wordCount);
+  const rubricBlock = def.id === "literary_agent" ? commercialRubricOutputContract() : "";
 
-  return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${wordCountBlock}${intentBlock}${grounding}`;
+  return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${wordCountBlock}${intentBlock}${grounding}${rubricBlock}`;
 }
 
 const WEIGHT: Record<ComplianceItem["status"], number> = { met: 1, partial: 0.5, unmet: 0 };
@@ -668,7 +673,7 @@ export const LITERARY_AGENT: ReviewerDefinition = {
       {
         heading: "Final Recommendation",
         guidance:
-          "A candid closing, including your verdict on intended-story-vs-execution. End with a single letter grade for commercial acquisition readiness on its own line as **Grade: X** (A+ to F).",
+          "A candid closing, including your verdict on intended-story-vs-execution. Do NOT assign a letter grade — numeric rubric scores are submitted separately in STORYDNA_RUBRIC_JSON.",
       },
       {
         heading: "Agent Notes",
@@ -697,12 +702,9 @@ export const LITERARY_AGENT: ReviewerDefinition = {
         description: "how strongly you would champion this",
         values: ["Low", "Moderate", "High", "Very High"],
       },
-      {
-        key: "Grade",
-        description: "commercial acquisition readiness, on its own line as **Grade: X** (A+ to F)",
-      },
     ],
     rules: [
+      "Do NOT write **Grade: X** or any letter grade — the application calculates the grade from STORYDNA_RUBRIC_JSON.",
       "Do NOT write a transparency/scope/coverage header — the system discloses scope separately; begin at Executive Recommendation.",
       "Every major claim must cite a verbatim manuscript passage in Evidence-Backed Findings, or be flagged as unverified — never invent a quote.",
       "Stay within your expertise; defer out-of-scope issues to the relevant specialist rather than assessing them yourself.",
@@ -938,13 +940,16 @@ export function buildRevisionCandidatesPrompt(
   def: ReviewerDefinition,
   reviewMemo: string,
   intent: AuthorIntent | null,
-  options?: { wordCount?: number | null },
+  options?: { wordCount?: number | null; statistics?: ReviewStatistics | null },
 ): string {
   const perms = def.revisionPermissions;
   const intentBlock = def.capabilities.usesAuthorIntent ? `\n\n${buildAuthorIntentBlock(intent)}` : "";
-  const wordCountBlock = authoritativeWordCountBlock(options?.wordCount);
+  const wordCountBlock = options?.statistics
+    ? authoritativeStatisticsBlock(options.statistics)
+    : authoritativeWordCountBlock(options?.wordCount);
   const lengthAuthority =
-    options?.wordCount != null && options.wordCount > 0
+    (options?.statistics?.canonical_word_count ?? options?.wordCount) != null &&
+    (options?.statistics?.canonical_word_count ?? options?.wordCount)! > 0
       ? `\n\nTOTAL MANUSCRIPT LENGTH — If your acquisitions memo above states a different total word count, treat the authoritative statistics as correct. Do NOT estimate, restate, or rely on memo length figures for total manuscript size. Per-candidate "word_savings" values estimate words saved by that specific edit only — never total manuscript length.`
       : "";
   return `You are the ${def.reviewer}. You already wrote the acquisitions memo below about this manuscript. Now turn its ACTIONABLE criticisms into trackable Editorial Issues and concrete Revision Candidates, grounded in the manuscript that follows.

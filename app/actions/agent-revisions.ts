@@ -2,13 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getManuscriptText } from "@/lib/reviews";
+import { getManuscriptReviewContext } from "@/lib/reviews";
 import { getStoryDna } from "@/lib/storydna";
 import { locatePassage } from "@/lib/manuscript-context";
-import { generateRevisionCandidates } from "@/lib/ai/anthropic";
-import { generateAgentReview } from "@/lib/ai/anthropic";
+import {
+  generateRevisionCandidates,
+  generateAgentReview,
+  repairCommercialReviewValidation,
+} from "@/lib/ai/anthropic";
 import { LITERARY_AGENT, type ParsedIssue } from "@/lib/ai/review-engine";
 import type { AuthorIntent, RevisionStatus, RevisionType } from "@/lib/types";
+import { buildReviewStatistics } from "@/lib/review-statistics";
+import {
+  buildReviewGradingRecord,
+  validateCommercialReviewContent,
+} from "@/lib/commercial-review-pipeline";
+import { extractRubricPayload, validateCommercialRubric } from "@/lib/rubric-validation";
+import { validateWordCountClaims } from "@/lib/word-count-validation";
 
 /**
  * Editorial lifecycle statuses (manuscript-page workflow).
@@ -246,10 +256,11 @@ export async function generateAgentRevisions(
 ): Promise<GenerateRevisionsResult> {
   if (!manuscriptId) return { ok: false, error: "Missing manuscript id." };
 
-  const text = await getManuscriptText(manuscriptId);
-  if (!text || !text.trim()) {
+  const ctx = await getManuscriptReviewContext(manuscriptId);
+  if (!ctx?.extractedText.trim()) {
     return { ok: false, error: "This manuscript has no extracted text." };
   }
+  const text = ctx.extractedText;
 
   const supabase = getSupabaseAdmin();
   const genStatus = await getRevisionGenerationStatus(manuscriptId);
@@ -279,6 +290,14 @@ export async function generateAgentRevisions(
   }
 
   const intent = intentFromDna(await getStoryDna(manuscriptId));
+  const statistics = buildReviewStatistics({
+    manuscriptId: ctx.manuscriptId,
+    manuscriptVersionId: ctx.manuscriptVersionId,
+    extractedText: text,
+    sentChars: text.length,
+    storedWordCount: ctx.wordCount,
+    characterCount: ctx.characterCount,
+  });
 
   let issues: ParsedIssue[];
   let warnings: string[];
@@ -288,6 +307,7 @@ export async function generateAgentRevisions(
       review.content,
       text,
       intent,
+      statistics,
     ));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -349,10 +369,11 @@ export async function runFreshEditorialGeneration(
 ): Promise<FreshEditorialGenerationResult> {
   if (!manuscriptId) return { ok: false, error: "Missing manuscript id." };
 
-  const text = await getManuscriptText(manuscriptId);
-  if (!text || !text.trim()) {
+  const ctx = await getManuscriptReviewContext(manuscriptId);
+  if (!ctx?.extractedText.trim()) {
     return { ok: false, error: "This manuscript has no extracted text." };
   }
+  const text = ctx.extractedText;
 
   const supabase = getSupabaseAdmin();
   const genStatus = await getRevisionGenerationStatus(manuscriptId);
@@ -374,22 +395,84 @@ export async function runFreshEditorialGeneration(
     .maybeSingle();
 
   const intent = intentFromDna(await getStoryDna(manuscriptId));
+  const statistics = buildReviewStatistics({
+    manuscriptId: ctx.manuscriptId,
+    manuscriptVersionId: ctx.manuscriptVersionId,
+    extractedText: text,
+    sentChars: text.length,
+    storedWordCount: ctx.wordCount,
+    characterCount: ctx.characterCount,
+  });
 
   let reviewResult;
   try {
-    reviewResult = await generateAgentReview(text, intent);
+    reviewResult = await generateAgentReview(text, intent, statistics);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+
+  let content = reviewResult.content;
+  let repairAttempted = false;
+
+  let validation = validateCommercialReviewContent({
+    content,
+    statistics,
+    reviewMeta: reviewResult.reviewMeta ?? null,
+  });
+
+  if (!validation.ok && validation.repairable && !repairAttempted) {
+    repairAttempted = true;
+
+    const { payload, parseError, categoryKeyErrors } = extractRubricPayload(content);
+    const rubricGrading = validateCommercialRubric({
+      payload,
+      parseError,
+      categoryKeyErrors,
+      canonicalWordCount: statistics.canonical_word_count,
+      fullTextSupplied: statistics.full_text_supplied,
+      statisticsValid: validateWordCountClaims(content, statistics.canonical_word_count).valid,
+    });
+
+    try {
+      const repaired = await repairCommercialReviewValidation({
+        reviewContent: content,
+        canonicalWordCount: statistics.canonical_word_count,
+        calculatedLetterGrade: rubricGrading.letterGrade,
+        manuscriptScore: rubricGrading.manuscriptScore,
+        wordCountContradiction: validation.wordCountContradiction?.quotation,
+        proseGradeConflict: validation.proseGradeConflict,
+      });
+      content = repaired.content;
+    } catch (e) {
+      return {
+        ok: false,
+        error: `Review repair failed: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+
+    validation = validateCommercialReviewContent({
+      content,
+      statistics,
+      reviewMeta: reviewResult.reviewMeta ?? null,
+      repairAttempted: true,
+    });
+  }
+
+  if (!validation.ok) {
+    return { ok: false, error: validation.error ?? "Review validation failed." };
+  }
+
+  const validated = validation.result!;
 
   let issues: ParsedIssue[];
   let warnings: string[];
   try {
     ({ issues, warnings } = await generateRevisionCandidates(
       LITERARY_AGENT,
-      reviewResult.content,
+      validated.fullContent,
       text,
       intent,
+      statistics,
     ));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -407,18 +490,21 @@ export async function runFreshEditorialGeneration(
   }
 
   const payload = buildReplacementPayload(issues, text);
+  const gradingRecord = buildReviewGradingRecord(validated);
 
   const { data, error } = await supabase.rpc("publish_commercial_review_generation", {
     p_manuscript_id: manuscriptId,
     p_provider: "openai",
     p_model: reviewResult.model,
-    p_content: reviewResult.content,
+    p_content: validated.fullContent,
     p_metadata: {
       truncated: reviewResult.truncated,
       chars_sent: reviewResult.charsSent,
       review_meta: reviewResult.reviewMeta ?? null,
+      review_statistics: statistics,
     },
     p_payload: payload,
+    p_grading: gradingRecord,
   });
 
   if (error) {

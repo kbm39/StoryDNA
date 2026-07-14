@@ -23,6 +23,10 @@ import {
   normalizeProseGradeLine,
   REVIEW_BLOCKED_PROSE_GRADE_MESSAGE,
 } from "./prose-grade-validation.ts";
+import {
+  buildCommercialReviewRepairPrompt,
+  normalizeCommercialReviewStatisticsText,
+} from "./commercial-review-repair.ts";
 import type { CommercialRubricPayload, RubricCategoryScore } from "./commercial-fiction-rubric.ts";
 import {
   ACQUISITION_CATEGORIES,
@@ -164,11 +168,22 @@ describe("word count validation", () => {
     assert.notEqual(stats.words_analyzed, stats.canonical_word_count);
   });
 
-  it("reviewer report text does not affect canonical count source", () => {
+  it("text-derived count is authoritative over a stale stored DB count", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
       extractedText: "Hold fast. The reckoning comes.",
       sentChars: 100,
+      storedWordCount: CANONICAL,
+    });
+    assert.equal(stats.canonical_word_count, 5);
+    assert.notEqual(stats.canonical_word_count, CANONICAL);
+  });
+
+  it("falls back to stored count when extracted text is empty", () => {
+    const stats = buildReviewStatistics({
+      manuscriptId: "m1",
+      extractedText: "",
+      sentChars: 0,
       storedWordCount: CANONICAL,
     });
     assert.equal(stats.canonical_word_count, CANONICAL);
@@ -281,7 +296,7 @@ describe("commercial review pipeline", () => {
   it("blocks publication on statistics contradiction before repair", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 1,
       storedWordCount: CANONICAL,
     });
@@ -299,7 +314,7 @@ describe("commercial review pipeline", () => {
   it("second failure after repair blocks publication", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 1,
       storedWordCount: CANONICAL,
     });
@@ -318,7 +333,7 @@ describe("commercial review pipeline", () => {
   it("offers repair only once before blocking", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 1,
       storedWordCount: CANONICAL,
     });
@@ -454,7 +469,7 @@ describe("prose letter grade validation", () => {
   it("blocks publication when prose grade conflicts before repair", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 100,
       storedWordCount: CANONICAL,
     });
@@ -469,7 +484,7 @@ describe("prose letter grade validation", () => {
   it("second prose failure after repair blocks publication", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 100,
       storedWordCount: CANONICAL,
     });
@@ -488,7 +503,7 @@ describe("prose letter grade validation", () => {
   it("offers prose repair only once", () => {
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 100,
       storedWordCount: CANONICAL,
     });
@@ -512,7 +527,7 @@ describe("grading record for RPC", () => {
     const payload = fullRubricPayload(craft, acq);
     const stats = buildReviewStatistics({
       manuscriptId: "m1",
-      extractedText: "x",
+      extractedText: "",
       sentChars: 100,
       storedWordCount: CANONICAL,
     });
@@ -534,5 +549,93 @@ describe("legacy safety", () => {
     const { memoContent, payload: parsed } = extractRubricPayload(content);
     assert.ok(!memoContent.includes("STORYDNA_RUBRIC_JSON"));
     assert.ok(parsed);
+  });
+});
+
+const HOLD_FAST_CANONICAL = 111_491;
+
+function holdFastContradictionFixture(): string {
+  const payload = fullRubricPayload(CRAFT_CATEGORIES.map(() => 5), ACQUISITION_CATEGORIES.map(() => 3));
+  return `This is a 150k-ish draft.
+
+There is a 105–115k book inside this.
+
+Cut 20–25% to reach 105–115k.
+
+**Grade: C+**
+
+Memo analysis continues here.
+
+<!-- STORYDNA_RUBRIC_JSON -->
+${JSON.stringify(payload)}`;
+}
+
+describe("Hold Fast statistics repair fixture", () => {
+  it("fails validation on simultaneous contradictions at canonical 111,491", () => {
+    const content = holdFastContradictionFixture();
+    const r = validateWordCountClaims(content, HOLD_FAST_CANONICAL);
+    assert.equal(r.valid, false);
+    assert.ok(r.contradictions.some((c) => /150k/i.test(c.quotation)));
+    assert.ok(r.contradictions.some((c) => /105/.test(c.quotation) && /115/.test(c.quotation)));
+    assert.ok(r.errors.some((e) => e.includes("exact canonical count")));
+  });
+
+  it("repair prompt includes canonical count and every contradiction", () => {
+    const content = holdFastContradictionFixture();
+    const wordVal = validateWordCountClaims(content, HOLD_FAST_CANONICAL);
+    const prompt = buildCommercialReviewRepairPrompt({
+      canonicalWordCount: HOLD_FAST_CANONICAL,
+      reviewContent: content,
+      wordCountContradictions: wordVal.contradictions,
+      wordCountErrors: wordVal.errors,
+    });
+    assert.match(prompt, /The manuscript is 111,491 words/);
+    assert.match(prompt, /EVERY LENGTH CONTRADICTION TO FIX/);
+    assert.match(prompt, /150k/i);
+    assert.match(prompt, /105/);
+    assert.match(prompt, /Recalculate EVERY percentage-cut/);
+    assert.match(prompt, /89,193/);
+    assert.match(prompt, /83,618/);
+    assert.match(prompt, /Do NOT assign an independent prose letter grade/);
+    assert.match(prompt, /STORYDNA_RUBRIC_JSON/);
+  });
+
+  it("deterministic normalization clears contradictions and preserves rubric JSON", () => {
+    const content = holdFastContradictionFixture();
+    const normalized = normalizeCommercialReviewStatisticsText({
+      content,
+      canonicalWordCount: HOLD_FAST_CANONICAL,
+      calculatedLetterGrade: "C+",
+      manuscriptScore: 78,
+    });
+    const r = validateWordCountClaims(normalized, HOLD_FAST_CANONICAL);
+    assert.equal(r.errors.length, 0, r.errors.join("; "));
+    assert.ok(
+      r.contradictions.every((c) => !/150\s*k|105\s*[–—-]\s*115\s*k/i.test(c.quotation)),
+      r.contradictions.map((c) => c.reason).join("; "),
+    );
+    assert.ok(!/150k/i.test(normalized));
+    assert.ok(!/\*\*Grade: C\+\*\*/.test(normalized.split("<!-- STORYDNA_RUBRIC_JSON -->")[0] ?? ""));
+    assert.ok(normalized.includes("<!-- STORYDNA_RUBRIC_JSON -->"));
+    assert.match(normalized, /The manuscript is 111,491 words/);
+    assert.match(normalized, /89,193/);
+    assert.match(normalized, /83,618/);
+    const prose = validateProseLetterGrade(
+      normalized.split("<!-- STORYDNA_RUBRIC_JSON -->")[0] ?? normalized,
+      "C+",
+    );
+    assert.equal(prose.valid, true);
+  });
+
+  it("buildReviewStatistics prefers recomputed count over stale stored 111,441", () => {
+    const text = "word ".repeat(HOLD_FAST_CANONICAL);
+    const stats = buildReviewStatistics({
+      manuscriptId: "9f482ca2-a0f6-4709-8364-18a0ef950eb0",
+      manuscriptVersionId: "4ba2909f-cdd6-40cb-9dbf-934df71246cd",
+      extractedText: text,
+      sentChars: text.length,
+      storedWordCount: 111_441,
+    });
+    assert.equal(stats.canonical_word_count, HOLD_FAST_CANONICAL);
   });
 });

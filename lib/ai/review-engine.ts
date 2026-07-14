@@ -1,6 +1,6 @@
 import "server-only";
 import { STORY_GROUNDING, buildAuthorIntentBlock, authoritativeWordCountBlock } from "@/lib/ai/shared";
-import { commercialRubricOutputContract } from "@/lib/commercial-fiction-rubric";
+import { commercialMemoOutputContract, COMMERCIAL_MEMO_MAX_TOKENS } from "@/lib/commercial-fiction-rubric";
 import { authoritativeStatisticsBlock, type ReviewStatistics } from "@/lib/review-statistics";
 import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
 import type {
@@ -392,7 +392,7 @@ export function buildReviewPrompt(
   const wordCountBlock = options?.statistics
     ? authoritativeStatisticsBlock(options.statistics)
     : authoritativeWordCountBlock(options?.wordCount);
-  const rubricBlock = def.id === "literary_agent" ? commercialRubricOutputContract() : "";
+  const rubricBlock = def.id === "literary_agent" ? commercialMemoOutputContract() : "";
 
   return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${wordCountBlock}${intentBlock}${grounding}${rubricBlock}`;
 }
@@ -673,7 +673,7 @@ export const LITERARY_AGENT: ReviewerDefinition = {
       {
         heading: "Final Recommendation",
         guidance:
-          "A candid closing, including your verdict on intended-story-vs-execution. Do NOT assign a letter grade — numeric rubric scores are submitted separately in STORYDNA_RUBRIC_JSON.",
+          "A candid closing, including your verdict on intended-story-vs-execution. Do NOT assign a letter grade or numerical score — structured rubric scoring is submitted in a separate grading call.",
       },
       {
         heading: "Agent Notes",
@@ -704,7 +704,11 @@ export const LITERARY_AGENT: ReviewerDefinition = {
       },
     ],
     rules: [
-      "Do NOT write **Grade: X** or any letter grade — the application calculates the grade from STORYDNA_RUBRIC_JSON.",
+      "Do NOT write **Grade: X** or any letter grade or /100 overall score — the application calculates grading from a separate rubric JSON call.",
+      "Do NOT append STORYDNA_RUBRIC_JSON or any JSON — output memo prose only.",
+      "Do NOT repeat the same strength or weakness in multiple sections — state each finding once in its primary section, then reference briefly elsewhere.",
+      "Do NOT restate the full synopsis in Story, Commercial, and Final Recommendation — premise belongs in one place.",
+      "Keep examples concise; Evidence-Backed Findings is the home for verbatim quotes — avoid duplicating them in other sections.",
       "Do NOT write a transparency/scope/coverage header — the system discloses scope separately; begin at Executive Recommendation.",
       "Every major claim must cite a verbatim manuscript passage in Evidence-Backed Findings, or be flagged as unverified — never invent a quote.",
       "Stay within your expertise; defer out-of-scope issues to the relevant specialist rather than assessing them yourself.",
@@ -712,7 +716,7 @@ export const LITERARY_AGENT: ReviewerDefinition = {
   },
   tone: `TONE: candid, direct, professional, and useful — your reputation rides on the honesty of this memo. Do not flatter. Do not pretend a manuscript is ready if it is not.`,
   grounding: true,
-  maxTokens: 16000,
+  maxTokens: COMMERCIAL_MEMO_MAX_TOKENS,
   capabilities: {
     fullText: true,
     chapterSegmented: false,

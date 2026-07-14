@@ -8,17 +8,34 @@ import { locatePassage } from "@/lib/manuscript-context";
 import {
   generateRevisionCandidates,
   generateAgentReview,
-  repairCommercialReviewValidation,
+  generateAgentRubric,
+  repairCommercialMemoValidation,
 } from "@/lib/ai/anthropic";
 import { LITERARY_AGENT, type ParsedIssue } from "@/lib/ai/review-engine";
 import type { AuthorIntent, RevisionStatus, RevisionType } from "@/lib/types";
 import { buildReviewStatistics } from "@/lib/review-statistics";
+import { countManuscriptWords } from "@/lib/word-count";
+import {
+  buildCommercialReviewFailureDiagnostics,
+  buildMemoTruncationDiagnostics,
+  buildTwoPhaseReviewFailureDiagnostics,
+  reviewFailureDiagnosticsEnabled,
+  writeMemoTruncationDiagnosticArtifact,
+  type CommercialReviewFailureDiagnostics,
+} from "@/lib/commercial-review-diagnostics";
+import { buildCommercialMemoRepairPrompt } from "@/lib/commercial-review-repair";
 import {
   buildReviewGradingRecord,
-  validateCommercialReviewContent,
 } from "@/lib/commercial-review-pipeline";
-import { extractRubricPayload, validateCommercialRubric } from "@/lib/rubric-validation";
-import { validateWordCountClaims } from "@/lib/word-count-validation";
+import {
+  assessRubricGenerationResult,
+  combineMemoAndRubric,
+  evaluateCallAGeneration,
+  MEMO_TRUNCATION_ERROR,
+  shouldRetryRubricGeneration,
+  validateCombinedCommercialReview,
+  validateMemoBeforeRubric,
+} from "@/lib/commercial-review-generation";
 
 /**
  * Editorial lifecycle statuses (manuscript-page workflow).
@@ -59,6 +76,8 @@ export interface FreshEditorialGenerationResult {
   newReviewId?: string;
   issueCount?: number;
   candidateCount?: number;
+  /** Non-persistent diagnostics when generation is blocked (dev / test only). */
+  diagnostics?: CommercialReviewFailureDiagnostics;
 }
 
 function intentFromDna(
@@ -395,6 +414,7 @@ export async function runFreshEditorialGeneration(
     .maybeSingle();
 
   const intent = intentFromDna(await getStoryDna(manuscriptId));
+  const recomputedWordCount = countManuscriptWords(text);
   const statistics = buildReviewStatistics({
     manuscriptId: ctx.manuscriptId,
     manuscriptVersionId: ctx.manuscriptVersionId,
@@ -411,55 +431,260 @@ export async function runFreshEditorialGeneration(
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  let content = reviewResult.content;
-  let repairAttempted = false;
-
-  let validation = validateCommercialReviewContent({
-    content,
-    statistics,
-    reviewMeta: reviewResult.reviewMeta ?? null,
+  const callAGate = evaluateCallAGeneration({
+    generationMeta: reviewResult.generationMeta,
   });
 
-  if (!validation.ok && validation.repairable && !repairAttempted) {
-    repairAttempted = true;
+  if (!callAGate.proceedToMemoValidation) {
+    const diagnostics = reviewFailureDiagnosticsEnabled()
+      ? buildMemoTruncationDiagnostics({
+          manuscriptId,
+          manuscriptVersionId: ctx.manuscriptVersionId,
+          statistics,
+          storedWordCount: ctx.wordCount,
+          recomputedWordCount,
+          memoContent: reviewResult.content,
+          memoGenerationMeta: reviewResult.generationMeta!,
+        })
+      : undefined;
+    if (diagnostics) {
+      writeMemoTruncationDiagnosticArtifact(diagnostics, "hold-fast-memo-truncation-latest.json");
+    }
+    return {
+      ok: false,
+      error: callAGate.error ?? MEMO_TRUNCATION_ERROR,
+      diagnostics,
+    };
+  }
 
-    const { payload, parseError, categoryKeyErrors } = extractRubricPayload(content);
-    const rubricGrading = validateCommercialRubric({
-      payload,
-      parseError,
-      categoryKeyErrors,
+  let memoContent = reviewResult.content;
+  let memoRepairAttempted = false;
+  let lastMemoRepairPrompt: string | undefined;
+
+  let memoValidation = validateMemoBeforeRubric({
+    memoContent,
+    canonicalWordCount: statistics.canonical_word_count,
+  });
+
+  if (!memoValidation.ok && memoValidation.repairable && !memoRepairAttempted) {
+    memoRepairAttempted = true;
+    lastMemoRepairPrompt = buildCommercialMemoRepairPrompt({
       canonicalWordCount: statistics.canonical_word_count,
-      fullTextSupplied: statistics.full_text_supplied,
-      statisticsValid: validateWordCountClaims(content, statistics.canonical_word_count).valid,
+      memoContent,
+      wordCountContradictions: memoValidation.wordCountContradictions ?? [],
+      wordCountErrors: memoValidation.wordCountErrors,
     });
 
     try {
-      const repaired = await repairCommercialReviewValidation({
-        reviewContent: content,
+      const repaired = await repairCommercialMemoValidation({
+        memoContent,
         canonicalWordCount: statistics.canonical_word_count,
-        calculatedLetterGrade: rubricGrading.letterGrade,
-        manuscriptScore: rubricGrading.manuscriptScore,
-        wordCountContradiction: validation.wordCountContradiction?.quotation,
-        proseGradeConflict: validation.proseGradeConflict,
+        wordCountContradictions: memoValidation.wordCountContradictions,
+        wordCountErrors: memoValidation.wordCountErrors,
       });
-      content = repaired.content;
+      memoContent = repaired.content;
     } catch (e) {
-      return {
-        ok: false,
-        error: `Review repair failed: ${e instanceof Error ? e.message : String(e)}`,
-      };
+      const diagnostics = reviewFailureDiagnosticsEnabled()
+        ? buildTwoPhaseReviewFailureDiagnostics({
+            manuscriptId,
+            manuscriptVersionId: ctx.manuscriptVersionId,
+            statistics,
+            storedWordCount: ctx.wordCount,
+            recomputedWordCount,
+            memoContent: reviewResult.content,
+            memoGenerationMeta: reviewResult.generationMeta ?? null,
+            failurePhase: "memo",
+            failureError: `Memo repair failed: ${e instanceof Error ? e.message : String(e)}`,
+            memoRepairAttempted: true,
+            reviewMeta: reviewResult.reviewMeta ?? null,
+            repairPrompt: lastMemoRepairPrompt,
+          })
+        : undefined;
+      return { ok: false, error: `Memo repair failed: ${e instanceof Error ? e.message : String(e)}`, diagnostics };
     }
 
-    validation = validateCommercialReviewContent({
-      content,
-      statistics,
-      reviewMeta: reviewResult.reviewMeta ?? null,
+    memoValidation = validateMemoBeforeRubric({
+      memoContent,
+      canonicalWordCount: statistics.canonical_word_count,
       repairAttempted: true,
     });
   }
 
+  if (!memoValidation.ok) {
+    const diagnostics = reviewFailureDiagnosticsEnabled()
+      ? buildTwoPhaseReviewFailureDiagnostics({
+          manuscriptId,
+          manuscriptVersionId: ctx.manuscriptVersionId,
+          statistics,
+          storedWordCount: ctx.wordCount,
+          recomputedWordCount,
+          memoContent,
+          memoGenerationMeta: reviewResult.generationMeta ?? null,
+          failurePhase: "memo",
+          failureError: memoValidation.error ?? "Memo validation failed.",
+          memoRepairAttempted,
+          reviewMeta: reviewResult.reviewMeta ?? null,
+          repairPrompt: lastMemoRepairPrompt,
+          wordCountContradictions: memoValidation.wordCountContradictions,
+        })
+      : undefined;
+    return {
+      ok: false,
+      error: memoValidation.error ?? "Memo validation failed.",
+      diagnostics,
+    };
+  }
+
+  let rubricResult;
+  try {
+    rubricResult = await generateAgentRubric({
+      text,
+      intent,
+      statistics,
+      memoContent,
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  let rubricRetryAttempted = false;
+  let rubricAssessment = assessRubricGenerationResult({
+    rawContent: rubricResult.content,
+    generationMeta: rubricResult.generationMeta ?? {
+      finishReason: null,
+      inputTokens: null,
+      outputTokens: null,
+      maxTokens: 0,
+      outputTruncated: false,
+    },
+    statistics,
+    statisticsValid: true,
+  });
+
+  if (shouldRetryRubricGeneration(rubricAssessment)) {
+    rubricRetryAttempted = true;
+    try {
+      rubricResult = await generateAgentRubric({
+        text,
+        intent,
+        statistics,
+        memoContent,
+        retryAfterTruncation: true,
+      });
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    rubricAssessment = assessRubricGenerationResult({
+      rawContent: rubricResult.content,
+      generationMeta: rubricResult.generationMeta ?? {
+        finishReason: null,
+        inputTokens: null,
+        outputTokens: null,
+        maxTokens: 0,
+        outputTruncated: false,
+      },
+      statistics,
+      statisticsValid: true,
+    });
+  }
+
+  if (rubricAssessment.failureKind || !rubricAssessment.parsed.payload) {
+    const diagnostics = reviewFailureDiagnosticsEnabled()
+      ? buildTwoPhaseReviewFailureDiagnostics({
+          manuscriptId,
+          manuscriptVersionId: ctx.manuscriptVersionId,
+          statistics,
+          storedWordCount: ctx.wordCount,
+          recomputedWordCount,
+          memoContent,
+          memoGenerationMeta: reviewResult.generationMeta ?? null,
+          rubricRawContent: rubricResult.content,
+          rubricGenerationMeta: rubricResult.generationMeta ?? null,
+          rubricFailureKind: rubricAssessment.failureKind ?? "RUBRIC_VALIDATION_FAILED",
+          rubricRetryAttempted,
+          failurePhase: "rubric",
+          failureError:
+            rubricAssessment.rubricGrading.validationErrors.join(" ") ||
+            rubricAssessment.parsed.parseError ||
+            "Rubric generation failed.",
+          memoRepairAttempted,
+          reviewMeta: reviewResult.reviewMeta ?? null,
+        })
+      : undefined;
+    return {
+      ok: false,
+      error: `Rubric generation failed: ${rubricAssessment.failureKind ?? "validation"} — ${
+        rubricAssessment.rubricGrading.validationErrors[0] ??
+        rubricAssessment.parsed.parseError ??
+        "invalid rubric"
+      }`,
+      diagnostics,
+    };
+  }
+
+  let validation = validateCombinedCommercialReview({
+    memoContent,
+    rubricPayload: rubricAssessment.parsed.payload,
+    statistics,
+    reviewMeta: reviewResult.reviewMeta ?? null,
+    memoRepairAttempted,
+  });
+
+  if (!validation.ok && validation.repairable && validation.repairKind === "prose_grade") {
+    memoRepairAttempted = true;
+    lastMemoRepairPrompt = buildCommercialMemoRepairPrompt({
+      canonicalWordCount: statistics.canonical_word_count,
+      memoContent,
+      wordCountContradictions: [],
+      proseGradeConflict: validation.proseGradeConflict,
+      calculatedLetterGrade: rubricAssessment.rubricGrading.letterGrade,
+      manuscriptScore: rubricAssessment.rubricGrading.manuscriptScore,
+    });
+    try {
+      const repaired = await repairCommercialMemoValidation({
+        memoContent,
+        canonicalWordCount: statistics.canonical_word_count,
+        proseGradeConflict: validation.proseGradeConflict,
+        calculatedLetterGrade: rubricAssessment.rubricGrading.letterGrade,
+        manuscriptScore: rubricAssessment.rubricGrading.manuscriptScore,
+      });
+      memoContent = repaired.content;
+    } catch (e) {
+      return { ok: false, error: `Prose grade repair failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    validation = validateCombinedCommercialReview({
+      memoContent,
+      rubricPayload: rubricAssessment.parsed.payload,
+      statistics,
+      reviewMeta: reviewResult.reviewMeta ?? null,
+      memoRepairAttempted: true,
+    });
+  }
+
   if (!validation.ok) {
-    return { ok: false, error: validation.error ?? "Review validation failed." };
+    const combinedForDiag = combineMemoAndRubric(memoContent, rubricAssessment.parsed.payload);
+    const diagnostics = reviewFailureDiagnosticsEnabled()
+      ? buildCommercialReviewFailureDiagnostics({
+          manuscriptId,
+          manuscriptVersionId: ctx.manuscriptVersionId,
+          statistics,
+          storedWordCount: ctx.wordCount,
+          recomputedWordCount,
+          originalReviewText: combinedForDiag,
+          repairAttempted: memoRepairAttempted,
+          reviewMeta: reviewResult.reviewMeta ?? null,
+          repairPrompt: lastMemoRepairPrompt,
+          calculatedLetterGrade: rubricAssessment.rubricGrading.letterGrade,
+          manuscriptScore: rubricAssessment.rubricGrading.manuscriptScore,
+          wordCountContradictions: validation.wordCountContradictions,
+          proseGradeConflict: validation.proseGradeConflict,
+        })
+      : undefined;
+    return {
+      ok: false,
+      error: validation.error ?? "Review validation failed.",
+      diagnostics,
+    };
   }
 
   const validated = validation.result!;
@@ -469,7 +694,7 @@ export async function runFreshEditorialGeneration(
   try {
     ({ issues, warnings } = await generateRevisionCandidates(
       LITERARY_AGENT,
-      validated.fullContent,
+      validated.memoContent,
       text,
       intent,
       statistics,
@@ -502,6 +727,13 @@ export async function runFreshEditorialGeneration(
       chars_sent: reviewResult.charsSent,
       review_meta: reviewResult.reviewMeta ?? null,
       review_statistics: statistics,
+      generation: {
+        pipeline: "two_call_v1",
+        memo_generation: reviewResult.generationMeta ?? null,
+        rubric_generation: rubricResult.generationMeta ?? null,
+        rubric_retry_attempted: rubricRetryAttempted,
+        memo_repair_attempted: memoRepairAttempted,
+      },
     },
     p_payload: payload,
     p_grading: gradingRecord,

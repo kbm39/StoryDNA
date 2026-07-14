@@ -16,6 +16,16 @@ import type {
 import { manuscriptWordsInCharSlice } from "@/lib/word-count";
 import { statisticsBlockForPrompt } from "@/lib/review-statistics";
 
+/** Token budget / finish metadata for a single model call. */
+export interface GenerationMeta {
+  finishReason: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  maxTokens: number;
+  /** True when the provider stopped because the output token budget was exhausted. */
+  outputTruncated: boolean;
+}
+
 export interface ReviewResult {
   content: string;
   model: string;
@@ -23,6 +33,7 @@ export interface ReviewResult {
   charsSent: number;
   /** Set by the Literary Agent Review V2 (transparency disclosure). */
   reviewMeta?: ReviewMeta;
+  generationMeta?: GenerationMeta;
 }
 
 /**

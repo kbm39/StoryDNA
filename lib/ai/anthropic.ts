@@ -61,8 +61,17 @@ import {
 } from "@/lib/ai/shared";
 import { countManuscriptWords, manuscriptWordsInCharSlice } from "@/lib/word-count";
 import { buildReviewStatistics, type ReviewStatistics } from "@/lib/review-statistics";
-import { buildWordCountRepairPrompt } from "@/lib/word-count-validation";
-import { buildProseGradeRepairPrompt, type ProseGradeMatch } from "@/lib/prose-grade-validation";
+import {
+  buildCommercialReviewRepairPrompt,
+  buildCommercialMemoRepairPrompt,
+} from "@/lib/commercial-review-repair";
+import {
+  buildCommercialRubricGenerationPrompt,
+  COMMERCIAL_RUBRIC_MAX_TOKENS,
+} from "@/lib/commercial-fiction-rubric";
+import type { GenerationMeta } from "@/lib/ai/shared";
+import type { ProseGradeMatch } from "@/lib/prose-grade-validation";
+import type { WordCountContradiction } from "@/lib/word-count-validation";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Claude Opus 4.8 has a 1M-token context window, so a whole novel fits. The
@@ -196,16 +205,68 @@ export async function generateReview(
     intent,
     manuscriptText: text,
   });
-  return { content, model, truncated, charsSent: clamped.length, reviewMeta };
+  return {
+    content,
+    model,
+    truncated,
+    charsSent: clamped.length,
+    reviewMeta,
+    generationMeta: generationMetaFromResponse(response, def.maxTokens),
+  };
 }
 
-/** Literary Agent Review V2 — the flagship reviewer on the shared engine. */
+/** Literary Agent Review V2 — Call A: acquisitions memo prose only. */
 export function generateAgentReview(
   text: string,
   intent: AuthorIntent | null,
   statistics?: ReviewStatistics | null,
 ): Promise<ReviewResult> {
   return generateReview(LITERARY_AGENT, text, intent, statistics);
+}
+
+/** Literary Agent — Call B: structured rubric JSON only (separate from memo). */
+export async function generateAgentRubric(args: {
+  text: string;
+  intent: AuthorIntent | null;
+  statistics: ReviewStatistics;
+  memoContent: string;
+  retryAfterTruncation?: boolean;
+}): Promise<ReviewResult> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+  const { text: clamped, truncated } = clampManuscript(args.text, MAX_INPUT_CHARS);
+  const sentWordCount = manuscriptWordsInCharSlice(args.text, clamped.length);
+
+  const prompt = buildCommercialRubricGenerationPrompt({
+    canonicalWordCount: args.statistics.canonical_word_count,
+    fullTextSupplied: args.statistics.full_text_supplied,
+    memoContent: args.memoContent,
+    retryAfterTruncation: args.retryAfterTruncation,
+  });
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: COMMERCIAL_RUBRIC_MAX_TOKENS,
+    system:
+      "You score commercial fiction manuscripts. Output ONLY valid JSON matching STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1. No markdown fences, no prose, no letter grades.",
+    messages: [
+      {
+        role: "user",
+        content: `${prompt}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+      },
+    ],
+  });
+
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty rubric response.");
+  const model = response.model || MODEL;
+  return {
+    content,
+    model,
+    truncated,
+    charsSent: clamped.length,
+    generationMeta: generationMetaFromResponse(response, COMMERCIAL_RUBRIC_MAX_TOKENS),
+  };
 }
 
 /** One automatic repair pass for statistics or prose-grade validation failures. */
@@ -215,43 +276,36 @@ export async function repairCommercialReviewValidation(args: {
   calculatedLetterGrade: string;
   manuscriptScore: number;
   wordCountContradiction?: string;
+  wordCountContradictions?: WordCountContradiction[];
+  wordCountErrors?: string[];
   proseGradeConflict?: ProseGradeMatch;
 }): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
 
-  const sections: string[] = [
-    "The acquisitions memo below failed StoryDNA validation. Apply ALL corrections below in one pass.",
-  ];
+  const contradictions: WordCountContradiction[] =
+    args.wordCountContradictions ??
+    (args.wordCountContradiction
+      ? [
+          {
+            quotation: args.wordCountContradiction,
+            claimedWords: 0,
+            approximate: false,
+            shorthand: false,
+            reason: "",
+          },
+        ]
+      : []);
 
-  if (args.wordCountContradiction) {
-    sections.push(
-      buildWordCountRepairPrompt({
-        canonicalWordCount: args.canonicalWordCount,
-        contradiction: {
-          quotation: args.wordCountContradiction,
-          claimedWords: 0,
-          approximate: false,
-          shorthand: false,
-          reason: "",
-        },
-        reviewContent: "",
-      }).replace(/\n---\nMEMO TO CORRECT:\n\n$/, ""),
-    );
-  }
-
-  if (args.proseGradeConflict) {
-    sections.push(
-      buildProseGradeRepairPrompt({
-        calculatedLetterGrade: args.calculatedLetterGrade,
-        manuscriptScore: args.manuscriptScore,
-        conflict: args.proseGradeConflict,
-        reviewContent: "",
-      }).replace(/\n---\nMEMO TO CORRECT:\n\n$/, ""),
-    );
-  }
-
-  const prompt = `${sections.join("\n\n")}\n\n---\nMEMO TO CORRECT:\n\n${args.reviewContent}`;
+  const prompt = buildCommercialReviewRepairPrompt({
+    canonicalWordCount: args.canonicalWordCount,
+    reviewContent: args.reviewContent,
+    wordCountContradictions: contradictions,
+    wordCountErrors: args.wordCountErrors,
+    proseGradeConflict: args.proseGradeConflict,
+    calculatedLetterGrade: args.calculatedLetterGrade,
+    manuscriptScore: args.manuscriptScore,
+  });
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -264,10 +318,59 @@ export async function repairCommercialReviewValidation(args: {
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty repair response.");
   const model = response.model || MODEL;
-  return { content, model, truncated: false, charsSent: content.length };
+  return {
+    content,
+    model,
+    truncated: false,
+    charsSent: content.length,
+    generationMeta: generationMetaFromResponse(response, LITERARY_AGENT.maxTokens),
+  };
 }
 
-/** @deprecated Use repairCommercialReviewValidation */
+/** Memo-only repair for Call A word-count / prose-grade failures (no rubric block). */
+export async function repairCommercialMemoValidation(args: {
+  memoContent: string;
+  canonicalWordCount: number;
+  calculatedLetterGrade?: string;
+  manuscriptScore?: number;
+  wordCountContradictions?: WordCountContradiction[];
+  wordCountErrors?: string[];
+  proseGradeConflict?: ProseGradeMatch;
+}): Promise<ReviewResult> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+
+  const prompt = buildCommercialMemoRepairPrompt({
+    canonicalWordCount: args.canonicalWordCount,
+    memoContent: args.memoContent,
+    wordCountContradictions: args.wordCountContradictions ?? [],
+    wordCountErrors: args.wordCountErrors,
+    proseGradeConflict: args.proseGradeConflict,
+    calculatedLetterGrade: args.calculatedLetterGrade,
+    manuscriptScore: args.manuscriptScore,
+  });
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: LITERARY_AGENT.maxTokens,
+    thinking: { type: "adaptive" },
+    system: buildSystemPrompt(LITERARY_AGENT),
+    messages: [{ role: "user", content: prompt }],
+  });
+  const response = await stream.finalMessage();
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty memo repair response.");
+  const model = response.model || MODEL;
+  return {
+    content,
+    model,
+    truncated: false,
+    charsSent: content.length,
+    generationMeta: generationMetaFromResponse(response, LITERARY_AGENT.maxTokens),
+  };
+}
+
+/** @deprecated Use repairCommercialMemoValidation or repairCommercialReviewValidation */
 export async function repairCommercialReviewWordCount(args: {
   reviewContent: string;
   canonicalWordCount: number;
@@ -275,16 +378,18 @@ export async function repairCommercialReviewWordCount(args: {
 }): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
-  const prompt = buildWordCountRepairPrompt({
+  const prompt = buildCommercialReviewRepairPrompt({
     canonicalWordCount: args.canonicalWordCount,
-    contradiction: {
-      quotation: args.contradictionQuotation,
-      claimedWords: 0,
-      approximate: false,
-      shorthand: false,
-      reason: "",
-    },
     reviewContent: args.reviewContent,
+    wordCountContradictions: [
+      {
+        quotation: args.contradictionQuotation,
+        claimedWords: 0,
+        approximate: false,
+        shorthand: false,
+        reason: "",
+      },
+    ],
   });
 
   const stream = client.messages.stream({
@@ -688,6 +793,20 @@ export async function brainstormScene(
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty response.");
   return { content, model: response.model || MODEL };
+}
+
+function generationMetaFromResponse(
+  response: Anthropic.Message,
+  maxTokens: number,
+): GenerationMeta {
+  const finishReason = response.stop_reason ?? null;
+  return {
+    finishReason,
+    inputTokens: response.usage?.input_tokens ?? null,
+    outputTokens: response.usage?.output_tokens ?? null,
+    maxTokens,
+    outputTruncated: finishReason === "max_tokens",
+  };
 }
 
 function textOf(response: Anthropic.Message): string {

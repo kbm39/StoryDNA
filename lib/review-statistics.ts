@@ -44,10 +44,14 @@ export interface BuildReviewStatisticsArgs {
 /** Resolve canonical counts from stored manuscript / version snapshot. */
 export function buildReviewStatistics(args: BuildReviewStatisticsArgs): ReviewStatistics {
   const text = args.extractedText ?? "";
+  const recomputed = countManuscriptWords(text);
+  // Authoritative length always comes from extracted_text — never a stale DB column.
   const canonical =
-    args.storedWordCount != null && args.storedWordCount > 0
-      ? args.storedWordCount
-      : countManuscriptWords(text);
+    recomputed > 0
+      ? recomputed
+      : args.storedWordCount != null && args.storedWordCount > 0
+        ? args.storedWordCount
+        : 0;
   const characterCount =
     args.characterCount != null && args.characterCount > 0
       ? args.characterCount

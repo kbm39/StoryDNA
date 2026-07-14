@@ -185,26 +185,9 @@ export function validateRubricCategoryKeys(craftRaw: unknown[], acqRaw: unknown[
   return errors;
 }
 
-/** Extract and parse STORYDNA_RUBRIC_JSON from review content. */
-export function extractRubricPayload(content: string): {
-  memoContent: string;
-  payload: CommercialRubricPayload | null;
-  parseError: string | null;
-  categoryKeyErrors: string[];
-} {
-  const marker = "<!-- STORYDNA_RUBRIC_JSON -->";
-  const idx = content.indexOf(marker);
-  if (idx === -1) {
-    return {
-      memoContent: content,
-      payload: null,
-      parseError: "Missing STORYDNA_RUBRIC_JSON block.",
-      categoryKeyErrors: [],
-    };
-  }
-
-  const memoContent = content.slice(0, idx).trim();
-  let jsonStr = content.slice(idx + marker.length).trim();
+/** Normalize model output to a JSON object string (strips fences / surrounding prose). */
+function normalizeRubricJsonString(raw: string): string {
+  let jsonStr = raw.trim();
   const fence = jsonStr.match(/^```(?:json)?\s*([\s\S]*?)```/);
   if (fence) jsonStr = fence[1].trim();
   if (!jsonStr.startsWith("{")) {
@@ -212,14 +195,16 @@ export function extractRubricPayload(content: string): {
     const end = jsonStr.lastIndexOf("}");
     if (start !== -1 && end > start) jsonStr = jsonStr.slice(start, end + 1);
   }
+  return jsonStr;
+}
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    return { memoContent, payload: null, parseError: "Invalid rubric JSON.", categoryKeyErrors: [] };
+function payloadFromParsedRoot(parsed: unknown): {
+  payload: CommercialRubricPayload | null;
+  categoryKeyErrors: string[];
+} {
+  if (!parsed || typeof parsed !== "object") {
+    return { payload: null, categoryKeyErrors: ["Invalid rubric JSON root."] };
   }
-
   const root = parsed as Record<string, unknown>;
   const craftRaw = Array.isArray(root.craft_categories) ? root.craft_categories : [];
   const acqRaw = Array.isArray(root.acquisition_categories) ? root.acquisition_categories : [];
@@ -253,10 +238,116 @@ export function extractRubricPayload(content: string): {
     .filter((r) => isFinite(r.authoritative_current_word_count));
 
   return {
-    memoContent,
     payload: { craft_categories, acquisition_categories, length_recommendations },
+    categoryKeyErrors,
+  };
+}
+
+export type RubricGenerationFailureKind =
+  | "RUBRIC_GENERATION_TRUNCATED"
+  | "RUBRIC_INVALID_JSON"
+  | "RUBRIC_VALIDATION_FAILED";
+
+/** Parse rubric JSON from a rubric-only model response (Call B). */
+export function parseRubricJsonString(rawContent: string): {
+  jsonStr: string;
+  payload: CommercialRubricPayload | null;
+  parseError: string | null;
+  categoryKeyErrors: string[];
+  appearsTruncated: boolean;
+} {
+  const jsonStr = normalizeRubricJsonString(rawContent);
+  const hasAcquisition = jsonStr.includes('"acquisition_categories"');
+  const craftCount = (jsonStr.match(/"category_key"/g) ?? []).length;
+  const appearsTruncated =
+    !jsonStr.endsWith("}") ||
+    (jsonStr.includes('"craft_categories"') && !hasAcquisition) ||
+    craftCount < REQUIRED_CRAFT_KEYS.length + REQUIRED_ACQUISITION_KEYS.length;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return {
+      jsonStr,
+      payload: null,
+      parseError: "Invalid rubric JSON.",
+      categoryKeyErrors: [],
+      appearsTruncated: true,
+    };
+  }
+
+  const { payload, categoryKeyErrors } = payloadFromParsedRoot(parsed);
+  return {
+    jsonStr,
+    payload,
     parseError: null,
     categoryKeyErrors,
+    appearsTruncated,
+  };
+}
+
+/** Classify rubric-only generation failure for retry / diagnostics. */
+export function classifyRubricGenerationFailure(args: {
+  rawContent: string;
+  outputTruncated: boolean;
+  parseError: string | null;
+  categoryKeyErrors: string[];
+  rubricValidationErrors?: string[];
+  rubricValid?: boolean;
+}): RubricGenerationFailureKind | null {
+  if (args.rubricValid) return null;
+
+  const parsed = parseRubricJsonString(args.rawContent);
+  if (args.outputTruncated || parsed.appearsTruncated) {
+    return "RUBRIC_GENERATION_TRUNCATED";
+  }
+  if (args.parseError || parsed.parseError) {
+    return "RUBRIC_INVALID_JSON";
+  }
+  if (args.categoryKeyErrors.length || parsed.categoryKeyErrors.length) {
+    return "RUBRIC_VALIDATION_FAILED";
+  }
+  if (args.rubricValidationErrors?.length) {
+    return "RUBRIC_VALIDATION_FAILED";
+  }
+  return "RUBRIC_VALIDATION_FAILED";
+}
+
+/** Extract and parse STORYDNA_RUBRIC_JSON from review content. */
+export function extractRubricPayload(content: string): {
+  memoContent: string;
+  payload: CommercialRubricPayload | null;
+  parseError: string | null;
+  categoryKeyErrors: string[];
+} {
+  const marker = "<!-- STORYDNA_RUBRIC_JSON -->";
+  const idx = content.indexOf(marker);
+  if (idx === -1) {
+    return {
+      memoContent: content,
+      payload: null,
+      parseError: "Missing STORYDNA_RUBRIC_JSON block.",
+      categoryKeyErrors: [],
+    };
+  }
+
+  const memoContent = content.slice(0, idx).trim();
+  const parsed = parseRubricJsonString(content.slice(idx + marker.length));
+  if (parsed.parseError) {
+    return {
+      memoContent,
+      payload: null,
+      parseError: parsed.parseError,
+      categoryKeyErrors: parsed.categoryKeyErrors,
+    };
+  }
+
+  return {
+    memoContent,
+    payload: parsed.payload,
+    parseError: null,
+    categoryKeyErrors: parsed.categoryKeyErrors,
   };
 }
 

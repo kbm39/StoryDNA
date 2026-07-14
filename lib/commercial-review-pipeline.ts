@@ -14,7 +14,7 @@ import {
   validateCommercialRubric,
   type RubricValidationResult,
 } from "./rubric-validation.ts";
-import { GRADING_FORMULA_VERSION, type CommercialRubricPayload } from "./commercial-fiction-rubric.ts";
+import { GRADING_FORMULA_VERSION, attachRubricToMemo, type CommercialRubricPayload } from "./commercial-fiction-rubric.ts";
 import type { ReviewMeta } from "./types.ts";
 import {
   normalizeProseGradeLine,
@@ -43,11 +43,68 @@ export interface CommercialReviewValidationOutcome {
   repairable?: boolean;
   repairKind?: "word_count" | "prose_grade";
   wordCountContradiction?: WordCountContradiction;
+  /** All length contradictions detected (for repair prompt / diagnostics). */
+  wordCountContradictions?: WordCountContradiction[];
+  wordCountErrors?: string[];
   proseGradeConflict?: ProseGradeMatch;
 }
 
+export interface CommercialMemoValidationOutcome {
+  ok: boolean;
+  error?: string;
+  repairable?: boolean;
+  repairKind?: "word_count" | "prose_grade";
+  wordCountContradiction?: WordCountContradiction;
+  wordCountContradictions?: WordCountContradiction[];
+  wordCountErrors?: string[];
+}
+
+/** Validate Call A memo only (statistics / word-count gate before rubric generation). */
+export function validateCommercialMemoOnly(args: {
+  memoContent: string;
+  canonicalWordCount: number;
+  repairAttempted?: boolean;
+}): CommercialMemoValidationOutcome {
+  const wordVal = validateWordCountClaims(args.memoContent, args.canonicalWordCount);
+
+  if (!wordVal.valid && !args.repairAttempted) {
+    const primary =
+      wordVal.contradictions[0] ??
+      ({
+        quotation: wordVal.errors[0] ?? "length reference",
+        claimedWords: 0,
+        approximate: false,
+        shorthand: false,
+        reason: wordVal.errors[0] ?? "Statistics validation failed.",
+      } satisfies WordCountContradiction);
+    return {
+      ok: false,
+      repairable: true,
+      repairKind: "word_count",
+      wordCountContradiction: primary,
+      wordCountContradictions: wordVal.contradictions,
+      wordCountErrors: wordVal.errors,
+      error: `${REVIEW_BLOCKED_STATISTICS_MESSAGE}: ${[
+        ...wordVal.errors,
+        ...wordVal.contradictions.map((c) => c.reason),
+      ].join(" ")}`,
+    };
+  }
+
+  if (!wordVal.valid) {
+    return {
+      ok: false,
+      error: `${REVIEW_BLOCKED_STATISTICS_MESSAGE}: Repair did not resolve length contradictions.`,
+      wordCountContradictions: wordVal.contradictions,
+      wordCountErrors: wordVal.errors,
+    };
+  }
+
+  return { ok: true };
+}
+
 function reattachRubric(memo: string, payload: CommercialRubricPayload): string {
-  return `${memo.trim()}\n\n<!-- STORYDNA_RUBRIC_JSON -->\n${JSON.stringify(payload, null, 2)}`;
+  return attachRubricToMemo(memo, payload);
 }
 
 /** Run full post-generation validation pipeline (no AI calls). */
@@ -93,6 +150,8 @@ export function validateCommercialReviewContent(args: {
       repairable: true,
       repairKind: "word_count",
       wordCountContradiction: primary,
+      wordCountContradictions: wordVal.contradictions,
+      wordCountErrors: wordVal.errors,
       error: `${REVIEW_BLOCKED_STATISTICS_MESSAGE}: ${[
         ...wordVal.errors,
         ...wordVal.contradictions.map((c) => c.reason),

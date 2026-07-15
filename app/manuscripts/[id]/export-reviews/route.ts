@@ -1,5 +1,12 @@
 import { getManuscriptMeta, listReviews } from "@/lib/reviews";
-import { activeCommercialReview } from "@/lib/review-selection";
+import { listConcernAssessmentsForReview } from "@/lib/concern-assessments";
+import { resolveAuthoritativeReviewForDisplay } from "@/lib/authoritative-review-resolve";
+import {
+  buildAuthoritativeReviewDisplay,
+  validateAuthoritativeExport,
+  EXPORT_BLOCKED_MESSAGE,
+} from "@/lib/authoritative-review-display";
+import { buildLiteraryAgentReviewDocxText } from "@/lib/literary-agent-docx";
 import { buildReviewsDocx, safeReviewsName, type ReviewSection } from "@/lib/export";
 
 const DOCX_MIME =
@@ -17,20 +24,39 @@ export async function GET(
   }
 
   const reviews = await listReviews(id);
-  const commercial = activeCommercialReview(reviews);
   const craft = reviews.find((r) => r.perspective === "craft");
   const screen = reviews.filter((r) => r.perspective === "screen");
   const providerLabel: Record<string, string> = { openai: "OpenAI", anthropic: "Claude" };
 
-  // Commercial, then craft, then producer's read(s) — matching the on-screen order.
   const sections: ReviewSection[] = [];
-  if (commercial) {
+
+  try {
+    const resolved = await resolveAuthoritativeReviewForDisplay(id, "commercial");
+    const assessments = await listConcernAssessmentsForReview(resolved.review.id);
+    const display = buildAuthoritativeReviewDisplay({
+      review: resolved.review,
+      manuscriptTitle: resolved.manuscriptTitle,
+      assessments,
+      fallbackWordCount: resolved.fallbackWordCount,
+      isHistorical: resolved.isHistorical,
+    });
+    if (!display) {
+      return new Response(EXPORT_BLOCKED_MESSAGE, { status: 422 });
+    }
+    const validation = validateAuthoritativeExport(display, { requireActive: true });
+    if (!validation.ok) {
+      return new Response(EXPORT_BLOCKED_MESSAGE, { status: 422 });
+    }
     sections.push({
       heading: "Literary-agent view",
-      subheading: `OpenAI · commercial${commercial.model ? ` · ${commercial.model}` : ""}`,
-      content: commercial.content,
+      subheading: `Authoritative active review · ${display.review_id}`,
+      content: buildLiteraryAgentReviewDocxText(display),
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to resolve active commercial review";
+    return new Response(message, { status: 422 });
   }
+
   if (craft) {
     sections.push({
       heading: "Developmental edit",
@@ -40,7 +66,7 @@ export async function GET(
   }
   for (const r of screen) {
     sections.push({
-      heading: "Producer’s read · TV / film",
+      heading: "Producer's read · TV / film",
       subheading: `${providerLabel[r.provider] ?? r.provider} · screen${r.model ? ` · ${r.model}` : ""}`,
       content: r.content,
     });

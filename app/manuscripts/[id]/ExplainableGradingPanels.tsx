@@ -2,14 +2,13 @@
 
 import type { Review, ReviewConcernAssessment } from "@/lib/types";
 import {
-  buildGradingExplanationDisplay,
+  buildAuthoritativeReviewDisplay,
+} from "@/lib/authoritative-review-display";
+import {
   formatRecommendationLabel,
-  METHODOLOGY_DISCLAIMER,
-  NORMALIZATION_AUTHORITY_NOTE,
   type GradingExplanationDisplay,
   type RetainedDeductionDisplay,
 } from "@/lib/grading-explanation-display";
-import { memoContentForDisplay } from "@/lib/review-display";
 
 function fmt(n: number): string {
   return n.toFixed(1).replace(/\.0$/, "");
@@ -95,14 +94,23 @@ function DeductionCard({ d }: { d: RetainedDeductionDisplay }) {
 export function ExplainableGradingPanels({
   review,
   assessments = [],
+  manuscriptTitle = "Manuscript",
+  fallbackWordCount,
 }: {
   review: Review;
   assessments?: ReviewConcernAssessment[];
+  manuscriptTitle?: string;
+  fallbackWordCount?: number | null;
 }) {
-  const memo = memoContentForDisplay(review.content);
-  const display = buildGradingExplanationDisplay({ review, memoContent: memo, assessments });
-  if (!display) return null;
+  const authoritative = buildAuthoritativeReviewDisplay({
+    review,
+    manuscriptTitle,
+    assessments,
+    fallbackWordCount,
+  });
+  if (!authoritative) return null;
 
+  const display = authoritative.grading;
   const adj = display.adjustments;
 
   return (
@@ -122,7 +130,9 @@ export function ExplainableGradingPanels({
             standard.
           </p>
         )}
-        <p className="mt-2 text-xs italic text-black/50 dark:text-white/50">{METHODOLOGY_DISCLAIMER}</p>
+        <p className="mt-2 text-xs italic text-black/50 dark:text-white/50">
+          {authoritative.methodology_disclaimer}
+        </p>
       </div>
 
       {adj && (
@@ -179,7 +189,7 @@ export function ExplainableGradingPanels({
             </div>
           </dl>
           <p className="mt-3 text-xs font-medium text-black/65 dark:text-white/65">
-            {NORMALIZATION_AUTHORITY_NOTE}
+            {authoritative.normalization_authority_note}
           </p>
         </div>
       )}

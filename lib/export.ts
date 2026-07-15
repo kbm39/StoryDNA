@@ -17,6 +17,7 @@ import {
 } from "docx";
 import type { Issue } from "@/lib/types";
 import { GRADE_LEGEND, GRADE_LEGEND_NOTE } from "@/lib/grade-legend";
+import { markdownToParagraphs } from "@/lib/docx-markdown";
 
 const SOURCE_LABEL: Record<string, string> = {
   openai: "OpenAI",
@@ -262,64 +263,6 @@ export async function buildSubmissionFormatDocx(
 
 export function safeManuscriptFileName(title: string): string {
   return (title || "manuscript").replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
-}
-
-// --- Minimal Markdown → Word -------------------------------------------------
-// The reviews are Markdown (## headings, **bold**, *italic*, - bullets, 1. lists).
-// LLM output puts one paragraph per line with blank lines between, so a
-// line-based pass is sufficient — no need for a full Markdown parser.
-
-function parseInline(text: string): TextRun[] {
-  const runs: TextRun[] = [];
-  const regex = /(\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_|`([^`]+)`)/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(text)) !== null) {
-    if (m.index > last) runs.push(new TextRun(text.slice(last, m.index)));
-    if (m[2] !== undefined) runs.push(new TextRun({ text: m[2], bold: true }));
-    else if (m[3] !== undefined) runs.push(new TextRun({ text: m[3], bold: true }));
-    else if (m[4] !== undefined) runs.push(new TextRun({ text: m[4], italics: true }));
-    else if (m[5] !== undefined) runs.push(new TextRun({ text: m[5], italics: true }));
-    else if (m[6] !== undefined) runs.push(new TextRun({ text: m[6], font: "Courier New" }));
-    last = regex.lastIndex;
-  }
-  if (last < text.length) runs.push(new TextRun(text.slice(last)));
-  return runs.length > 0 ? runs : [new TextRun(text)];
-}
-
-function markdownToParagraphs(md: string): Paragraph[] {
-  const out: Paragraph[] = [];
-  for (const raw of md.replace(/\r\n/g, "\n").split("\n")) {
-    const line = raw.replace(/\s+$/, "");
-    if (!line.trim()) continue;
-
-    let m: RegExpMatchArray | null;
-    if ((m = line.match(/^(#{1,3})\s+(.*)$/))) {
-      const level = m[1].length;
-      const heading =
-        level === 1
-          ? HeadingLevel.HEADING_1
-          : level === 2
-            ? HeadingLevel.HEADING_2
-            : HeadingLevel.HEADING_3;
-      out.push(new Paragraph({ heading, spacing: { before: 200, after: 80 }, children: parseInline(m[2]) }));
-    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-      out.push(new Paragraph({ children: [new TextRun("")] })); // horizontal rule → spacer
-    } else if ((m = line.match(/^[-*]\s+(.*)$/))) {
-      out.push(new Paragraph({ bullet: { level: 0 }, children: parseInline(m[1]) }));
-    } else if ((m = line.match(/^(\d+)\.\s+(.*)$/))) {
-      out.push(
-        new Paragraph({
-          indent: { left: 360 },
-          spacing: { after: 40 },
-          children: [new TextRun({ text: `${m[1]}. ` }), ...parseInline(m[2])],
-        }),
-      );
-    } else {
-      out.push(new Paragraph({ spacing: { after: 80 }, children: parseInline(line) }));
-    }
-  }
-  return out;
 }
 
 export interface ReviewSection {

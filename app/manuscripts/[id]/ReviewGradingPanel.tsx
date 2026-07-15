@@ -1,14 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import type { Review } from "@/lib/types";
+import type { Review, ReviewConcernAssessment } from "@/lib/types";
 import type { CommercialRubricPayload, RubricCategoryScore } from "@/lib/commercial-fiction-rubric";
 import { CRAFT_MAX_TOTAL, ACQUISITION_MAX_TOTAL } from "@/lib/commercial-fiction-rubric";
+import { buildGradingExplanationDisplay } from "@/lib/grading-explanation-display";
+import { memoContentForDisplay } from "@/lib/review-display";
+import { ExplainableGradingPanels } from "./ExplainableGradingPanels";
 
 function isVerifiedGrade(review: Review): boolean {
+  if (review.scoring_gate_valid === false) return false;
+  if (
+    review.contrary_evidence_gate_status === "required_not_run" ||
+    review.contrary_evidence_gate_status === "failed"
+  ) {
+    return false;
+  }
   return (
     review.grade_status === "VERIFIED" ||
     review.grade_status === "PROVISIONAL_PARTIAL_COVERAGE"
+  );
+}
+
+function isGateIncomplete(review: Review): boolean {
+  return (
+    review.scoring_gate_valid === false ||
+    review.contrary_evidence_gate_status === "required_not_run" ||
+    review.contrary_evidence_gate_status === "failed"
   );
 }
 
@@ -103,13 +121,27 @@ function CategoryRow({ cat }: { cat: RubricCategoryScore }) {
   );
 }
 
-export function ReviewGradingPanel({ review }: { review: Review }) {
+export function ReviewGradingPanel({
+  review,
+  assessments = [],
+}: {
+  review: Review;
+  assessments?: ReviewConcernAssessment[];
+}) {
   const [showCalc, setShowCalc] = useState(false);
   const legacy = isLegacyReview(review);
-  const withheld = review.grade_status?.startsWith("WITHHELD");
-  const provisional = review.grade_status === "PROVISIONAL_PARTIAL_COVERAGE";
+  const gateIncomplete = isGateIncomplete(review);
+  const withheld = review.grade_status?.startsWith("WITHHELD") || gateIncomplete;
+  const provisional = review.grade_status === "PROVISIONAL_PARTIAL_COVERAGE" && !gateIncomplete;
   const verified = isVerifiedGrade(review);
   const rubric = review.rubric_breakdown as CommercialRubricPayload | null | undefined;
+  const hasExplainable = Boolean(
+    buildGradingExplanationDisplay({
+      review,
+      memoContent: memoContentForDisplay(review.content),
+      assessments,
+    }),
+  );
 
   if (legacy) {
     return (
@@ -127,42 +159,63 @@ export function ReviewGradingPanel({ review }: { review: Review }) {
   }
 
   return (
-    <div className="mb-4 rounded-lg border border-black/10 bg-black/[.02] p-3 text-sm dark:border-white/10 dark:bg-white/[.03]">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">
-            Commercial Grade
-          </p>
-          {withheld ? (
-            <p className="mt-1 text-lg font-semibold text-red-700 dark:text-red-400">Grade withheld</p>
-          ) : (
-            <p className="mt-1 font-serif text-2xl font-semibold">
-              {review.manuscript_letter_grade ?? "—"}
-              {review.manuscript_score != null && (
-                <span className="ml-2 text-base font-normal text-black/50 dark:text-white/50">
-                  ({review.manuscript_score}/100)
-                </span>
+    <>
+      {!hasExplainable && (
+        <div className="mb-4 rounded-lg border border-black/10 bg-black/[.02] p-3 text-sm dark:border-white/10 dark:bg-white/[.03]">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">
+                Commercial Grade
+              </p>
+              {withheld ? (
+                <p className="mt-1 text-lg font-semibold text-red-700 dark:text-red-400">
+                  {gateIncomplete
+                    ? "Grade withheld — revision-aware validation incomplete."
+                    : "Grade withheld"}
+                </p>
+              ) : (
+                <p className="mt-1 font-serif text-2xl font-semibold">
+                  {review.manuscript_letter_grade ?? "—"}
+                  {review.manuscript_score != null && (
+                    <span className="ml-2 text-base font-normal text-black/50 dark:text-white/50">
+                      ({review.manuscript_score}/100)
+                    </span>
+                  )}
+                </p>
               )}
-            </p>
-          )}
+              {provisional && <StatusBadge label="Provisional grade" tone="warn" />}
+              {verified && <StatusBadge label="Verified" tone="ok" />}
+            </div>
+            <div className="text-right text-xs text-black/55 dark:text-white/55">
+              {review.craft_score != null && (
+                <p>Craft: {review.craft_score}/{CRAFT_MAX_TOTAL}</p>
+              )}
+              {review.acquisition_readiness_score != null && (
+                <p>Acquisition: {review.acquisition_readiness_score}/{ACQUISITION_MAX_TOTAL}</p>
+              )}
+              {review.grading_formula_version && <p className="mt-1">{review.grading_formula_version}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasExplainable && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           {provisional && <StatusBadge label="Provisional grade" tone="warn" />}
           {verified && <StatusBadge label="Verified" tone="ok" />}
+          {withheld && <StatusBadge label="Grade withheld" tone="bad" />}
         </div>
-        <div className="text-right text-xs text-black/55 dark:text-white/55">
-          {review.craft_score != null && (
-            <p>Craft: {review.craft_score}/{CRAFT_MAX_TOTAL}</p>
-          )}
-          {review.acquisition_readiness_score != null && (
-            <p>Acquisition: {review.acquisition_readiness_score}/{ACQUISITION_MAX_TOTAL}</p>
-          )}
-          {review.grading_formula_version && <p className="mt-1">{review.grading_formula_version}</p>}
-        </div>
-      </div>
+      )}
 
+      {hasExplainable && !withheld && (
+        <ExplainableGradingPanels review={review} assessments={assessments} />
+      )}
+
+      <div className="mb-4 rounded-lg border border-black/10 bg-black/[.02] p-3 text-sm dark:border-white/10 dark:bg-white/[.03]">
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
         {review.canonical_word_count != null && (
           <div>
-            <dt className="inline text-black/45 dark:text-white/45">Authoritative count: </dt>
+            <dt className="inline text-black/45 dark:text-white/45">StoryDNA analytical count: </dt>
             <dd className="inline font-medium">{review.canonical_word_count.toLocaleString()} words</dd>
           </div>
         )}
@@ -227,12 +280,6 @@ export function ReviewGradingPanel({ review }: { review: Review }) {
         </div>
       )}
     </div>
+    </>
   );
-}
-
-/** Strip structured rubric JSON from memo display. */
-export function memoContentForDisplay(content: string): string {
-  const marker = "<!-- STORYDNA_RUBRIC_JSON -->";
-  const idx = content.indexOf(marker);
-  return idx === -1 ? content : content.slice(0, idx).trim();
 }

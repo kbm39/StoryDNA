@@ -2,6 +2,7 @@
  * Repair prompt construction and deterministic normalization for tests/dev diagnostics.
  */
 
+import { canonicalManuscriptLengthSentence } from "./word-count-reporting.ts";
 import type { WordCountContradiction } from "./word-count-validation.ts";
 import type { ProseGradeMatch } from "./prose-grade-validation.ts";
 import { buildProseGradeRepairPrompt } from "./prose-grade-validation.ts";
@@ -58,7 +59,7 @@ export function buildCommercialReviewRepairPrompt(
     `AUTHORITATIVE MANUSCRIPT LENGTH: ${args.canonicalWordCount.toLocaleString()} words (exact — never estimate, round away, or substitute shorthand).`,
     "",
     "MANDATORY REPAIR REQUIREMENTS:",
-    `1. Open the memo with this exact sentence: "The manuscript is ${args.canonicalWordCount.toLocaleString()} words."`,
+    `1. Include exactly one current-total sentence: "${canonicalManuscriptLengthSentence(args.canonicalWordCount)}"`,
     "2. Remove EVERY inconsistent total-length statement, shorthand (150k, ~150k, 150k-ish), approximate total (about/roughly/around), page-count proxy, reading-time proxy, and invalid target range that contradicts the authoritative total.",
     "3. Recalculate EVERY percentage-cut recommendation and EVERY resulting/target word count from the authoritative total above.",
     formatCutExamples(args.canonicalWordCount),
@@ -110,7 +111,7 @@ export function normalizeCommercialReviewStatisticsText(args: {
   const rubricTail = markerIdx >= 0 ? args.content.slice(markerIdx) : "";
   const cut20 = Math.round(args.canonicalWordCount * 0.8);
   const cut25 = Math.round(args.canonicalWordCount * 0.75);
-  const exactOpen = `The manuscript is ${args.canonicalWordCount.toLocaleString()} words.`;
+  const exactOpen = canonicalManuscriptLengthSentence(args.canonicalWordCount);
 
   let memo =
     markerIdx >= 0

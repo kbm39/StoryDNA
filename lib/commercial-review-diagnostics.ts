@@ -19,9 +19,8 @@ import type { ReviewStatistics } from "./review-statistics.ts";
 import type { ReviewMeta } from "./types.ts";
 import type { GenerationMeta } from "./ai/shared.ts";
 import type { RubricGenerationFailureKind } from "./rubric-validation.ts";
+import type { MemoGenerationFailureKind } from "./commercial-review-generation.ts";
 import { buildCommercialReviewRepairPrompt } from "./commercial-review-repair.ts";
-
-export type MemoGenerationFailureKind = "MEMO_GENERATION_TRUNCATED";
 
 export type CommercialReviewFailureKind =
   | MemoGenerationFailureKind
@@ -226,6 +225,7 @@ export function buildTwoPhaseReviewFailureDiagnostics(args: {
   reviewMeta: ReviewMeta | null;
   repairPrompt?: string;
   wordCountContradictions?: import("./word-count-validation.ts").WordCountContradiction[];
+  failureKind?: CommercialReviewFailureKind;
 }): CommercialReviewFailureDiagnostics {
   const combinedText = args.rubricRawContent
     ? `${args.memoContent}\n\n<!-- STORYDNA_RUBRIC_JSON -->\n${args.rubricRawContent}`
@@ -255,6 +255,7 @@ export function buildTwoPhaseReviewFailureDiagnostics(args: {
     rubricFailureKind: args.rubricFailureKind,
     rubricRetryAttempted: args.rubricRetryAttempted ?? false,
     memoRepairAttempted: args.memoRepairAttempted ?? false,
+    failureKind: args.failureKind ?? args.rubricFailureKind,
     originalPass: {
       ...base.originalPass,
       error: args.failureError,

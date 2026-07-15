@@ -11,6 +11,8 @@ export interface Manuscript {
   storage_path: string;
   file_size: number | null;
   word_count: number | null;
+  /** Microsoft Word <Words> from docProps/app.xml at upload; display-only. */
+  source_document_word_count?: number | null;
   extracted_text: string | null;
   status: string;
   archived: boolean;
@@ -33,6 +35,8 @@ export interface ManuscriptVersion {
   file_size: number | null;
   extracted_text: string | null;
   word_count: number | null;
+  /** Microsoft Word <Words> from docProps/app.xml at upload; display-only. */
+  source_document_word_count?: number | null;
   character_count: number | null;
   content_hash: string;
   uploaded_at: string;
@@ -127,6 +131,39 @@ export interface Review {
   arithmetic_validation_status?: string | null;
   rubric_breakdown?: import("@/lib/commercial-fiction-rubric").CommercialRubricPayload | null;
   grading_metadata?: Record<string, unknown> | null;
+  contrary_evidence_gate_status?: string | null;
+  contrary_evidence_gate_version?: string | null;
+  scoring_gate_valid?: boolean | null;
+  duplicate_deduction_count?: number | null;
+  restored_points_total?: number | null;
+  blocked_stale_deduction_count?: number | null;
+}
+
+export interface ReviewConcernAssessment {
+  id: string;
+  review_id: string;
+  prior_review_id: string | null;
+  manuscript_id: string;
+  manuscript_version_id: string | null;
+  prior_manuscript_version_id: string | null;
+  concern_id: string;
+  root_issue: string;
+  source_type: string;
+  rubric_category: string | null;
+  prior_criticism: string;
+  prior_evidence: unknown;
+  current_supporting_evidence: unknown;
+  current_contrary_evidence: unknown;
+  revision_change: unknown;
+  original_basis_still_present: boolean;
+  status: string;
+  confidence: string;
+  prior_deduction: number;
+  points_restored: number;
+  remaining_deduction: number;
+  narrowed_current_finding: string | null;
+  explanation: string;
+  created_at: string;
 }
 
 // --- Literary Agent Review V2: transparency + author intent ------------------

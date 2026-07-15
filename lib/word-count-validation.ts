@@ -4,8 +4,14 @@
  */
 
 import { buildCommercialReviewRepairPrompt } from "./commercial-review-repair.ts";
+import { canonicalManuscriptLengthSentence } from "./word-count-reporting.ts";
 
-export type LengthClaimType = "current_total" | "resulting_total" | "cut_amount";
+export type LengthClaimType =
+  | "current_total"
+  | "resulting_total"
+  | "cut_amount"
+  | "cut_percentage"
+  | "category_target";
 
 export interface WordCountContradiction {
   /** Verbatim excerpt from the review containing the claim. */
@@ -64,6 +70,20 @@ const APPROX_WORDS =
 
 const LENGTH_CONTEXT =
   /\b(word|words|manuscript|draft|novel|book|length|count|size|total|page|pages|reading time|read time)\b/i;
+
+const CATEGORY_TARGET_INDICATORS =
+  /\b(?:genre\s+target|market\s+range|target\s+range|ideal\s+length|commercial\s+fiction\s+typically|reader\s+expectations?\s+for\s+length|standard\s+range)\b/i;
+
+/** Unsupported qualitative length claims without mathematical basis from canonical count. */
+const UNSUPPORTED_LENGTH_PHRASE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
+  { re: /\b(?:reads?|read)\s+well\s+past\s+\d+\s*k\b/gi, reason: "Unsupported qualitative claim (reads well past Nk)." },
+  { re: /\bwell\s+past\s+(?:\d+\s*k|150\s*k|130\s*k)\b/gi, reason: "Unsupported qualitative claim (well past Nk)." },
+  { re: /\broughly\s+150\s*k\b/gi, reason: "Unsupported 150k estimate." },
+  { re: /\bover\s+130\s*k\b/gi, reason: "Unsupported 130k+ claim." },
+  { re: /\b(?:about|approximately|roughly)\s+150\s*k\b/gi, reason: "Unsupported 150k estimate." },
+  { re: /\b25\s*[–—-]\s*30\s*%\s+too\s+much\s+book\b/gi, reason: "Unsupported percentage-too-much claim without supported arithmetic." },
+  { re: /\ba\s+third\s+too\s+long\b/gi, reason: "Unsupported fractional length claim without supported arithmetic." },
+];
 
 const CURRENT_TOTAL_INDICATORS =
   /\b(?:the\s+)?(?:manuscript|book|draft|novel)\s+is\b|\b(?:manuscript|book|draft|novel)\s+runs\b|\bcomes in at\b|\bcurrent(?:ly)?\s+(?:length|runs|totals?|stands)\b|\b(?:totals?|stands)\s+at\b|\b(?:draft|book|manuscript)\s+currently\b|\b\d{1,3}(?:,\d{3})+\s*[-–—]?\s*word\s+(?:manuscript|novel|draft|book)\b/i;
@@ -296,6 +316,7 @@ export function parseCompoundCutRanges(text: string, canonicalWordCount: number)
       const spanStart = m.index;
       const spanEnd = m.index + m[0].length;
       if (out.some((existing) => overlapsSpan(spanStart, spanEnd, existing.spanStart, existing.spanEnd))) {
+        skipExecMatch(re, spanStart, spanEnd);
         continue;
       }
 
@@ -403,6 +424,12 @@ export function classifyLengthClaimContext(
 
   if (CUT_AMOUNT_INDICATORS.test(before)) return "cut_amount";
   if (RESULTING_TOTAL_INDICATORS.test(before)) return "resulting_total";
+
+  const clauseWindow = text
+    .slice(Math.max(0, numberIndex - 150), Math.min(text.length, numberEnd + 80))
+    .toLowerCase();
+  if (CATEGORY_TARGET_INDICATORS.test(clauseWindow)) return "category_target";
+
   if (CURRENT_TOTAL_INDICATORS.test(before)) return "current_total";
 
   // "Target length: 89,193 words after a 20% cut" — resulting follows target + after cut in after-context
@@ -454,13 +481,17 @@ export function parseLinkedCutRecommendations(
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null) {
-      const cutPct = parseFloat(m[1]);
-      const resulting = parseWordNumber(m[2]);
-      if (!Number.isFinite(cutPct) || resulting == null) continue;
-
       const spanStart = m.index;
       const spanEnd = m.index + m[0].length;
+      const cutPct = parseFloat(m[1]);
+      const resulting = parseWordNumber(m[2]);
+      if (!Number.isFinite(cutPct) || resulting == null) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
+
       if (out.some((existing) => overlapsSpan(spanStart, spanEnd, existing.spanStart, existing.spanEnd))) {
+        skipExecMatch(re, spanStart, spanEnd);
         continue;
       }
 
@@ -495,6 +526,10 @@ interface RawMatch {
 
 function overlapsSpan(index: number, end: number, spanStart: number, spanEnd: number): boolean {
   return index < spanEnd && end > spanStart;
+}
+
+function skipExecMatch(re: RegExp, matchIndex: number, matchEnd: number): void {
+  if (re.global && re.lastIndex <= matchIndex) re.lastIndex = matchEnd;
 }
 
 function collectMatches(text: string, validatedSpans: Array<{ spanStart: number; spanEnd: number }>): RawMatch[] {
@@ -595,14 +630,17 @@ function collectMatches(text: string, validatedSpans: Array<{ spanStart: number;
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null) {
-      const raw = m[group];
-      let claimed = shorthand ? parseKValue(`${raw}k`) : parseWordNumber(raw);
-      if (claimed == null) continue;
-
       const matchEnd = m.index + m[0].length;
       const matchIndex = m.index;
+      const raw = m[group];
+      let claimed = shorthand ? parseKValue(`${raw}k`) : parseWordNumber(raw);
+      if (claimed == null) {
+        skipExecMatch(re, matchIndex, matchEnd);
+        continue;
+      }
 
       if (validatedSpans.some((s) => overlapsSpan(matchIndex, matchEnd, s.spanStart, s.spanEnd))) {
+        skipExecMatch(re, matchIndex, matchEnd);
         continue;
       }
 
@@ -615,8 +653,12 @@ function collectMatches(text: string, validatedSpans: Array<{ spanStart: number;
         claimed = Math.round(claimed * 250 * 60);
       }
 
-      if (claimed < 10_000 || claimed > 500_000) continue;
+      if (claimed < 10_000 || claimed > 500_000) {
+        skipExecMatch(re, matchIndex, matchEnd);
+        continue;
+      }
       if (!isManuscriptLengthContext(body, m.index) && !shorthand && !/page|hour|reading time/i.test(m[0])) {
+        skipExecMatch(re, matchIndex, matchEnd);
         continue;
       }
 
@@ -627,7 +669,10 @@ function collectMatches(text: string, validatedSpans: Array<{ spanStart: number;
       const normalizedPhrase = m[0].trim().toLowerCase().replace(/\s+/g, " ");
       const dedupeKey = `${m.index}:${matchEnd}:${claimType}:${normalizedPhrase}`;
 
-      if (seen.has(dedupeKey)) continue;
+      if (seen.has(dedupeKey)) {
+        skipExecMatch(re, matchIndex, matchEnd);
+        continue;
+      }
       seen.add(dedupeKey);
 
       matches.push({
@@ -662,19 +707,26 @@ function collectRangeContradictions(text: string, canonicalWordCount: number): W
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null) {
+      const spanStart = m.index;
+      const spanEnd = m.index + m[0].length;
       const before = body.slice(Math.max(0, m.index - 60), m.index).toLowerCase();
       if (RESULTING_TOTAL_INDICATORS.test(before) || CUT_AMOUNT_INDICATORS.test(before)) {
+        skipExecMatch(re, m.index, m.index + m[0].length);
         continue;
       }
       // Skip ranges inside reduction clauses (handled by parseCompoundCutRanges)
       const clause = body.slice(Math.max(0, m.index - 120), m.index + m[0].length + 40).toLowerCase();
       if (REDUCTION_CLAUSE_INDICATORS.test(clause) && /\d+\s*[–—-]\s*\d+\s*%/.test(clause)) {
+        skipExecMatch(re, m.index, m.index + m[0].length);
         continue;
       }
 
       const low = parseWordNumber(/k/i.test(m[0]) ? `${m[1]}k` : m[1]);
       const high = parseWordNumber(/k/i.test(m[0]) ? `${m[2]}k` : m[2]);
-      if (low == null || high == null) continue;
+      if (low == null || high == null) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
 
       const window = body.slice(Math.max(0, m.index - 40), m.index + m[0].length + 60).toLowerCase();
       const isTarget =
@@ -689,11 +741,17 @@ function collectRangeContradictions(text: string, canonicalWordCount: number): W
         !containsCanonical ||
         /\bbook inside\b/i.test(window);
 
-      if (!failRange) continue;
+      if (!failRange) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
 
       const quotation = body.slice(Math.max(0, m.index - 25), m.index + m[0].length + 55).trim();
       const dedupeKey = `range:${m.index}:${m.index + m[0].length}:current_total`;
-      if (seen.has(dedupeKey)) continue;
+      if (seen.has(dedupeKey)) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
       seen.add(dedupeKey);
 
       out.push({
@@ -729,11 +787,16 @@ function collectCutRecommendationContradictions(
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null) {
+      const spanStart = m.index;
+      const spanEnd = m.index + m[0].length;
       const cutLow = parseFloat(m[1]);
       const cutHigh = m[2] ? parseFloat(m[2]) : cutLow;
       const targetLow = parseKValue(`${m[3]}k`);
       const targetHigh = parseKValue(`${m[4]}k`);
-      if (!Number.isFinite(cutLow) || targetLow == null || targetHigh == null) continue;
+      if (!Number.isFinite(cutLow) || targetLow == null || targetHigh == null) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
 
       const resultLow = resultingFromCut(canonicalWordCount, cutHigh);
       const resultHigh = resultingFromCut(canonicalWordCount, cutLow);
@@ -741,7 +804,10 @@ function collectCutRecommendationContradictions(
       const targetOverlaps =
         resultHigh >= targetLow - tolerance && resultLow <= targetHigh + tolerance;
 
-      if (targetOverlaps) continue;
+      if (targetOverlaps) {
+        skipExecMatch(re, spanStart, spanEnd);
+        continue;
+      }
 
       const quotation = body.slice(Math.max(0, m.index - 20), m.index + m[0].length + 30).trim();
       out.push({
@@ -795,19 +861,89 @@ function validateResultingTotalClaim(
   return null;
 }
 
-/** Require exact canonical count stated at least once in memo prose. */
+/** Require the canonical current-total sentence exactly once in memo prose. */
 export function hasExactCanonicalStatement(text: string, canonicalWordCount: number): boolean {
   const body = memoBody(text);
-  const formatted = canonicalWordCount.toLocaleString("en-US");
-  const commaFlexible = formatted.replace(/,/g, "[, ]?");
-  const patterns = [
-    new RegExp(`\\b${commaFlexible}\\s+words\\b`, "i"),
-    new RegExp(`\\bmanuscript\\s+is\\s+${commaFlexible}\\b`, "i"),
-    new RegExp(`\\b${commaFlexible}\\s*[-–—]\\s*word\\s+manuscript\\b`, "i"),
-    new RegExp(`\\btotal\\s+(?:of\\s+)?${commaFlexible}\\s+words\\b`, "i"),
-  ];
-  return patterns.some((re) => re.test(body));
+  const required = canonicalManuscriptLengthSentence(canonicalWordCount);
+  const escaped = required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = body.match(new RegExp(escaped, "gi")) ?? [];
+  return matches.length === 1;
 }
+
+export function collectUnsupportedLengthPhrases(text: string): WordCountContradiction[] {
+  const body = memoBody(text);
+  const out: WordCountContradiction[] = [];
+  for (const { re, reason } of UNSUPPORTED_LENGTH_PHRASE_PATTERNS) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(body)) !== null) {
+      const quotation = body.slice(Math.max(0, m.index - 20), Math.min(body.length, m.index + m[0].length + 40)).trim();
+      out.push({
+        quotation,
+        claimedWords: 0,
+        approximate: true,
+        shorthand: true,
+        reason,
+        claimType: "current_total",
+      });
+    }
+  }
+
+  const overlongRe = /\bsignificantly\s+overlong\b/gi;
+  let om: RegExpExecArray | null;
+  while ((om = overlongRe.exec(body)) !== null) {
+    const after = body.slice(om.index, om.index + 200);
+    const formatted = canonicalWordCountFromContext(after);
+    if (!formatted) {
+      out.push({
+        quotation: body.slice(Math.max(0, om.index - 15), om.index + om[0].length + 60).trim(),
+        claimedWords: 0,
+        approximate: true,
+        shorthand: false,
+        reason: '"Significantly overlong" must be followed by the exact canonical count and a supported target range.',
+        claimType: "current_total",
+      });
+    }
+  }
+
+  return out;
+}
+
+function canonicalWordCountFromContext(snippet: string): boolean {
+  return /\b\d{1,3}(?:,\d{3})+\s+words\b/.test(snippet);
+}
+
+/** Detect multiple conflicting current-total claims in memo prose. */
+export function detectContradictoryCurrentTotals(
+  text: string,
+  canonicalWordCount: number,
+): WordCountContradiction[] {
+  const body = memoBody(text);
+  const currentTotals = new Set<number>();
+
+  for (const m of collectMatches(body, [])) {
+    if (m.claimType !== "current_total") continue;
+    if (m.claimedWords === canonicalWordCount) continue;
+    if (withinTolerance(m.claimedWords, canonicalWordCount, m.approximate)) continue;
+    currentTotals.add(m.claimedWords);
+  }
+
+  if (currentTotals.size === 0) return [];
+
+  return [
+    {
+      quotation: "Multiple conflicting current-length totals detected in memo.",
+      claimedWords: [...currentTotals][0] ?? 0,
+      approximate: false,
+      shorthand: false,
+      reason: `Memo contains ${currentTotals.size + 1} incompatible current-total claims; only ${canonicalWordCount.toLocaleString()} is authoritative.`,
+      claimType: "current_total",
+    },
+  ];
+}
+
+export const UNSUPPORTED_LENGTH_CLAIM_MESSAGE =
+  "REVIEW BLOCKED — UNSUPPORTED LENGTH CLAIM";
 
 /** Validate review prose against canonical manuscript word count. */
 export function validateWordCountClaims(
@@ -833,8 +969,12 @@ export function validateWordCountClaims(
 
   if (!hasExactCanonicalStatement(reviewText, canonicalWordCount)) {
     errors.push(
-      `Memo must state the exact canonical count at least once (e.g. "The manuscript is ${canonicalWordCount.toLocaleString()} words.").`,
+      `Memo must include exactly one current-total sentence: "${canonicalManuscriptLengthSentence(canonicalWordCount)}"`,
     );
+  }
+
+  for (const unsupported of collectUnsupportedLengthPhrases(reviewText)) {
+    pushContradiction(unsupported);
   }
 
   const linkedCuts = parseLinkedCutRecommendations(reviewText, canonicalWordCount);
@@ -882,6 +1022,7 @@ export function validateWordCountClaims(
     if (m.claimedWords === canonicalWordCount) continue;
 
     if (m.claimType === "cut_amount") continue;
+    if (m.claimType === "category_target") continue;
 
     if (m.claimType === "resulting_total") {
       const err = validateResultingTotalClaim(m, reviewText, canonicalWordCount);
@@ -892,20 +1033,22 @@ export function validateWordCountClaims(
     // CURRENT_TOTAL
     const drift = Math.abs(m.claimedWords - canonicalWordCount) / canonicalWordCount;
 
-    // CURRENT_TOTAL — approximate independent estimates must match canonical exactly
-    if (m.approximate && m.claimedWords !== canonicalWordCount) {
-      pushContradiction(
-        {
-          quotation: m.quotation,
-          claimedWords: m.claimedWords,
-          approximate: true,
-          shorthand: m.shorthand,
-          claimType: "current_total",
-          reason: `Estimated length claim (${m.claimedWords.toLocaleString()}) contradicts canonical ${canonicalWordCount.toLocaleString()}.`,
-        },
-        m.index,
-        m.matchEnd,
-      );
+    // CURRENT_TOTAL — approximate claims allowed within configured tolerance
+    if (m.approximate) {
+      if (!withinTolerance(m.claimedWords, canonicalWordCount, true)) {
+        pushContradiction(
+          {
+            quotation: m.quotation,
+            claimedWords: m.claimedWords,
+            approximate: true,
+            shorthand: m.shorthand,
+            claimType: "current_total",
+            reason: `Estimated length claim (${m.claimedWords.toLocaleString()}) exceeds editorial tolerance from canonical ${canonicalWordCount.toLocaleString()}.`,
+          },
+          m.index,
+          m.matchEnd,
+        );
+      }
       continue;
     }
 
@@ -948,6 +1091,10 @@ export function validateWordCountClaims(
   }
   for (const c of collectCutRecommendationContradictions(reviewText, canonicalWordCount)) {
     pushContradiction(c);
+  }
+
+  for (const conflict of detectContradictoryCurrentTotals(reviewText, canonicalWordCount)) {
+    pushContradiction(conflict);
   }
 
   return {

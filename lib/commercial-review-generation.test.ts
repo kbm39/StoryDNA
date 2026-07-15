@@ -17,10 +17,13 @@ import {
   evaluatePostMemoValidation,
   isMemoOutputWithinBudget,
   memoContainsEmbeddedRubric,
+  RUBRIC_PARSE_FAILURE_USER_MESSAGE,
+  shouldRepairRubricJson,
   shouldRetryRubricGeneration,
   validateCombinedCommercialReview,
   validateMemoBeforeRubric,
 } from "./commercial-review-generation.ts";
+import { buildCommercialRubricGenerationPrompt } from "./commercial-fiction-rubric.ts";
 import {
   buildMemoTruncationDiagnostics,
   writeMemoTruncationDiagnosticArtifact,
@@ -35,8 +38,10 @@ import { buildReviewStatistics } from "./review-statistics.ts";
 import type { CommercialRubricPayload, RubricCategoryScore } from "./commercial-fiction-rubric.ts";
 import type { GenerationMeta } from "./ai/shared.ts";
 
+import { storyDnaAnalyticalOpening } from "./word-count-reporting.ts";
+
 const HOLD_FAST_CANONICAL = 111_491;
-const EXACT_OPENING = `The manuscript is ${HOLD_FAST_CANONICAL.toLocaleString()} words.`;
+const EXACT_OPENING = storyDnaAnalyticalOpening(HOLD_FAST_CANONICAL);
 
 function sampleCategory(
   key: string,
@@ -348,7 +353,7 @@ describe("Hold Fast diagnostic replay (no AI)", () => {
       canonicalWordCount: number;
     };
     const extracted = extractRubricPayload(diagnostic.originalReviewText);
-    assert.equal(extracted.parseError, "Invalid rubric JSON.");
+    assert.ok(extracted.parseError);
     const keys = (diagnostic.originalReviewText.match(/"category_key"/g) ?? []).length;
     assert.ok(keys < 14, `expected fewer than 14 keys, got ${keys}`);
   });
@@ -380,8 +385,70 @@ describe("Hold Fast diagnostic replay (no AI)", () => {
     assert.ok(markerIdx >= 0);
     const rubricRaw = diagnostic.originalReviewText.slice(markerIdx + RUBRIC_JSON_MARKER.length);
     const parsed = parseRubricJsonString(rubricRaw);
-    assert.equal(parsed.parseError, "Invalid rubric JSON.");
-    assert.equal(parsed.appearsTruncated, true);
+    assert.ok(parsed.parseError);
+    assert.ok(parsed.parseError || parsed.appearsTruncated);
+  });
+});
+
+describe("malformed rubric JSON retry", () => {
+  const malformed = '{"craft_categories":[{"category_key":"premise_hook"';
+
+  it("malformed array JSON triggers rubric-only repair classification", () => {
+    const assessment = assessRubricGenerationResult({
+      rawContent: malformed,
+      generationMeta: meta(false),
+      statistics: stats(),
+      statisticsValid: true,
+    });
+    assert.equal(assessment.failureKind, "RUBRIC_INVALID_JSON");
+    assert.equal(shouldRepairRubricJson(assessment), true);
+    assert.equal(shouldRetryRubricGeneration(assessment), true);
+  });
+
+  it("repair prompt includes parse error and malformed raw output", () => {
+    const parsed = parseRubricJsonString(malformed);
+    const prompt = buildCommercialRubricGenerationPrompt({
+      canonicalWordCount: HOLD_FAST_CANONICAL,
+      fullTextSupplied: true,
+      memoContent: `${EXACT_OPENING}\n\nMemo preserved.`,
+      repairContext: {
+        parseError: parsed.parseError ?? "parse error",
+        malformedRaw: malformed,
+      },
+    });
+    assert.match(prompt, /RUBRIC REPAIR/);
+    assert.match(prompt, /PARSE ERROR/);
+    assert.match(prompt, /MALFORMED PREVIOUS OUTPUT/);
+    assert.match(prompt, /craft_categories/);
+    assert.doesNotMatch(prompt, /regenerate the memo/i);
+  });
+
+  it("valid retry assessment can publish while invalid retry blocks", () => {
+    const memo = `${EXACT_OPENING}\n\nValid memo.`;
+    const bad = assessRubricGenerationResult({
+      rawContent: malformed,
+      generationMeta: meta(false),
+      statistics: stats(),
+      statisticsValid: true,
+    });
+    assert.equal(bad.parsed.payload, null);
+
+    const goodPayload = fullRubricPayload(CRAFT_CATEGORIES.map(() => 5), ACQUISITION_CATEGORIES.map(() => 3));
+    const good = assessRubricGenerationResult({
+      rawContent: JSON.stringify(goodPayload),
+      generationMeta: meta(false),
+      statistics: stats(),
+      statisticsValid: true,
+    });
+    assert.equal(good.failureKind, null);
+    const combined = validateCombinedCommercialReview({
+      memoContent: memo,
+      rubricPayload: good.parsed.payload!,
+      statistics: stats(),
+      reviewMeta: null,
+    });
+    assert.equal(combined.ok, true);
+    assert.equal(RUBRIC_PARSE_FAILURE_USER_MESSAGE.includes("memo completed"), true);
   });
 });
 

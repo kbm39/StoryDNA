@@ -6,6 +6,7 @@ import type { ReviewStatistics } from "./review-statistics.ts";
 import {
   buildWordCountRepairPrompt,
   REVIEW_BLOCKED_STATISTICS_MESSAGE,
+  UNSUPPORTED_LENGTH_CLAIM_MESSAGE,
   validateWordCountClaims,
   type WordCountContradiction,
 } from "./word-count-validation.ts";
@@ -18,7 +19,9 @@ import { GRADING_FORMULA_VERSION, attachRubricToMemo, type CommercialRubricPaylo
 import type { ReviewMeta } from "./types.ts";
 import {
   normalizeProseGradeLine,
+  REVIEW_BLOCKED_MEMO_GRADE_MESSAGE,
   REVIEW_BLOCKED_PROSE_GRADE_MESSAGE,
+  validateMemoProhibitedGrades,
   validateProseLetterGrade,
   type ProseGradeMatch,
 } from "./prose-grade-validation.ts";
@@ -57,17 +60,38 @@ export interface CommercialMemoValidationOutcome {
   wordCountContradiction?: WordCountContradiction;
   wordCountContradictions?: WordCountContradiction[];
   wordCountErrors?: string[];
+  proseGradeConflict?: ProseGradeMatch;
 }
 
-/** Validate Call A memo only (statistics / word-count gate before rubric generation). */
+/** Validate Call A memo only (statistics / word-count / grade gate before rubric generation). */
 export function validateCommercialMemoOnly(args: {
   memoContent: string;
   canonicalWordCount: number;
   repairAttempted?: boolean;
 }): CommercialMemoValidationOutcome {
+  const gradeVal = validateMemoProhibitedGrades(args.memoContent);
+  if (!gradeVal.valid && !args.repairAttempted) {
+    return {
+      ok: false,
+      repairable: true,
+      repairKind: "prose_grade",
+      proseGradeConflict: gradeVal.conflicts[0],
+      error: `${REVIEW_BLOCKED_MEMO_GRADE_MESSAGE}: memo contains prohibited letter grade (${gradeVal.conflicts.map((c) => c.grade).join(", ")}).`,
+    };
+  }
+  if (!gradeVal.valid) {
+    return {
+      ok: false,
+      error: `${REVIEW_BLOCKED_MEMO_GRADE_MESSAGE}: Repair did not remove prohibited letter grades.`,
+    };
+  }
+
   const wordVal = validateWordCountClaims(args.memoContent, args.canonicalWordCount);
 
   if (!wordVal.valid && !args.repairAttempted) {
+    const hasUnsupported = wordVal.contradictions.some((c) =>
+      c.reason.includes("Unsupported") || c.reason.includes("well past"),
+    );
     const primary =
       wordVal.contradictions[0] ??
       ({
@@ -77,6 +101,9 @@ export function validateCommercialMemoOnly(args: {
         shorthand: false,
         reason: wordVal.errors[0] ?? "Statistics validation failed.",
       } satisfies WordCountContradiction);
+    const blockedMessage = hasUnsupported
+      ? UNSUPPORTED_LENGTH_CLAIM_MESSAGE
+      : REVIEW_BLOCKED_STATISTICS_MESSAGE;
     return {
       ok: false,
       repairable: true,
@@ -84,7 +111,7 @@ export function validateCommercialMemoOnly(args: {
       wordCountContradiction: primary,
       wordCountContradictions: wordVal.contradictions,
       wordCountErrors: wordVal.errors,
-      error: `${REVIEW_BLOCKED_STATISTICS_MESSAGE}: ${[
+      error: `${blockedMessage}: ${[
         ...wordVal.errors,
         ...wordVal.contradictions.map((c) => c.reason),
       ].join(" ")}`,
@@ -221,8 +248,45 @@ export function validateCommercialReviewContent(args: {
 }
 
 /** Build grading record for DB persistence (matches RPC validation expectations). */
-export function buildReviewGradingRecord(v: ValidatedCommercialReview): Record<string, unknown> {
-  const g = v.grading;
+export function buildReviewGradingRecord(
+  v: ValidatedCommercialReview,
+  gateExtras?: Record<string, unknown> & {
+    adjustedGrading?: RubricValidationResult;
+    concernAssessments?: unknown[];
+    prior_review_id?: string | null;
+    prior_manuscript_version_id?: string | null;
+    manuscript_version_id?: string | null;
+  },
+): Record<string, unknown> {
+  const g = gateExtras?.adjustedGrading ?? v.grading;
+  const gradingMetadata: Record<string, unknown> = {
+    repair_attempted: v.repairAttempted,
+    repair_succeeded: v.repairSucceeded,
+    validation_errors: g.validationErrors,
+    statistics: v.statistics,
+  };
+
+  if (gateExtras) {
+    const {
+      adjustedGrading: _adjustedGrading,
+      concernAssessments,
+      prior_review_id,
+      prior_manuscript_version_id,
+      manuscript_version_id,
+      ...gateFields
+    } = gateExtras;
+    void _adjustedGrading;
+    Object.assign(gradingMetadata, { contrary_evidence_gate: gateFields });
+    if (concernAssessments) {
+      gradingMetadata.concern_assessments = concernAssessments;
+    }
+    if (prior_review_id) gradingMetadata.prior_review_id = prior_review_id;
+    if (prior_manuscript_version_id) {
+      gradingMetadata.prior_manuscript_version_id = prior_manuscript_version_id;
+    }
+    if (manuscript_version_id) gradingMetadata.manuscript_version_id = manuscript_version_id;
+  }
+
   return {
     manuscript_score: g.manuscriptScore,
     manuscript_letter_grade: g.letterGrade || null,
@@ -237,12 +301,21 @@ export function buildReviewGradingRecord(v: ValidatedCommercialReview): Record<s
     evidence_completeness_status: g.evidenceCompletenessStatus,
     arithmetic_validation_status: "VERIFIED",
     rubric_breakdown: v.rubric,
-    grading_metadata: {
-      repair_attempted: v.repairAttempted,
-      repair_succeeded: v.repairSucceeded,
-      validation_errors: g.validationErrors,
-      statistics: v.statistics,
-    },
+    grading_metadata: gradingMetadata,
+    ...(gateExtras
+      ? {
+          contrary_evidence_gate_status: gateExtras.contrary_evidence_gate_status,
+          contrary_evidence_gate_version: gateExtras.contrary_evidence_gate_version,
+          scoring_gate_valid: gateExtras.scoring_gate_valid,
+          duplicate_deduction_count: gateExtras.duplicate_deduction_count,
+          restored_points_total: gateExtras.restored_points_total,
+          blocked_stale_deduction_count: gateExtras.blocked_stale_deduction_count,
+          concern_assessments: gateExtras.concernAssessments ?? [],
+          prior_review_id: gateExtras.prior_review_id ?? null,
+          prior_manuscript_version_id: gateExtras.prior_manuscript_version_id ?? null,
+          manuscript_version_id: gateExtras.manuscript_version_id ?? null,
+        }
+      : {}),
   };
 }
 

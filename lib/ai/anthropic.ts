@@ -231,6 +231,11 @@ export async function generateAgentRubric(args: {
   statistics: ReviewStatistics;
   memoContent: string;
   retryAfterTruncation?: boolean;
+  contraryEvidenceGateBlock?: string;
+  repairContext?: {
+    parseError: string;
+    malformedRaw: string;
+  };
 }): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
@@ -242,6 +247,8 @@ export async function generateAgentRubric(args: {
     fullTextSupplied: args.statistics.full_text_supplied,
     memoContent: args.memoContent,
     retryAfterTruncation: args.retryAfterTruncation,
+    contraryEvidenceGateBlock: args.contraryEvidenceGateBlock,
+    repairContext: args.repairContext,
   });
 
   const response = await client.messages.create({

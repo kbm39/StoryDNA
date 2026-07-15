@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { getManuscriptMeta, listReviews } from "@/lib/reviews";
+import { listConcernAssessmentsForReview } from "@/lib/concern-assessments";
 import { activeCommercialReview } from "@/lib/review-selection";
 import { listIssues } from "@/lib/issues";
 import { listSuggestionsForIssues, groupByIssue } from "@/lib/suggestions";
@@ -30,13 +31,17 @@ import type {
   Review,
   RevisionCheck,
   ReviewMeta,
+  ReviewConcernAssessment,
   ComplianceItemStatus,
   ConstitutionalStatus,
 } from "@/lib/types";
 import GenerateReviewsButton from "./GenerateReviewsButton";
 import RunAgentReviewButton from "./RunAgentReviewButton";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
-import { ReviewGradingPanel, memoContentForDisplay } from "./ReviewGradingPanel";
+import { ReviewGradingPanel } from "./ReviewGradingPanel";
+import { RevisionImpactPanel } from "./RevisionImpactPanel";
+import { memoContentForDisplay } from "@/lib/review-display";
+import { ManuscriptWordCountReport } from "./ManuscriptWordCountReport";
 import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions";
 import { getRevisionGenerationStatus } from "@/app/actions/agent-revisions";
 import ExtractIssuesButton from "./ExtractIssuesButton";
@@ -224,12 +229,16 @@ function ReviewColumn({
   accent,
   review,
   manuscriptId,
+  concernAssessments,
+  priorScore,
 }: {
   heading: string;
   subheading: string;
   accent: string;
   review: Review | undefined;
   manuscriptId: string;
+  concernAssessments?: ReviewConcernAssessment[];
+  priorScore?: number | null;
 }) {
   const rawMeta = review?.metadata?.review_meta as ReviewMeta | undefined;
   const meta = rawMeta?.compliance ? rawMeta : undefined;
@@ -259,7 +268,14 @@ function ReviewColumn({
       <div className="px-5 py-4">
         {review ? (
           <>
-            {showGrading && <ReviewGradingPanel review={review} />}
+            {showGrading && <ReviewGradingPanel review={review} assessments={concernAssessments} />}
+            {showGrading && concernAssessments && (
+              <RevisionImpactPanel
+                review={review}
+                assessments={concernAssessments}
+                priorScore={priorScore}
+              />
+            )}
             {meta ? (
               <TransparencyHeader meta={meta} />
             ) : (
@@ -348,6 +364,16 @@ export default async function ManuscriptPage({
   const suggestionsByIssue = groupByIssue(suggestions);
   const commercial = activeCommercialReview(reviews);
   const craft = reviews.find((r) => r.perspective === "craft");
+  const concernAssessments = commercial
+    ? await listConcernAssessmentsForReview(commercial.id)
+    : [];
+  const priorCommercialScore =
+    (commercial?.grading_metadata as { prior_manuscript_score?: number } | null)
+      ?.prior_manuscript_score ??
+    reviews.find(
+      (r) => r.perspective === "commercial" && r.lifecycle_status === "superseded",
+    )?.manuscript_score ??
+    null;
   const screenReviews = reviews.filter((r) => r.perspective === "screen");
   const outstandingIssues = issues
     .filter((i) => i.status === "outstanding")
@@ -374,10 +400,11 @@ export default async function ManuscriptPage({
           <h1 className="text-3xl font-semibold tracking-tight">{manuscript.title}</h1>
           <p className="mt-1 text-sm text-black/55 dark:text-white/55">
             {manuscript.original_filename}
-            {manuscript.word_count != null
-              ? ` · ${manuscript.word_count.toLocaleString()} words`
-              : ""}
           </p>
+          <ManuscriptWordCountReport
+            canonicalWordCount={manuscript.word_count}
+            sourceDocumentWordCount={manuscript.source_document_word_count}
+          />
           <p className="mt-0.5 text-xs text-black/45 dark:text-white/45">
             Uploaded {fmtDateTime(manuscript.created_at)}
           </p>
@@ -451,6 +478,8 @@ export default async function ManuscriptPage({
             accent="text-emerald-700 dark:text-emerald-400"
             review={commercial}
             manuscriptId={id}
+            concernAssessments={concernAssessments}
+            priorScore={priorCommercialScore}
           />
           <ReviewColumn
             heading="Developmental edit"

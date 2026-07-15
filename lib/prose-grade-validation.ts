@@ -12,6 +12,7 @@ const LETTER = /[A-F](?:\+|-)?/;
 
 /** Patterns for model-assigned final manuscript letter grades in memo prose. */
 const PROSE_GRADE_PATTERNS: RegExp[] = [
+  /\bGrade:\s*([A-F](?:\+|-)?)/gi,
   /\*\*Grade:\s*([A-F](?:\+|-)?)\*\*/gi,
   /(?:Overall|Final)\s+grade\s*[:\s—–-]+\s*([A-F](?:\+|-)?)/gi,
   /letter\s+grade\s*[:\s—–-]+\s*([A-F](?:\+|-)?)/gi,
@@ -55,6 +56,16 @@ export interface ProseGradeValidationResult {
   conflicts: ProseGradeMatch[];
 }
 
+/** Reject any model-assigned letter grade in Call A memo (before rubric exists). */
+export function validateMemoProhibitedGrades(memoContent: string): ProseGradeValidationResult {
+  const detected = detectProseLetterGrades(memoContent);
+  return {
+    valid: detected.length === 0,
+    detected,
+    conflicts: detected,
+  };
+}
+
 /** Validate prose grades against the application-calculated letter grade. */
 export function validateProseLetterGrade(
   memoContent: string,
@@ -74,6 +85,9 @@ export function validateProseLetterGrade(
     conflicts,
   };
 }
+
+export const REVIEW_BLOCKED_MEMO_GRADE_MESSAGE =
+  "REVIEW BLOCKED — MEMO CONTAINS PROHIBITED LETTER GRADE";
 
 export const REVIEW_BLOCKED_PROSE_GRADE_MESSAGE =
   "REVIEW BLOCKED — PROSE LETTER GRADE CONTRADICTS CALCULATED GRADE";

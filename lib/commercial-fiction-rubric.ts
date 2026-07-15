@@ -3,6 +3,8 @@
  * Letter grades are NEVER chosen by the model; application code derives them from totals.
  */
 
+import { STORYDNA_COUNT_METHOD } from "./word-count-reporting.ts";
+
 export const GRADING_FORMULA_VERSION = "STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1";
 
 export type RubricConfidence = "high" | "medium" | "low";
@@ -135,10 +137,12 @@ MEMO-ONLY OUTPUT (mandatory):
 - Do NOT append STORYDNA_RUBRIC_JSON, any JSON block, or structured rubric scores — a separate grading call handles rubric JSON.
 - Do NOT write **Grade: X**, Overall score, Final grade, or any letter grade or /100 numerical score — the application calculates grading after rubric validation.
 - Do NOT embed rubric-style category-by-category scoring or point breakdowns in the memo — reserve numerical scoring for the separate rubric call.
-- The memo MUST open with or include this exact statement:
+- The memo MUST include exactly one current-total sentence:
   "The manuscript is [EXACT CANONICAL COUNT FROM MANUSCRIPT STATISTICS] words."
-  Use the comma-formatted number from MANUSCRIPT STATISTICS — do not round to shorthand (150k) or ranges.
-- Percentage-cut and savings recommendations in prose must use arithmetic derived from the authoritative total.
+  Use the comma-formatted canonical_word_count from MANUSCRIPT STATISTICS — do not round to shorthand (150k) or ranges.
+  Do not claim totals such as 130k, 150k, "well past 150k", or other unsupported round figures.
+- Do not state any competing current total elsewhere in the memo.
+- Percentage-cut recommendations must show current count, cut percentage, cut amount, and resulting count derived from the authoritative total.
 
 CONCISION (mandatory — avoid repetition to stay within output budget):
 - Each strength or weakness should appear in only ONE primary section (Strengths, Weaknesses, or the most relevant assessment section) — do not restate the same point elsewhere.
@@ -194,9 +198,9 @@ Evidence rules:
 Do NOT include manuscript_letter_grade or any letter grade in the JSON or memo.
 Do NOT write **Grade: X** anywhere — the system computes the grade from your numeric scores.
 
-The acquisitions memo MUST open with or include this exact statement:
+The acquisitions memo MUST include exactly one current-total sentence:
 "The manuscript is [EXACT CANONICAL COUNT FROM MANUSCRIPT STATISTICS] words."
-Use the comma-formatted number from MANUSCRIPT STATISTICS — do not round to shorthand (150k) or ranges.
+Use canonical_word_count from MANUSCRIPT STATISTICS — do not round to shorthand (150k) or ranges.
 
 length_recommendations entries MUST include:
 - authoritative_current_word_count (exact canonical total from MANUSCRIPT STATISTICS)
@@ -211,6 +215,11 @@ export function buildCommercialRubricGenerationPrompt(args: {
   fullTextSupplied: boolean;
   memoContent: string;
   retryAfterTruncation?: boolean;
+  contraryEvidenceGateBlock?: string;
+  repairContext?: {
+    parseError: string;
+    malformedRaw: string;
+  };
 }): string {
   const craftLines = CRAFT_CATEGORIES.map((c) => `  - ${c.key}: ${c.name} (max ${c.max})`).join("\n");
   const acqLines = ACQUISITION_CATEGORIES.map(
@@ -221,9 +230,11 @@ export function buildCommercialRubricGenerationPrompt(args: {
       ? `${args.memoContent.slice(0, 12_000)}\n\n[Memo truncated for context — full memo was read in Call A.]`
       : args.memoContent;
 
-  const retryNote = args.retryAfterTruncation
-    ? `\nRETRY: Your previous rubric response was truncated or invalid. Keep EVERY field concise so all 14 categories fit. Use exactly 2 examples per category. Maximum 3 strengths and 3 deductions per category.\n`
-    : "";
+  const retryNote = args.repairContext
+    ? `\nRUBRIC REPAIR: Your previous JSON response failed to parse.\nPARSE ERROR: ${args.repairContext.parseError}\nReturn ONLY valid JSON matching the schema below — no markdown fences, no prose.\nMALFORMED PREVIOUS OUTPUT (fix and return corrected JSON only):\n---\n${args.repairContext.malformedRaw.slice(0, 24_000)}\n---\n`
+    : args.retryAfterTruncation
+      ? `\nRETRY: Your previous rubric response was truncated or invalid. Keep EVERY field concise so all 14 categories fit. Use exactly 2 examples per category. Maximum 3 strengths and 3 deductions per category.\n`
+      : "";
 
   return `You are scoring a commercial fiction manuscript using STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1.
 
@@ -234,6 +245,7 @@ OUTPUT RULES (strict):
 ${retryNote}
 MANUSCRIPT STATISTICS:
 - canonical_word_count: ${args.canonicalWordCount.toLocaleString()}
+- count_method: ${STORYDNA_COUNT_METHOD}
 - full_text_supplied: ${args.fullTextSupplied}
 
 COMPLETED ACQUISITIONS MEMO (from Call A — ground your scores and evidence in this assessment AND the manuscript):
@@ -277,6 +289,7 @@ length_recommendations (if any cuts are warranted):
 - recommended_cut_percentage and/or recommended_cut_words
 - resulting_word_count (must equal canonical minus cut words, or canonical × (1 - percentage/100), rounded)
 - genre_target_range, configuration_source, basis, rationale
+${args.contraryEvidenceGateBlock ?? ""}
 
 Return the JSON object only.`;
 }

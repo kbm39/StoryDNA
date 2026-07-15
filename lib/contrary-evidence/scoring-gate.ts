@@ -1,8 +1,11 @@
 import type {
+  ComparisonMode,
   ConcernAssessment,
   ConcernStatus,
   RetainedDeduction,
+  SameVersionStatus,
   ScoringGateResult,
+  UnifiedAssessmentStatus,
 } from "./types.ts";
 
 const BROAD_CRITICISM_PATTERNS = [
@@ -17,6 +20,7 @@ const BROAD_CRITICISM_PATTERNS = [
 
 export interface ScoringGateInput {
   assessments: ConcernAssessment[];
+  comparison_mode?: ComparisonMode;
 }
 
 /**
@@ -27,18 +31,21 @@ export function enforceScoringGate(input: ScoringGateInput): ScoringGateResult {
   const errors: string[] = [];
   const adjusted: RetainedDeduction[] = [];
   let totalRestored = 0;
+  const mode = input.comparison_mode ?? input.assessments[0]?.comparison_mode ?? "REVISION_COMPARISON";
 
   for (const assessment of input.assessments) {
     if (assessment.prior_deduction <= 0 && assessment.status !== "NOT_ASSESSABLE") {
       continue;
     }
 
-    const gateErrors = validateAssessment(assessment);
+    const gateErrors = validateAssessment(assessment, mode);
     errors.push(...gateErrors);
 
     if (gateErrors.length > 0) continue;
 
-    totalRestored += assessment.points_restored;
+    if (mode === "REVISION_COMPARISON") {
+      totalRestored += assessment.points_restored;
+    }
 
     if (assessment.remaining_deduction > 0) {
       adjusted.push({
@@ -65,47 +72,66 @@ export function enforceScoringGate(input: ScoringGateInput): ScoringGateResult {
   };
 }
 
-function validateAssessment(a: ConcernAssessment): string[] {
+function validateAssessment(a: ConcernAssessment, mode: ComparisonMode): string[] {
   const errors: string[] = [];
 
-  if (a.status === "RESOLVED" || a.status === "STALE_CRITIQUE") {
-    if (a.remaining_deduction !== 0) {
-      errors.push(
-        `${a.concern_id}: ${a.status} must deduct zero (got ${a.remaining_deduction}).`,
-      );
+  if (mode === "SAME_VERSION_REASSESSMENT") {
+    if (a.points_restored > 0) {
+      errors.push(`${a.concern_id}: same-version mode must not record points_restored.`);
     }
-    return errors;
+    if (REVISION_ONLY.has(a.status)) {
+      errors.push(`${a.concern_id}: ${a.status} is invalid in SAME_VERSION_REASSESSMENT.`);
+    }
+    if (statusZeroesDeduction(a.status, mode)) {
+      if (a.remaining_deduction !== 0) {
+        errors.push(`${a.concern_id}: ${a.status} must deduct zero (got ${a.remaining_deduction}).`);
+      }
+      return errors;
+    }
+  } else {
+    if (SAME_VERSION_ONLY.has(a.status)) {
+      errors.push(`${a.concern_id}: ${a.status} is invalid in REVISION_COMPARISON.`);
+    }
+    if (statusZeroesDeduction(a.status, mode)) {
+      if (a.remaining_deduction !== 0) {
+        errors.push(`${a.concern_id}: ${a.status} must deduct zero (got ${a.remaining_deduction}).`);
+      }
+      return errors;
+    }
   }
 
   if (a.remaining_deduction > 0) {
     const supporting = a.current_supporting_evidence.filter((e) => e.relevance === "supporting");
     if (supporting.length === 0) {
-      errors.push(
-        `${a.concern_id}: retained deduction requires current supporting evidence.`,
-      );
+      errors.push(`${a.concern_id}: retained deduction requires current supporting evidence.`);
     }
 
     if (!a.contrary_evidence_analysis?.trim()) {
-      errors.push(
-        `${a.concern_id}: missing contrary-evidence analysis blocks the deduction.`,
-      );
+      errors.push(`${a.concern_id}: missing contrary-evidence analysis blocks the deduction.`);
     }
 
     if (isBroadCriticism(a.prior_criticism) && !a.narrowed_current_finding?.trim()) {
-      errors.push(
-        `${a.concern_id}: broad criticism must be narrowed before retaining a deduction.`,
-      );
+      errors.push(`${a.concern_id}: broad criticism must be narrowed before retaining a deduction.`);
     }
 
     if (hasDeletedQuotationWithoutSupport(a)) {
-      errors.push(
-        `${a.concern_id}: deleted prior quotation cannot support a deduction.`,
-      );
+      errors.push(`${a.concern_id}: deleted prior quotation cannot support a deduction.`);
     }
   }
 
   return errors;
 }
+
+const REVISION_ONLY = new Set<string>([
+  "RESOLVED",
+  "SUBSTANTIALLY_IMPROVED",
+  "PARTIALLY_IMPROVED",
+  "UNCHANGED",
+  "WORSENED",
+  "STALE_CRITIQUE",
+]);
+
+const SAME_VERSION_ONLY = new Set<string>(["SUPPORTED", "UNSUPPORTED", "OVERBROAD", "DUPLICATED"]);
 
 export function isBroadCriticism(text: string): boolean {
   return BROAD_CRITICISM_PATTERNS.some((p) => p.test(text));
@@ -119,7 +145,26 @@ function hasDeletedQuotationWithoutSupport(a: ConcernAssessment): boolean {
   return deleted && !supportingQuotes && a.prior_evidence.length > 0;
 }
 
-/** Helper for tests — whether status zeroes deduction. */
-export function statusZeroesDeduction(status: ConcernStatus): boolean {
+/** Whether status zeroes deduction for the given comparison mode. */
+export function statusZeroesDeduction(
+  status: UnifiedAssessmentStatus,
+  mode: ComparisonMode = "REVISION_COMPARISON",
+): boolean {
+  if (mode === "SAME_VERSION_REASSESSMENT") {
+    return (
+      status === "UNSUPPORTED" ||
+      status === "NOT_ASSESSABLE" ||
+      status === "DUPLICATED"
+    );
+  }
   return status === "RESOLVED" || status === "STALE_CRITIQUE";
+}
+
+/** @deprecated use statusZeroesDeduction with mode */
+export function isRevisionStatusZeroDeduction(status: ConcernStatus): boolean {
+  return status === "RESOLVED" || status === "STALE_CRITIQUE";
+}
+
+export function isSameVersionStatusZeroDeduction(status: SameVersionStatus): boolean {
+  return status === "UNSUPPORTED" || status === "NOT_ASSESSABLE" || status === "DUPLICATED";
 }

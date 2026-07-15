@@ -265,15 +265,17 @@ export function parseRubricJsonString(rawContent: string): {
     craftCount < REQUIRED_CRAFT_KEYS.length + REQUIRED_ACQUISITION_KEYS.length;
 
   let parsed: unknown;
+  let parseError: string | null = null;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch {
+  } catch (e) {
+    parseError = e instanceof Error ? e.message : "Invalid rubric JSON.";
     return {
       jsonStr,
       payload: null,
-      parseError: "Invalid rubric JSON.",
+      parseError,
       categoryKeyErrors: [],
-      appearsTruncated: true,
+      appearsTruncated: false,
     };
   }
 
@@ -298,12 +300,20 @@ export function classifyRubricGenerationFailure(args: {
 }): RubricGenerationFailureKind | null {
   if (args.rubricValid) return null;
 
-  const parsed = parseRubricJsonString(args.rawContent);
-  if (args.outputTruncated || parsed.appearsTruncated) {
+  if (args.outputTruncated) {
     return "RUBRIC_GENERATION_TRUNCATED";
   }
-  if (args.parseError || parsed.parseError) {
+
+  if (args.parseError) {
     return "RUBRIC_INVALID_JSON";
+  }
+
+  const parsed = parseRubricJsonString(args.rawContent);
+  if (parsed.parseError) {
+    return "RUBRIC_INVALID_JSON";
+  }
+  if (parsed.appearsTruncated) {
+    return "RUBRIC_GENERATION_TRUNCATED";
   }
   if (args.categoryKeyErrors.length || parsed.categoryKeyErrors.length) {
     return "RUBRIC_VALIDATION_FAILED";

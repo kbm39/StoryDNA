@@ -29,10 +29,16 @@ import { validateWordCountClaims } from "./word-count-validation.ts";
 
 export type { RubricGenerationFailureKind };
 
-export type MemoGenerationFailureKind = "MEMO_GENERATION_TRUNCATED";
+export type MemoGenerationFailureKind =
+  | "MEMO_GENERATION_TRUNCATED"
+  | "UNSUPPORTED_LENGTH_CLAIM"
+  | "MEMO_PROHIBITED_GRADE";
 
 export const MEMO_TRUNCATION_ERROR =
   "Memo generation truncated (output token limit reached). No review was published.";
+
+export const RUBRIC_PARSE_FAILURE_USER_MESSAGE =
+  "The memo completed, but the grading rubric could not be parsed. No review was published.";
 
 export interface CallAGenerationGate {
   proceedToMemoValidation: boolean;
@@ -124,9 +130,25 @@ export function assessRubricGenerationResult(args: {
   };
 }
 
+/** Classify memo validation failure for diagnostics. */
+export function classifyMemoValidationFailure(
+  outcome: CommercialMemoValidationOutcome,
+): MemoGenerationFailureKind | null {
+  if (outcome.ok) return null;
+  if (outcome.error?.includes("UNSUPPORTED LENGTH CLAIM")) return "UNSUPPORTED_LENGTH_CLAIM";
+  if (outcome.error?.includes("PROHIBITED LETTER GRADE")) return "MEMO_PROHIBITED_GRADE";
+  if (outcome.error?.includes("AUTHORITATIVE STATISTICS")) return "UNSUPPORTED_LENGTH_CLAIM";
+  return "UNSUPPORTED_LENGTH_CLAIM";
+}
+
 /** Whether Call B should be retried once (rubric-only — never regenerates memo). */
 export function shouldRetryRubricGeneration(assessment: RubricGenerationAssessment): boolean {
   return assessment.failureKind != null;
+}
+
+/** Whether rubric retry should use parse-error repair (memo preserved). */
+export function shouldRepairRubricJson(assessment: RubricGenerationAssessment): boolean {
+  return assessment.failureKind === "RUBRIC_INVALID_JSON";
 }
 
 export function memoContainsEmbeddedRubric(memo: string): boolean {

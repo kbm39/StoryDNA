@@ -193,6 +193,7 @@ export function composeConcernAssessment(
   });
 
   return {
+    comparison_mode: "REVISION_COMPARISON",
     concern_id: concern.concern_id,
     root_issue: concern.root_issue,
     rubric_category: concern.rubric_category,
@@ -206,6 +207,9 @@ export function composeConcernAssessment(
     confidence: semantic.confidence,
     prior_deduction: concern.prior_deduction,
     points_restored,
+    points_invalidated: 0,
+    duplicate_points_removed: 0,
+    overbreadth_points_removed: 0,
     remaining_deduction,
     narrowed_current_finding,
     explanation: semantic.explanation,

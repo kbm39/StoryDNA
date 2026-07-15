@@ -27,12 +27,12 @@ import { holdFastTestFixture } from "./fixtures/hold-fast.ts";
 import { buildSearchPlan } from "./search-plan.ts";
 import type { ConcernAssessment, PriorReviewBundle } from "./types.ts";
 
-function runScenario(fixture: {
+async function runScenario(fixture: {
   genre: import("./types.ts").GenreProfile;
   priorText: string;
   currentText: string;
   priorReview: PriorReviewBundle;
-  expectedStatus: string;
+  expectedStatus?: string;
 }) {
   return runContraryEvidenceGate({
     priorReview: fixture.priorReview,
@@ -43,8 +43,8 @@ function runScenario(fixture: {
 }
 
 describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
-  it("romance conflict substantially improved", () => {
-    const result = runScenario(romanceImprovedFixture);
+  it("romance conflict substantially improved", async () => {
+    const result = await runScenario(romanceImprovedFixture);
     const assessment = result.assessments[0];
     assert.ok(
       ["SUBSTANTIALLY_IMPROVED", "RESOLVED", "PARTIALLY_IMPROVED"].includes(assessment.status),
@@ -54,8 +54,8 @@ describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
     assert.equal(result.scoring_gate.valid, true);
   });
 
-  it("mystery clue fairness resolved or narrowed", () => {
-    const result = runScenario(mysteryFairnessFixture);
+  it("mystery clue fairness resolved or narrowed", async () => {
+    const result = await runScenario(mysteryFairnessFixture);
     const assessment = result.assessments[0];
     assert.ok(
       ["PARTIALLY_IMPROVED", "SUBSTANTIALLY_IMPROVED", "RESOLVED"].includes(assessment.status),
@@ -66,8 +66,8 @@ describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
     assert.equal(result.scoring_gate.valid, true);
   });
 
-  it("fantasy exposition stale or resolved", () => {
-    const result = runScenario(fantasyExpositionFixture);
+  it("fantasy exposition stale or resolved", async () => {
+    const result = await runScenario(fantasyExpositionFixture);
     const assessment = result.assessments[0];
     assert.ok(["STALE_CRITIQUE", "RESOLVED", "SUBSTANTIALLY_IMPROVED"].includes(assessment.status));
     if (statusZeroesDeduction(assessment.status)) {
@@ -75,8 +75,8 @@ describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
     }
   });
 
-  it("literary-fiction character agency improved", () => {
-    const result = runScenario(literaryAgencyFixture);
+  it("literary-fiction character agency improved", async () => {
+    const result = await runScenario(literaryAgencyFixture);
     const assessment = result.assessments[0];
     assert.ok(
       ["SUBSTANTIALLY_IMPROVED", "RESOLVED", "PARTIALLY_IMPROVED"].includes(assessment.status),
@@ -84,15 +84,15 @@ describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
     assert.ok(assessment.points_restored > 0);
   });
 
-  it("narrative-nonfiction sourcing improved", () => {
-    const result = runScenario(narrativeNonfictionFixture);
+  it("narrative-nonfiction sourcing improved", async () => {
+    const result = await runScenario(narrativeNonfictionFixture);
     const assessment = result.assessments[0];
     assert.ok(["RESOLVED", "SUBSTANTIALLY_IMPROVED"].includes(assessment.status));
     assert.equal(assessment.remaining_deduction, 0);
   });
 
-  it("unchanged criticism retained with fresh evidence", () => {
-    const result = runScenario(unchangedCriticismFixture);
+  it("unchanged criticism retained with fresh evidence", async () => {
+    const result = await runScenario(unchangedCriticismFixture);
     const assessment = result.assessments[0];
     assert.equal(assessment.status, "UNCHANGED");
     assert.ok(assessment.current_supporting_evidence.length > 0);
@@ -100,8 +100,8 @@ describe("Contrary-Evidence Gate — cross-genre scenarios", () => {
     assert.equal(result.scoring_gate.valid, true);
   });
 
-  it("worsened criticism increased", () => {
-    const result = runScenario(worsenedCriticismFixture);
+  it("worsened criticism increased", async () => {
+    const result = await runScenario(worsenedCriticismFixture);
     const assessment = result.assessments[0];
     assert.equal(assessment.status, "WORSENED");
     assert.ok(assessment.remaining_deduction >= assessment.prior_deduction);
@@ -172,6 +172,7 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
 
   it("deleted prior quotation cannot support a deduction", () => {
     const assessment: ConcernAssessment = {
+      comparison_mode: "REVISION_COMPARISON",
       concern_id: "test-deleted",
       root_issue: "Flat dialogue",
       rubric_category: "dialogue_scene_execution",
@@ -192,6 +193,9 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
       confidence: "medium",
       prior_deduction: 2,
       points_restored: 0,
+      points_invalidated: 0,
+      duplicate_points_removed: 0,
+      overbreadth_points_removed: 0,
       remaining_deduction: 2,
       narrowed_current_finding: "Dialogue throughout remains flat in scene 3",
       explanation: "test",
@@ -204,6 +208,7 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
 
   it("retained deduction requires current supporting evidence", () => {
     const assessment: ConcernAssessment = {
+      comparison_mode: "REVISION_COMPARISON",
       concern_id: "test-no-support",
       root_issue: "Weak stakes",
       rubric_category: "stakes_emotional_impact",
@@ -217,6 +222,9 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
       confidence: "medium",
       prior_deduction: 2,
       points_restored: 1,
+      points_invalidated: 0,
+      duplicate_points_removed: 0,
+      overbreadth_points_removed: 0,
       remaining_deduction: 1,
       narrowed_current_finding: "Stakes still low in chapter 4",
       explanation: "test",
@@ -229,6 +237,7 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
 
   it("missing contrary-evidence analysis blocks the deduction", () => {
     const assessment: ConcernAssessment = {
+      comparison_mode: "REVISION_COMPARISON",
       concern_id: "test-no-contrary-analysis",
       root_issue: "Weak stakes",
       rubric_category: "stakes_emotional_impact",
@@ -244,6 +253,9 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
       confidence: "medium",
       prior_deduction: 2,
       points_restored: 0,
+      points_invalidated: 0,
+      duplicate_points_removed: 0,
+      overbreadth_points_removed: 0,
       remaining_deduction: 2,
       narrowed_current_finding: null,
       explanation: "test",
@@ -256,6 +268,7 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
 
   it("broad criticism must narrow before retaining a deduction", () => {
     const assessment: ConcernAssessment = {
+      comparison_mode: "REVISION_COMPARISON",
       concern_id: "test-broad",
       root_issue: "Dialogue throughout remains flat",
       rubric_category: "dialogue_scene_execution",
@@ -271,6 +284,9 @@ describe("Contrary-Evidence Gate — scoring enforcement", () => {
       confidence: "medium",
       prior_deduction: 2,
       points_restored: 0,
+      points_invalidated: 0,
+      duplicate_points_removed: 0,
+      overbreadth_points_removed: 0,
       remaining_deduction: 2,
       narrowed_current_finding: null,
       explanation: "test",
@@ -323,8 +339,8 @@ describe("Contrary-Evidence Gate — Hold Fast isolation", () => {
     }
   });
 
-  it("Hold Fast fixture runs through gate without polluting production", () => {
-    const result = runContraryEvidenceGate({
+  it("Hold Fast fixture runs through gate without polluting production", async () => {
+    const result = await runContraryEvidenceGate({
       priorReview: holdFastTestFixture.priorReview,
       priorText: holdFastTestFixture.priorText,
       currentText: holdFastTestFixture.currentText,
@@ -336,7 +352,7 @@ describe("Contrary-Evidence Gate — Hold Fast isolation", () => {
 });
 
 describe("Contrary-Evidence Gate — semantic assessor interface", () => {
-  it("fixture assessor can override deterministic status for tests", () => {
+  it("fixture assessor can override deterministic status for tests", async () => {
     const concern = extractPriorConcerns(romanceImprovedFixture.priorReview).concerns[0];
     const plan = buildSearchPlan(concern, romanceImprovedFixture.genre);
     const search = executeSearch({
@@ -349,7 +365,7 @@ describe("Contrary-Evidence Gate — semantic assessor interface", () => {
     const assessor = createFixtureAssessor({
       [concern.concern_id]: { status: "RESOLVED", confidence: "high" },
     });
-    const semantic = assessor.assess(input);
+    const semantic = await Promise.resolve(assessor.assess(input));
     assert.equal(semantic.status, "RESOLVED");
     const composed = composeConcernAssessment(concern, search, semantic);
     assert.equal(composed.remaining_deduction, 0);

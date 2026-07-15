@@ -13,6 +13,18 @@ export type ConcernStatus =
   | "STALE_CRITIQUE"
   | "NOT_ASSESSABLE";
 
+/** Same-manuscript-version reassessment — not revision impact. */
+export type SameVersionStatus =
+  | "SUPPORTED"
+  | "UNSUPPORTED"
+  | "OVERBROAD"
+  | "DUPLICATED"
+  | "NOT_ASSESSABLE";
+
+export type ComparisonMode = "REVISION_COMPARISON" | "SAME_VERSION_REASSESSMENT";
+
+export type UnifiedAssessmentStatus = ConcernStatus | SameVersionStatus;
+
 export type PriorConcernSourceType =
   | "rubric_deduction"
   | "editorial_issue"
@@ -131,10 +143,19 @@ export interface SemanticAssessorInput {
 }
 
 export interface SemanticAssessor {
-  assess(input: SemanticAssessorInput): SemanticAssessmentResult;
+  assess(
+    input: SemanticAssessorInput,
+  ): SemanticAssessmentResult | Promise<SemanticAssessmentResult>;
 }
 
+export type ContraryEvidenceGateStatus =
+  | "skipped"
+  | "completed"
+  | "required_not_run"
+  | "failed";
+
 export interface ConcernAssessment {
+  comparison_mode: ComparisonMode;
   concern_id: string;
   root_issue: string;
   rubric_category: string | null;
@@ -144,10 +165,15 @@ export interface ConcernAssessment {
   current_contrary_evidence: EvidenceSnippet[];
   revision_that_addresses_it: string | null;
   original_basis_still_present: boolean;
-  status: ConcernStatus;
+  status: UnifiedAssessmentStatus;
   confidence: AssessmentConfidence;
   prior_deduction: number;
+  /** Revision comparison only — points restored because of manuscript revision. */
   points_restored: number;
+  /** Same-version reassessment — prior deduction invalidated (unsupported). */
+  points_invalidated: number;
+  duplicate_points_removed: number;
+  overbreadth_points_removed: number;
   remaining_deduction: number;
   narrowed_current_finding: string | null;
   explanation: string;

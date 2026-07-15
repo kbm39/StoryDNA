@@ -4,6 +4,12 @@
  */
 
 import { countManuscriptWords, manuscriptWordsInCharSlice } from "./word-count.ts";
+import {
+  STORYDNA_COUNT_METHOD,
+  canonicalManuscriptLengthSentence,
+} from "./word-count-reporting.ts";
+import type { CanonicalReviewInput } from "./canonical-review-input.ts";
+import { formatLengthCutBlock } from "./length-cut-arithmetic.ts";
 
 export type StatisticsValidationStatus =
   | "pending"
@@ -21,6 +27,7 @@ export interface ReviewStatistics {
   manuscript_id: string;
   manuscript_version_id: string | null;
   canonical_word_count: number;
+  count_method: "STORYDNA_UNICODE_V1";
   character_count: number;
   full_text_supplied: boolean;
   scope: ReviewScope;
@@ -36,18 +43,20 @@ export interface BuildReviewStatisticsArgs {
   manuscriptVersionId?: string | null;
   extractedText: string;
   sentChars: number;
-  /** Stored word_count from DB when available; recomputed from text if missing. */
+  /** Stored word_count from DB — must match recomputed count before review runs. */
   storedWordCount?: number | null;
   characterCount?: number | null;
+  /** When provided, canonical count comes from verified input object. */
+  canonicalInput?: CanonicalReviewInput | null;
 }
 
-/** Resolve canonical counts from stored manuscript / version snapshot. */
+/** Resolve canonical counts from verified input or extracted text. */
 export function buildReviewStatistics(args: BuildReviewStatisticsArgs): ReviewStatistics {
   const text = args.extractedText ?? "";
   const recomputed = countManuscriptWords(text);
-  // Authoritative length always comes from extracted_text — never a stale DB column.
-  const canonical =
-    recomputed > 0
+  const canonical = args.canonicalInput
+    ? args.canonicalInput.canonicalWordCount
+    : recomputed > 0
       ? recomputed
       : args.storedWordCount != null && args.storedWordCount > 0
         ? args.storedWordCount
@@ -65,6 +74,7 @@ export function buildReviewStatistics(args: BuildReviewStatisticsArgs): ReviewSt
     manuscript_id: args.manuscriptId,
     manuscript_version_id: args.manuscriptVersionId ?? null,
     canonical_word_count: canonical,
+    count_method: STORYDNA_COUNT_METHOD,
     character_count: characterCount,
     full_text_supplied: fullText,
     scope: fullText ? "full_manuscript" : "partial_manuscript",
@@ -98,21 +108,32 @@ export function authoritativeStatisticsBlock(stats: ReviewStatistics): string {
   return `
 
 ═══════════════════════════════════════════════════════════════
-MANUSCRIPT STATISTICS — AUTHORITATIVE
+CANONICAL MANUSCRIPT LENGTH
 ═══════════════════════════════════════════════════════════════
-- Exact total manuscript word count: ${stats.canonical_word_count.toLocaleString()}
+The manuscript is exactly ${stats.canonical_word_count.toLocaleString()} words by StoryDNA's analytical counter.
+Do not estimate, round, infer, or replace this number.
+Any length recommendation must use this exact count as its starting point.
+
+- canonical_word_count: ${stats.canonical_word_count.toLocaleString()}
+- count_method: ${stats.count_method}
+- manuscript_version_id: ${stats.manuscript_version_id ?? "legacy"}
+- Required memo sentence (exactly once): "${canonicalManuscriptLengthSentence(stats.canonical_word_count)}"
 - Words analyzed in this review: ${stats.words_analyzed.toLocaleString()}
 - Full manuscript supplied: ${stats.full_text_supplied ? "true" : "false"}
 - Review scope: ${scopeLabel(stats.scope)}
 
 MANDATORY RULES:
-- These values are authoritative.
+- canonical_word_count and count_method are authoritative for all review arithmetic.
+- Use ONLY the StoryDNA analytical count — never Microsoft Word embedded counts or legacy split counts.
 - Do not estimate manuscript length.
 - Do not infer length from pages, characters, tokens, excerpts, or reading time.
 - Do not contradict, round away, or replace the exact total.
 - Any length-based recommendation must use the exact authoritative count (${stats.canonical_word_count.toLocaleString()} words).
-- The acquisitions memo MUST state the exact total once, e.g. "The manuscript is ${stats.canonical_word_count.toLocaleString()} words."
+- The acquisitions memo MUST include exactly one current-total sentence: "${canonicalManuscriptLengthSentence(stats.canonical_word_count)}"
 - Do not use shorthand (150k), ranges (105–115k), page counts, or reading time to estimate total length.
+- Do not claim totals such as 130k, 150k, or "well past 150k" or other unsupported round figures.
+- Cut recommendations must show current count, cut percentage, cut amount, and resulting count — example 15% cut:
+${formatLengthCutBlock(stats.canonical_word_count, 15)}
 - If prior review text or supplied material contains a different total, ignore it.
 - words_analyzed (${stats.words_analyzed.toLocaleString()}) is coverage for this review — it is NOT total manuscript length.
 ═══════════════════════════════════════════════════════════════`;
@@ -130,6 +151,7 @@ export function statisticsBlockForPrompt(args: {
     manuscript_id: "",
     manuscript_version_id: null,
     canonical_word_count: args.wordCount,
+    count_method: STORYDNA_COUNT_METHOD,
     character_count: 0,
     full_text_supplied: args.fullText ?? true,
     scope: args.fullText === false ? "partial_manuscript" : "full_manuscript",

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import mammoth from "mammoth";
 import { getSupabaseAdmin, MANUSCRIPTS_BUCKET } from "@/lib/supabase/server";
 import { countManuscriptWords } from "@/lib/word-count";
+import { readDocxSourceWordCount } from "@/lib/docx-properties";
 
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -96,6 +97,9 @@ export async function uploadManuscript(
     };
   }
 
+  const sourceDocumentWordCount = await readDocxSourceWordCount(buffer);
+  const analyticalWordCount = countManuscriptWords(extractedText);
+
   const id = crypto.randomUUID();
   const safeName = sanitizeFilename(file.name);
   const storagePath = `${id}/${safeName}`;
@@ -116,7 +120,8 @@ export async function uploadManuscript(
     original_filename: file.name,
     storage_path: storagePath,
     file_size: file.size,
-    word_count: countManuscriptWords(extractedText),
+    word_count: analyticalWordCount,
+    source_document_word_count: sourceDocumentWordCount,
     extracted_text: extractedText,
     status: "uploaded",
   });

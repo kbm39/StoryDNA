@@ -17,6 +17,7 @@ import {
   validateCommercialReviewContent,
   firstWordCountContradiction,
   buildReviewGradingRecord,
+  validateCommercialMemoOnly,
 } from "./commercial-review-pipeline.ts";
 import {
   validateProseLetterGrade,
@@ -35,8 +36,10 @@ import {
   REQUIRED_CRAFT_KEYS,
 } from "./commercial-fiction-rubric.ts";
 
+import { storyDnaAnalyticalOpening } from "./word-count-reporting.ts";
+
 const CANONICAL = 108_845;
-const EXACT_OPENING = `The manuscript is ${CANONICAL.toLocaleString()} words.`;
+const EXACT_OPENING = storyDnaAnalyticalOpening(CANONICAL);
 
 function sampleCategory(
   key: string,
@@ -96,15 +99,15 @@ describe("word count validation", () => {
   it("fails when exact canonical statement is missing", () => {
     const r = validateWordCountClaims("This draft is long but well paced.", CANONICAL);
     assert.equal(r.valid, false);
-    assert.ok(r.errors.some((e) => e.includes("exact canonical count")));
+    assert.ok(r.errors.some((e) => e.includes("exactly one current-total")));
   });
 
-  it('fails independent estimate "about 109,000 words" even near canonical', () => {
+  it('accepts "about 109,000 words" within editorial tolerance near canonical', () => {
     const r = validateWordCountClaims(
       `${EXACT_OPENING} At about 109,000 words, pacing is an issue.`,
       CANONICAL,
     );
-    assert.equal(r.valid, false);
+    assert.equal(r.valid, true);
   });
 
   it('fails "150,000 words"', () => {
@@ -351,7 +354,7 @@ describe("commercial review pipeline", () => {
   });
 
   it("detects first contradiction for repair pass", () => {
-    const c = firstWordCountContradiction("The 150k-ish book needs work.", CANONICAL);
+    const c = firstWordCountContradiction(`${EXACT_OPENING} The 150k-ish book needs work.`, CANONICAL);
     assert.ok(c);
     assert.match(c!.quotation, /150k/i);
   });
@@ -577,7 +580,7 @@ describe("Hold Fast statistics repair fixture", () => {
     assert.equal(r.valid, false);
     assert.ok(r.contradictions.some((c) => /150k/i.test(c.quotation)));
     assert.ok(r.contradictions.some((c) => /105/.test(c.quotation) && /115/.test(c.quotation)));
-    assert.ok(r.errors.some((e) => e.includes("exact canonical count")));
+    assert.ok(r.errors.some((e) => e.includes("exactly one current-total")));
   });
 
   it("repair prompt includes canonical count and every contradiction", () => {
@@ -637,5 +640,46 @@ describe("Hold Fast statistics repair fixture", () => {
       storedWordCount: 111_441,
     });
     assert.equal(stats.canonical_word_count, HOLD_FAST_CANONICAL);
+  });
+});
+
+describe("pipeline hardening regressions", () => {
+  const HF = 111_491;
+  const OPEN = storyDnaAnalyticalOpening(HF);
+
+  it('rejects "reads well past 150k" for a 111,491-word manuscript', () => {
+    const r = validateWordCountClaims(`${OPEN} This reads well past 150k words.`, HF);
+    assert.equal(r.valid, false);
+    assert.ok(r.contradictions.some((c) => /well past/i.test(c.reason)));
+  });
+
+  it('accepts "approximately 111,500 words" within tolerance', () => {
+    const r = validateWordCountClaims(`${OPEN} At approximately 111,500 words, pacing is tight.`, HF);
+    assert.equal(r.valid, true);
+  });
+
+  it("allows genre target ranges without treating them as current totals", () => {
+    const r = validateWordCountClaims(
+      `${OPEN} Genre target range for commercial fiction is 80,000–100,000 words.`,
+      HF,
+    );
+    assert.equal(r.valid, true);
+  });
+
+  it("rejects memo containing Grade: C+ before Call B", () => {
+    const gate = validateCommercialMemoOnly({
+      memoContent: `${OPEN}\n\n**Grade: C+**\n\nAnalysis.`,
+      canonicalWordCount: HF,
+    });
+    assert.equal(gate.ok, false);
+    assert.match(gate.error ?? "", /PROHIBITED LETTER GRADE/);
+  });
+
+  it("blocks contradictory current totals from proceeding to rubric", () => {
+    const gate = validateCommercialMemoOnly({
+      memoContent: `${OPEN} Also totals 150,000 words throughout.`,
+      canonicalWordCount: HF,
+    });
+    assert.equal(gate.ok, false);
   });
 });

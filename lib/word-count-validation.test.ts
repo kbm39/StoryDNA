@@ -7,12 +7,14 @@ import {
   parseCompoundCutRanges,
   parseLinkedCutRecommendations,
   validateWordCountClaims,
+  hasExactCanonicalStatement,
   EDITORIAL_CUT_RANGE_TOLERANCE_WORDS,
 } from "./word-count-validation.ts";
 import { validateCommercialMemoOnly } from "./commercial-review-pipeline.ts";
+import { storyDnaAnalyticalOpening } from "./word-count-reporting.ts";
 
 const CANONICAL = 111_491;
-const EXACT_OPENING = `The manuscript is ${CANONICAL.toLocaleString()} words.`;
+const EXACT_OPENING = storyDnaAnalyticalOpening(CANONICAL);
 
 const REAL_CUT_SENTENCE =
   "A 20% cut would bring the book to roughly 89,193 words and a 25% cut to roughly 83,618 words.";
@@ -249,7 +251,7 @@ describe("Hold Fast fresh-run diagnostic replay (no AI)", () => {
     });
     assert.equal(memoGate.ok, true, memoGate.error ?? "");
 
-    assert.match(memo, /The manuscript is 111,491 words/);
+    assert.ok(hasExactCanonicalStatement(memo, canonical));
     assert.doesNotMatch(memo, /STORYDNA_RUBRIC_JSON/);
   });
 });
@@ -284,7 +286,7 @@ describe("Hold Fast two-call diagnostic replay (no AI)", () => {
     assert.ok(cut20?.valid, "20% / 89,193 should pass");
     assert.ok(cut25?.valid, "25% / 83,618 should pass");
 
-    assert.match(memo, /The manuscript is 111,491 words/);
+    assert.ok(hasExactCanonicalStatement(memo, canonical));
     assert.doesNotMatch(memo, /STORYDNA_RUBRIC_JSON/);
   });
 });

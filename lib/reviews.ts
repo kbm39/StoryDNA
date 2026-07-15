@@ -9,6 +9,7 @@ export interface ManuscriptReviewContext {
   extractedText: string;
   wordCount: number;
   characterCount: number;
+  contentHash: string | null;
 }
 
 /** Manuscript metadata (no extracted_text) for a detail page. */
@@ -16,12 +17,21 @@ export async function getManuscriptMeta(
   id: string,
 ): Promise<Pick<
   Manuscript,
-  "id" | "title" | "original_filename" | "word_count" | "series_id" | "series_order" | "created_at"
+  | "id"
+  | "title"
+  | "original_filename"
+  | "word_count"
+  | "source_document_word_count"
+  | "series_id"
+  | "series_order"
+  | "created_at"
 > | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("manuscripts")
-    .select("id, title, original_filename, word_count, series_id, series_order, created_at")
+    .select(
+      "id, title, original_filename, word_count, source_document_word_count, series_id, series_order, created_at",
+    )
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -51,11 +61,12 @@ export async function getManuscriptReviewContext(
   let versionWordCount: number | null = null;
   let versionCharCount: number | null = null;
   let versionId: string | null = null;
+  let contentHash: string | null = null;
 
   if (manuscript.current_version_id) {
     const { data: version } = await supabase
       .from("manuscript_versions")
-      .select("id, extracted_text, word_count, character_count")
+      .select("id, extracted_text, word_count, character_count, content_hash")
       .eq("id", manuscript.current_version_id)
       .maybeSingle();
     if (version) {
@@ -63,6 +74,7 @@ export async function getManuscriptReviewContext(
       versionText = version.extracted_text;
       versionWordCount = version.word_count;
       versionCharCount = version.character_count;
+      contentHash = version.content_hash ?? null;
     }
   }
 
@@ -82,6 +94,7 @@ export async function getManuscriptReviewContext(
     extractedText: text,
     wordCount,
     characterCount,
+    contentHash,
   };
 }
 

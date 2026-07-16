@@ -31,11 +31,19 @@ export async function GET(
 
   if (review.perspective === "commercial") {
     let resolved;
+    let authoritativeReviewId: string | null = null;
     try {
       resolved = await resolveAuthoritativeReviewForDisplay(id, "commercial", rid);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to resolve review";
       return new Response(message, { status: 422 });
+    }
+
+    try {
+      const defaultResolved = await resolveAuthoritativeReviewForDisplay(id, "commercial");
+      authoritativeReviewId = defaultResolved.review.id;
+    } catch {
+      authoritativeReviewId = null;
     }
 
     const assessments = await listConcernAssessmentsForReview(rid);
@@ -45,6 +53,8 @@ export async function GET(
       assessments,
       fallbackWordCount: resolved.fallbackWordCount,
       isHistorical: resolved.isHistorical,
+      currentVersionId: resolved.currentVersionId,
+      authoritativeReviewId,
     });
     if (!display) {
       return new Response(EXPORT_BLOCKED_MESSAGE, { status: 422 });

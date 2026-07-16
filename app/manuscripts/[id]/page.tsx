@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { getManuscriptMeta, listReviews } from "@/lib/reviews";
 import { listConcernAssessmentsForReview } from "@/lib/concern-assessments";
-import { activeCommercialReview } from "@/lib/review-selection";
+import {
+  buildAuthoritativeReviewDisplay,
+  resolveAuthoritativeReviewFromList,
+} from "@/lib/authoritative-review-display";
+import { listCommercialReviewHistory } from "@/lib/review-provenance";
+import type { AuthoritativeReviewDisplay } from "@/lib/authoritative-review-display";
 import { listIssues } from "@/lib/issues";
 import { listSuggestionsForIssues, groupByIssue } from "@/lib/suggestions";
 import { listRevisionChecks } from "@/lib/revisions";
@@ -40,6 +45,8 @@ import RunAgentReviewButton from "./RunAgentReviewButton";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
 import { ReviewGradingPanel } from "./ReviewGradingPanel";
 import { RevisionImpactPanel } from "./RevisionImpactPanel";
+import { ReviewProvenanceBanner } from "./ReviewProvenanceBanner";
+import { CommercialReviewHistory } from "./CommercialReviewHistory";
 import { memoContentForDisplay } from "@/lib/review-display";
 import { ManuscriptWordCountReport } from "./ManuscriptWordCountReport";
 import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions";
@@ -231,6 +238,7 @@ function ReviewColumn({
   manuscriptId,
   concernAssessments,
   priorScore,
+  authoritativeDisplay,
 }: {
   heading: string;
   subheading: string;
@@ -239,6 +247,7 @@ function ReviewColumn({
   manuscriptId: string;
   concernAssessments?: ReviewConcernAssessment[];
   priorScore?: number | null;
+  authoritativeDisplay?: AuthoritativeReviewDisplay | null;
 }) {
   const rawMeta = review?.metadata?.review_meta as ReviewMeta | undefined;
   const meta = rawMeta?.compliance ? rawMeta : undefined;
@@ -268,7 +277,19 @@ function ReviewColumn({
       <div className="px-5 py-4">
         {review ? (
           <>
-            {showGrading && <ReviewGradingPanel review={review} assessments={concernAssessments} />}
+            {showGrading && authoritativeDisplay && (
+              <ReviewProvenanceBanner
+                display={authoritativeDisplay}
+                manuscriptPagePath={`/manuscripts/${manuscriptId}`}
+              />
+            )}
+            {showGrading && (
+              <ReviewGradingPanel
+                review={review}
+                assessments={concernAssessments}
+                authoritativeDisplay={authoritativeDisplay ?? undefined}
+              />
+            )}
             {showGrading && concernAssessments && (
               <RevisionImpactPanel
                 review={review}
@@ -302,12 +323,18 @@ function ReviewColumn({
 
 export default async function ManuscriptPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ review?: string }>;
 }) {
   const { id } = await params;
+  const { review: explicitReviewId } = await searchParams;
   const manuscript = await getManuscriptMeta(id);
   if (!manuscript) notFound();
+
+  const currentVersionId = manuscript.current_version_id ?? null;
+  const fallbackWordCount = manuscript.word_count;
 
   const [reviews, issues] = await Promise.all([listReviews(id), listIssues(id)]);
   const [
@@ -362,11 +389,62 @@ export default async function ManuscriptPage({
   }
   const brainstormRounds = groupByPrompt(brainstorms);
   const suggestionsByIssue = groupByIssue(suggestions);
-  const commercial = activeCommercialReview(reviews);
-  const craft = reviews.find((r) => r.perspective === "craft");
+
+  const authoritativeResult = resolveAuthoritativeReviewFromList({
+    manuscriptId: id,
+    currentVersionId,
+    reviews,
+    reviewerType: "commercial",
+  });
+  const authoritativeReviewId = authoritativeResult.ok
+    ? authoritativeResult.review.id
+    : null;
+
+  let displayedCommercial: Review | undefined;
+  let displayedIsHistorical = false;
+  if (explicitReviewId) {
+    const explicitResult = resolveAuthoritativeReviewFromList({
+      manuscriptId: id,
+      currentVersionId,
+      reviews,
+      reviewerType: "commercial",
+      explicitReviewId,
+    });
+    if (explicitResult.ok) {
+      displayedCommercial = explicitResult.review;
+      displayedIsHistorical = explicitResult.isHistorical;
+    }
+  } else if (authoritativeResult.ok) {
+    displayedCommercial = authoritativeResult.review;
+  }
+
+  const commercial = displayedCommercial;
+  const editorialHistory = listCommercialReviewHistory({
+    manuscriptId: id,
+    reviews,
+    currentVersionId,
+    fallbackWordCount,
+    authoritativeReviewId,
+    manuscriptPagePath: `/manuscripts/${id}`,
+  });
+
   const concernAssessments = commercial
     ? await listConcernAssessmentsForReview(commercial.id)
     : [];
+
+  const commercialDisplay =
+    commercial &&
+    buildAuthoritativeReviewDisplay({
+      review: commercial,
+      manuscriptTitle: manuscript.title,
+      assessments: concernAssessments,
+      fallbackWordCount,
+      isHistorical: displayedIsHistorical,
+      currentVersionId,
+      authoritativeReviewId,
+    });
+
+  const craft = reviews.find((r) => r.perspective === "craft");
   const priorCommercialScore =
     (commercial?.grading_metadata as { prior_manuscript_score?: number } | null)
       ?.prior_manuscript_score ??
@@ -471,6 +549,13 @@ export default async function ManuscriptPage({
           </div>
         )}
 
+        {editorialHistory.length > 0 && (
+          <CommercialReviewHistory
+            entries={editorialHistory}
+            selectedReviewId={commercial?.id ?? null}
+          />
+        )}
+
         <div className="grid gap-5 md:grid-cols-2">
           <ReviewColumn
             heading="Literary Agent · Acquisitions Memo"
@@ -480,6 +565,7 @@ export default async function ManuscriptPage({
             manuscriptId={id}
             concernAssessments={concernAssessments}
             priorScore={priorCommercialScore}
+            authoritativeDisplay={commercialDisplay}
           />
           <ReviewColumn
             heading="Developmental edit"

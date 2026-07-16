@@ -6,6 +6,7 @@ import type { CommercialRubricPayload, RubricCategoryScore } from "@/lib/commerc
 import { CRAFT_MAX_TOTAL, ACQUISITION_MAX_TOTAL } from "@/lib/commercial-fiction-rubric";
 import { buildGradingExplanationDisplay } from "@/lib/grading-explanation-display";
 import { memoContentForDisplay } from "@/lib/review-display";
+import type { AuthoritativeReviewDisplay } from "@/lib/authoritative-review-display";
 import { ExplainableGradingPanels } from "./ExplainableGradingPanels";
 
 function isVerifiedGrade(review: Review): boolean {
@@ -124,9 +125,11 @@ function CategoryRow({ cat }: { cat: RubricCategoryScore }) {
 export function ReviewGradingPanel({
   review,
   assessments = [],
+  authoritativeDisplay,
 }: {
   review: Review;
   assessments?: ReviewConcernAssessment[];
+  authoritativeDisplay?: AuthoritativeReviewDisplay;
 }) {
   const [showCalc, setShowCalc] = useState(false);
   const legacy = isLegacyReview(review);
@@ -208,7 +211,11 @@ export function ReviewGradingPanel({
       )}
 
       {hasExplainable && !withheld && (
-        <ExplainableGradingPanels review={review} assessments={assessments} />
+        <ExplainableGradingPanels
+          review={review}
+          assessments={assessments}
+          authoritativeDisplay={authoritativeDisplay}
+        />
       )}
 
       <div className="mb-4 rounded-lg border border-black/10 bg-black/[.02] p-3 text-sm dark:border-white/10 dark:bg-white/[.03]">

@@ -24,13 +24,14 @@ export async function getManuscriptMeta(
   | "source_document_word_count"
   | "series_id"
   | "series_order"
+  | "current_version_id"
   | "created_at"
 > | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("manuscripts")
     .select(
-      "id, title, original_filename, word_count, source_document_word_count, series_id, series_order, created_at",
+      "id, title, original_filename, word_count, source_document_word_count, series_id, series_order, current_version_id, created_at",
     )
     .eq("id", id)
     .maybeSingle();

@@ -4,12 +4,12 @@ import { describe, it } from "node:test";
 import {
   buildAuthoritativeReviewDisplay,
   EXPORT_BLOCKED_MESSAGE,
-  HISTORICAL_REVIEW_LABEL,
   hasFalseCurrentLengthThousandsLanguage,
   resolveAuthoritativeReviewFromList,
   sanitizeMemoForAuthoritativeExport,
   validateAuthoritativeExport,
 } from "./authoritative-review-display.ts";
+import { SUPERSEDED_REVIEW_DISCLAIMER } from "./review-provenance.ts";
 import { buildGradingExplanationDisplay } from "./grading-explanation-display.ts";
 import { buildLiteraryAgentReviewDocxText } from "./literary-agent-docx.ts";
 import type { Review } from "./types.ts";
@@ -172,14 +172,19 @@ describe("authoritative review resolution", () => {
 });
 
 describe("authoritative review display", () => {
-  it("UI and DOCX use the same display model", () => {
+  it("UI and DOCX use the same display model with provenance", () => {
     const review = makeHoldFastReview();
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
       assessments: [],
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.ok(display);
+    assert.equal(display!.provenance.review_id, ACTIVE_REVIEW_ID);
+    assert.equal(display!.provenance.canonical_word_count, CANONICAL);
+    assert.match(display!.provenance.generated_at, /2026/);
     const uiGrading = display!.grading;
     const legacy = buildGradingExplanationDisplay({
       review,
@@ -190,6 +195,8 @@ describe("authoritative review display", () => {
     const docxText = buildLiteraryAgentReviewDocxText(display!);
     assert.match(docxText, /76\.6/);
     assert.match(docxText, /111,491/);
+    assert.match(docxText, /Review provenance/);
+    assert.match(docxText, /Review ID: 04c525db-5091-4179-8086-8242b7c7f169/);
     assert.match(docxText, /Revise & Resubmit/);
   });
 
@@ -198,6 +205,8 @@ describe("authoritative review display", () => {
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.ok(display);
     assert.equal(display!.review_id, ACTIVE_REVIEW_ID);
@@ -207,7 +216,7 @@ describe("authoritative review display", () => {
     assert.equal(display!.grading.acquisition_score, 21);
   });
 
-  it("labels historical superseded export", () => {
+  it("labels historical superseded export with exact disclaimer", () => {
     const review = makeHoldFastReview({
       id: SUPERSEDED_REVIEW_ID,
       lifecycle_status: "superseded",
@@ -216,8 +225,11 @@ describe("authoritative review display", () => {
       review,
       manuscriptTitle: "Hold Fast",
       isHistorical: true,
+      currentVersionId: VERSION_ID,
     });
-    assert.equal(display!.historical_label, HISTORICAL_REVIEW_LABEL);
+    assert.equal(display!.historical_label, SUPERSEDED_REVIEW_DISCLAIMER);
+    const docxText = buildLiteraryAgentReviewDocxText(display!);
+    assert.match(docxText, new RegExp(SUPERSEDED_REVIEW_DISCLAIMER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 
   it("removes raw Grade: lines from sanitized memo", () => {
@@ -226,20 +238,61 @@ describe("authoritative review display", () => {
     assert.doesNotMatch(cleaned, /Grade:\s*C\+/);
   });
 
-  it("blocks export when false 150k language is present", () => {
+  it("blocks export for active contradictory pre-enforcement review", () => {
+    const review = makeHoldFastReview({
+      canonical_word_count: null,
+      scoring_gate_valid: null,
+      content: `${holdFastMemo()}\n\nThe draft is comfortably north of 130k.`,
+    });
+    const display = buildAuthoritativeReviewDisplay({
+      review,
+      manuscriptTitle: "Hold Fast",
+      fallbackWordCount: CANONICAL,
+      currentVersionId: VERSION_ID,
+    });
+    assert.ok(display);
+    assert.equal(display!.provenance.staleness.pre_enforcement, true);
+    assert.equal(display!.provenance.staleness.contradicts_canonical_statistics, true);
+    const validation = validateAuthoritativeExport(display!, { requireActive: true });
+    assert.equal(validation.ok, false);
+  });
+
+  it("allows historical superseded export without active gates", () => {
+    const review = makeHoldFastReview({
+      id: SUPERSEDED_REVIEW_ID,
+      lifecycle_status: "superseded",
+      content: `${holdFastMemo()}\n\nThe draft is comfortably north of 130k.`,
+      canonical_word_count: null,
+      scoring_gate_valid: null,
+    });
+    const display = buildAuthoritativeReviewDisplay({
+      review,
+      manuscriptTitle: "Hold Fast",
+      isHistorical: true,
+      fallbackWordCount: CANONICAL,
+      currentVersionId: VERSION_ID,
+    });
+    assert.ok(display);
+    const validation = validateAuthoritativeExport(display!, { requireActive: false });
+    assert.equal(validation.ok, true, validation.errors.join("; "));
+  });
+
+  it("blocks export when false 150k language is present on active review", () => {
     const review = makeHoldFastReview({
       content: `${holdFastMemo()}\n\nThe draft reads well past 150k.`,
     });
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.ok(display);
     assert.equal(
       hasFalseCurrentLengthThousandsLanguage(display!.memo_content, CANONICAL),
       true,
     );
-    const validation = validateAuthoritativeExport(display!);
+    const validation = validateAuthoritativeExport(display!, { requireActive: true });
     assert.equal(validation.ok, false);
   });
 
@@ -250,6 +303,8 @@ describe("authoritative review display", () => {
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.ok(display);
     assert.doesNotMatch(display!.memo_content, /Grade:\s*C\+/);
@@ -262,6 +317,8 @@ describe("authoritative review display", () => {
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.ok(display);
     const validation = validateAuthoritativeExport(display!, {
@@ -282,6 +339,8 @@ describe("authoritative review display", () => {
     const display = buildAuthoritativeReviewDisplay({
       review,
       manuscriptTitle: "Hold Fast",
+      currentVersionId: VERSION_ID,
+      authoritativeReviewId: ACTIVE_REVIEW_ID,
     });
     assert.equal(display, null);
   });

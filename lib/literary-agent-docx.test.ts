@@ -65,10 +65,45 @@ function makeReview(): Review {
 }
 
 describe("literary agent DOCX export", () => {
+  it("includes provenance header in text snapshot", () => {
+    const display = buildAuthoritativeReviewDisplay({
+      review: makeReview(),
+      manuscriptTitle: "Hold Fast",
+      currentVersionId: "4ba2909f-cdd6-40cb-9dbf-934df71246cd",
+      authoritativeReviewId: "04c525db-5091-4179-8086-8242b7c7f169",
+    });
+    assert.ok(display);
+    const text = buildLiteraryAgentReviewDocxText(display!);
+    assert.match(text, /Review provenance/);
+    assert.match(text, /Generated:/);
+    assert.match(text, /Manuscript version:/);
+    assert.match(text, /Verified canonical word count: 111,491/);
+    assert.match(text, /AI model: claude/);
+    assert.match(text, /Lifecycle status: Active/);
+    assert.match(text, /Review ID: 04c525db/);
+  });
+
+  it("includes historical disclaimer in superseded DOCX text", () => {
+    const display = buildAuthoritativeReviewDisplay({
+      review: makeReview({ lifecycle_status: "superseded" }),
+      manuscriptTitle: "Hold Fast",
+      isHistorical: true,
+      currentVersionId: "4ba2909f-cdd6-40cb-9dbf-934df71246cd",
+    });
+    assert.ok(display);
+    const text = buildLiteraryAgentReviewDocxText(display!);
+    assert.match(
+      text,
+      /This assessment was generated for an earlier manuscript version and may contain outdated conclusions/,
+    );
+  });
+
   it("includes authoritative scores and sections in text snapshot", () => {
     const display = buildAuthoritativeReviewDisplay({
       review: makeReview(),
       manuscriptTitle: "Hold Fast",
+      currentVersionId: "4ba2909f-cdd6-40cb-9dbf-934df71246cd",
+      authoritativeReviewId: "04c525db-5091-4179-8086-8242b7c7f169",
     });
     assert.ok(display);
     const text = buildLiteraryAgentReviewDocxText(display!);
@@ -87,6 +122,8 @@ describe("literary agent DOCX export", () => {
     const display = buildAuthoritativeReviewDisplay({
       review: makeReview(),
       manuscriptTitle: "Hold Fast",
+      currentVersionId: "4ba2909f-cdd6-40cb-9dbf-934df71246cd",
+      authoritativeReviewId: "04c525db-5091-4179-8086-8242b7c7f169",
     });
     assert.ok(display);
     const buffer = await buildLiteraryAgentReviewDocx(display!);

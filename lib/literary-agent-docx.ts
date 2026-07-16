@@ -8,6 +8,7 @@ import {
 import type { AuthoritativeReviewDisplay } from "./authoritative-review-display.ts";
 import { formatRecommendationLabel } from "./grading-explanation-display.ts";
 import type { RetainedDeductionDisplay } from "./grading-explanation-display.ts";
+import { appendProvenanceToDocxLines } from "./literary-agent-docx-provenance.ts";
 import { markdownToParagraphs } from "./docx-markdown.ts";
 
 function fmt(n: number): string {
@@ -60,10 +61,8 @@ export function buildLiteraryAgentReviewDocxText(display: AuthoritativeReviewDis
   const lines: string[] = [
     display.manuscript_title,
     `${display.review_type_label} · ${display.provider_label}`,
-    `Generated ${display.generated_at}`,
-    `Review ID: ${display.review_id}`,
+    ...appendProvenanceToDocxLines(display),
   ];
-  if (display.historical_label) lines.push(display.historical_label);
   lines.push(
     `${display.canonical_word_count.toLocaleString()} words`,
     `${fmt(g.total_score)} / ${g.total_max} — ${g.descriptive_band}`,
@@ -96,11 +95,6 @@ export async function buildLiteraryAgentReviewDocx(
 ): Promise<Buffer> {
   const g = display.grading;
   const adj = g.adjustments;
-  const generated = new Date().toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
 
   const children: Paragraph[] = [
     new Paragraph({
@@ -111,20 +105,25 @@ export async function buildLiteraryAgentReviewDocx(
       spacing: { after: 80 },
       children: [
         new TextRun({ text: display.review_type_label, bold: true }),
-        new TextRun({ text: ` · ${display.provider_label} · generated ${generated}`, color: "888888" }),
+        new TextRun({ text: ` · ${display.provider_label}`, color: "888888" }),
       ],
     }),
-    body(`Review ID: ${display.review_id}`, { color: "888888" }),
+    heading("Review provenance", HeadingLevel.HEADING_2),
+    ...appendProvenanceToDocxLines(display).flatMap((line) => {
+      if (line.startsWith("---")) return [];
+      if (line === display.provenance.historical_disclaimer) {
+        return [
+          new Paragraph({
+            spacing: { after: 120 },
+            children: [
+              new TextRun({ text: line, bold: true, color: "AA5500" }),
+            ],
+          }),
+        ];
+      }
+      return [body(line, { color: "666666" })];
+    }),
   ];
-
-  if (display.historical_label) {
-    children.push(
-      new Paragraph({
-        spacing: { after: 120 },
-        children: [new TextRun({ text: display.historical_label, bold: true, color: "AA5500" })],
-      }),
-    );
-  }
 
   children.push(
     body(`${display.canonical_word_count.toLocaleString()} words`),

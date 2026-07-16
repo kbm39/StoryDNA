@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local review failure diagnostics (never commit)
 .review-failure-diagnostics/
+
+# locally generated milestone review DOCX (scripts/generate-milestone-review-docx.mjs)
+/StoryDNA-*-Review.docx

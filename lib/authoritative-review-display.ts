@@ -12,6 +12,12 @@ import {
 import { validateMemoProhibitedGrades } from "./prose-grade-validation.ts";
 import { memoContentForDisplay } from "./review-display.ts";
 import type { Review, ReviewConcernAssessment } from "./types.ts";
+import {
+  buildReviewProvenance,
+  hasFalseCurrentLengthThousandsLanguage,
+  resolveCanonicalWordCount,
+  type ReviewProvenance,
+} from "./review-provenance.ts";
 import { validateWordCountClaims } from "./word-count-validation.ts";
 
 export type ReviewerType = "commercial" | "craft" | "screen";
@@ -19,6 +25,15 @@ export type ReviewerType = "commercial" | "craft" | "screen";
 export const EXPORT_BLOCKED_MESSAGE =
   "Export blocked: review content does not match the authoritative validated assessment.";
 
+export const PRE_ENFORCEMENT_EXPORT_BLOCKED =
+  "Export blocked: review was generated before canonical word-count enforcement.";
+
+export const CONTRADICTS_CANONICAL_EXPORT_BLOCKED =
+  "Export blocked: review prose contradicts verified canonical manuscript statistics.";
+
+export { SUPERSEDED_REVIEW_DISCLAIMER as HISTORICAL_REVIEW_DISCLAIMER } from "./review-provenance.ts";
+
+/** @deprecated Use provenance.historical_disclaimer */
 export const HISTORICAL_REVIEW_LABEL = "Historical review — superseded";
 
 const REVIEW_TYPE_LABEL: Record<ReviewerType, string> = {
@@ -57,6 +72,7 @@ export interface AuthoritativeReviewDisplay {
   methodology_disclaimer: string;
   normalization_authority_note: string;
   contrary_evidence_summary: ContraryEvidenceSummary;
+  provenance: ReviewProvenance;
 }
 
 export type ResolveAuthoritativeReviewResult =
@@ -93,15 +109,7 @@ export function assessmentModeLabel(
   return null;
 }
 
-export function resolveCanonicalWordCount(
-  review: Review,
-  fallbackWordCount?: number | null,
-): number {
-  const fromReview = review.canonical_word_count;
-  if (typeof fromReview === "number" && fromReview > 0) return fromReview;
-  if (typeof fallbackWordCount === "number" && fallbackWordCount > 0) return fallbackWordCount;
-  return 0;
-}
+export { resolveCanonicalWordCount, hasFalseCurrentLengthThousandsLanguage };
 
 /** Remove model-authored grade lines and calculated-grade footers from memo prose. */
 export function sanitizeMemoForAuthoritativeExport(memo: string): string {
@@ -116,32 +124,13 @@ export function sanitizeMemoForAuthoritativeExport(memo: string): string {
   return text.trim();
 }
 
-/** Detect unsupported 130k / 150k / 180k / 200k current-length language. */
-export function hasFalseCurrentLengthThousandsLanguage(
-  text: string,
-  canonicalWordCount: number,
-): boolean {
-  if (canonicalWordCount <= 0) return false;
-  const body = memoContentForDisplay(text);
-  for (const k of [130, 150, 180, 200]) {
-    const kPattern = new RegExp(
-      `\\b(?:about|approximately|roughly|over|around|~|well\\s+past|reads?\\s+well\\s+past)?\\s*${k}\\s*k(?:\\s*-?\\s*ish)?\\b`,
-      "gi",
-    );
-    if (kPattern.test(body)) return true;
-    const formatted = new RegExp(`\\b${k},?000\\s+words\\b`, "gi");
-    if (formatted.test(body) && Math.abs(k * 1000 - canonicalWordCount) > 1000) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function formatGeneratedDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(iso).toLocaleString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -225,8 +214,18 @@ export function buildAuthoritativeReviewDisplay(args: {
   assessments?: ReviewConcernAssessment[];
   fallbackWordCount?: number | null;
   isHistorical?: boolean;
+  currentVersionId?: string | null;
+  authoritativeReviewId?: string | null;
 }): AuthoritativeReviewDisplay | null {
-  const { review, manuscriptTitle, assessments = [], fallbackWordCount, isHistorical } = args;
+  const {
+    review,
+    manuscriptTitle,
+    assessments = [],
+    fallbackWordCount,
+    isHistorical,
+    currentVersionId,
+    authoritativeReviewId,
+  } = args;
   const rawMemo = memoContentForDisplay(review.content);
   const grading = buildGradingExplanationDisplay({
     review,
@@ -241,6 +240,14 @@ export function buildAuthoritativeReviewDisplay(args: {
   const historical =
     isHistorical ?? lifecycle === "superseded";
 
+  const provenance = buildReviewProvenance({
+    review,
+    currentVersionId,
+    fallbackWordCount,
+    isHistoricalView: historical,
+    authoritativeReviewId,
+  });
+
   return {
     review_id: review.id,
     manuscript_id: review.manuscript_id,
@@ -249,7 +256,7 @@ export function buildAuthoritativeReviewDisplay(args: {
     provider_label: PROVIDER_LABEL[review.provider] ?? review.provider,
     generated_at: formatGeneratedDate(review.created_at),
     is_historical: historical,
-    historical_label: historical ? HISTORICAL_REVIEW_LABEL : null,
+    historical_label: historical ? provenance.historical_disclaimer : null,
     lifecycle_status: lifecycle,
     memo_content: memoContent,
     canonical_word_count: canonicalWordCount,
@@ -260,6 +267,7 @@ export function buildAuthoritativeReviewDisplay(args: {
     methodology_disclaimer: METHODOLOGY_DISCLAIMER,
     normalization_authority_note: NORMALIZATION_AUTHORITY_NOTE,
     contrary_evidence_summary: buildContraryEvidenceSummary(review, assessments),
+    provenance,
   };
 }
 
@@ -281,7 +289,17 @@ export function validateAuthoritativeExport(
   if (requireActive && display.lifecycle_status !== "active") {
     errors.push(`Review lifecycle_status is ${display.lifecycle_status}, not active.`);
   }
-  if (!display.scoring_gate_valid) {
+
+  if (requireActive) {
+    if (display.provenance.staleness.pre_enforcement) {
+      errors.push(PRE_ENFORCEMENT_EXPORT_BLOCKED);
+    }
+    if (display.provenance.staleness.contradicts_canonical_statistics) {
+      errors.push(CONTRADICTS_CANONICAL_EXPORT_BLOCKED);
+    }
+  }
+
+  if (requireActive && !display.scoring_gate_valid) {
     errors.push("scoring_gate_valid is not true.");
   }
   if (!display.grading.has_grading_explanation) {
@@ -317,15 +335,17 @@ export function validateAuthoritativeExport(
     errors.push("Normalized application score does not match authoritative total_score.");
   }
 
-  const wordVal = validateWordCountClaims(display.memo_content, display.canonical_word_count);
-  if (!wordVal.valid) {
-    errors.push(...wordVal.errors);
-    for (const c of wordVal.contradictions) {
-      if (c.reason) errors.push(c.reason);
+  if (requireActive) {
+    const wordVal = validateWordCountClaims(display.memo_content, display.canonical_word_count);
+    if (!wordVal.valid) {
+      errors.push(...wordVal.errors);
+      for (const c of wordVal.contradictions) {
+        if (c.reason) errors.push(c.reason);
+      }
     }
-  }
-  if (hasFalseCurrentLengthThousandsLanguage(display.memo_content, display.canonical_word_count)) {
-    errors.push("Unsupported 130k / 150k / 180k / 200k current-length language detected.");
+    if (hasFalseCurrentLengthThousandsLanguage(display.memo_content, display.canonical_word_count)) {
+      errors.push("Unsupported 130k / 150k / 180k / 200k current-length language detected.");
+    }
   }
 
   const gradeVal = validateMemoProhibitedGrades(display.memo_content);

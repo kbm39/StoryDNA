@@ -1,6 +1,9 @@
 import type { Review } from "@/lib/types";
 
-/** Active Literary Agent (commercial) review for a manuscript, if any. */
+/**
+ * @deprecated Prefer resolveAuthoritativeReviewFromList with current_version_id.
+ * Returns newest active commercial review without version validation.
+ */
 export function activeCommercialReview(reviews: Review[]): Review | undefined {
   return reviews
     .filter(

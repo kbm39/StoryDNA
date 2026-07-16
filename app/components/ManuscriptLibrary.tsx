@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { setManuscriptArchived } from "@/app/actions/manuscripts";
 import DeleteManuscriptButton from "@/app/components/DeleteManuscriptButton";
 import type { Manuscript } from "@/lib/types";
@@ -79,12 +79,16 @@ function Card({
 
 export default function ManuscriptLibrary({ manuscripts }: { manuscripts: Manuscript[] }) {
   const [list, setList] = useState(manuscripts);
+  const [prevManuscripts, setPrevManuscripts] = useState(manuscripts);
   const [, start] = useTransition();
   const [over, setOver] = useState<null | "current" | "older">(null);
   const [dragging, setDragging] = useState(false);
 
-  // Server is the source of truth; re-sync whenever it revalidates.
-  useEffect(() => setList(manuscripts), [manuscripts]);
+  // Re-sync when the server revalidates the manuscript list.
+  if (manuscripts !== prevManuscripts) {
+    setPrevManuscripts(manuscripts);
+    setList(manuscripts);
+  }
 
   const current = list.filter((m) => !m.archived);
   const older = list.filter((m) => m.archived);

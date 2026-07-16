@@ -1,6 +1,7 @@
 "use client";
 
 import type { Review, ReviewConcernAssessment } from "@/lib/types";
+import type { AuthoritativeReviewDisplay } from "@/lib/authoritative-review-display";
 import {
   buildAuthoritativeReviewDisplay,
 } from "@/lib/authoritative-review-display";
@@ -96,18 +97,22 @@ export function ExplainableGradingPanels({
   assessments = [],
   manuscriptTitle = "Manuscript",
   fallbackWordCount,
+  authoritativeDisplay,
 }: {
   review: Review;
   assessments?: ReviewConcernAssessment[];
   manuscriptTitle?: string;
   fallbackWordCount?: number | null;
+  authoritativeDisplay?: AuthoritativeReviewDisplay;
 }) {
-  const authoritative = buildAuthoritativeReviewDisplay({
-    review,
-    manuscriptTitle,
-    assessments,
-    fallbackWordCount,
-  });
+  const authoritative =
+    authoritativeDisplay ??
+    buildAuthoritativeReviewDisplay({
+      review,
+      manuscriptTitle,
+      assessments,
+      fallbackWordCount,
+    });
   if (!authoritative) return null;
 
   const display = authoritative.grading;

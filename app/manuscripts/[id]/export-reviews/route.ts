@@ -39,6 +39,8 @@ export async function GET(
       assessments,
       fallbackWordCount: resolved.fallbackWordCount,
       isHistorical: resolved.isHistorical,
+      currentVersionId: resolved.currentVersionId,
+      authoritativeReviewId: resolved.review.id,
     });
     if (!display) {
       return new Response(EXPORT_BLOCKED_MESSAGE, { status: 422 });
@@ -49,7 +51,7 @@ export async function GET(
     }
     sections.push({
       heading: "Literary-agent view",
-      subheading: `Authoritative active review · ${display.review_id}`,
+      subheading: `Authoritative active review · ${display.review_id} · ${display.provenance.generated_at}`,
       content: buildLiteraryAgentReviewDocxText(display),
     });
   } catch (err) {

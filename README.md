@@ -131,3 +131,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
 Local: `npm run dev` + `npm run trigger:dev` (after migration `0023` is applied).
+
+### Expert Registry (Milestone 2 · Phase 1 — not deployed)
+
+Structured, versioned expert definitions for StoryDNA’s Expert Intelligence Platform.
+See `docs/EXPERT-REGISTRY.md`, `docs/EVIDENCE-BACKED-EXPERT-COMMENTARY.md`, and
+`docs/EXPERT-PROFESSIONAL-STANDARDS.md`.
+
+- Migration `0024_expert_registry.sql` — **not applied** until approved
+- Literary Agent runtime unchanged (`lib/ai/review-engine.ts`)
+- Registry seeds are idempotent; run `seedPlatformExperts()` only in dev/staging

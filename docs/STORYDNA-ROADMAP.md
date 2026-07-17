@@ -9,6 +9,30 @@ Items recorded for future sprints. **Not implemented** in the review-provenance 
 3. **StoryDNA engine version** — application release identifier stamped on each review run.
 4. **Review freshness status** — computed lifecycle beyond active/superseded (e.g. stale-under-current-rules).
 
+## Expert Registry (Milestone 2 · Phase 1 — in code, not deployed)
+
+Implemented foundation:
+
+- `experts` + `expert_versions` + `expert_version_events` (migration `0024`)
+- `ExpertDefinitionV1` with identity, professional standards, competencies, limitations, evaluation, evidence policy, execution profile
+- Code-defined evidence profiles (EDITORIAL, COMMERCIAL, RESEARCH, …)
+- Canonical SHA-256 definition hashing + immutability guards
+- Platform expert seeds: Editor-in-Chief, Literary Agent (registry mirror), Developmental Editor
+- Literary Agent runtime **unchanged** — mirror has `execution_wired: false`
+
+**Deferred from Phase 1:**
+
+- Expert Runtime (execution from registry)
+- Editor-in-Chief orchestration
+- Roundtable / parallel experts
+- Dynamic expert generation
+- Author-created custom experts
+- `expert_version_id` on reviews and workflows
+- Evidence observation persistence tables
+- Admin UI for expert lifecycle
+
+See `docs/EXPERT-REGISTRY.md`.
+
 ## Editorial workflow
 
 5. **Editorial History across all reviewer types** — extend provenance/history to craft, screen, and other perspectives.

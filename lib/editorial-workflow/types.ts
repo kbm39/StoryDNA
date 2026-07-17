@@ -60,6 +60,7 @@ export interface WorkflowInputSnapshot {
   workflowPurpose: WorkflowType;
   participatingExperts: string[];
   reviewerDefinitionId: string;
+  /** Future: expert_version_id from Expert Registry (M2) — not wired in Phase 1. */
   /** Reserved for future Editorial Decision Log linkage. */
   editorialDecisionLogEnabled: boolean;
   /** Reserved: pause-for-author-guidance in later milestones. */

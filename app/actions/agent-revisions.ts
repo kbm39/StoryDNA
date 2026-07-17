@@ -14,6 +14,10 @@ import { buildReviewStatistics } from "@/lib/review-statistics";
 import {
   runFreshEditorialGeneration as runFreshEditorialGenerationCore,
 } from "@/lib/editorial-generation/run-fresh-editorial-generation";
+import {
+  isLiteraryAgentSyncFromServerActionAllowed,
+  LITERARY_AGENT_UNAVAILABLE_MESSAGE,
+} from "@/lib/editorial-workflow/sync-policy";
 
 export type { FreshEditorialGenerationResult } from "@/lib/editorial-generation/run-fresh-editorial-generation";
 
@@ -349,10 +353,16 @@ export async function generateAgentRevisions(
 /**
  * Fresh versioned editorial run: new Literary Agent review + atomic issue/candidate replacement.
  * Delegates to lib/editorial-generation — same path as CLI.
+ *
+ * Blocked in production and when Publishing Workflow is enabled — use the durable workflow instead.
  */
 export async function runFreshEditorialGeneration(
   manuscriptId: string,
 ): Promise<import("@/lib/editorial-generation/run-fresh-editorial-generation").FreshEditorialGenerationResult> {
+  if (!isLiteraryAgentSyncFromServerActionAllowed()) {
+    return { ok: false, error: LITERARY_AGENT_UNAVAILABLE_MESSAGE };
+  }
+
   const result = await runFreshEditorialGenerationCore(manuscriptId);
   if (result.ok) {
     revalidatePath(`/manuscripts/${manuscriptId}`);

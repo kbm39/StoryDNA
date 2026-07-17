@@ -3,113 +3,74 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateReviews } from "@/app/actions/reviews";
-import {
-  getRevisionGenerationStatus,
-  runFreshEditorialGeneration,
-} from "@/app/actions/agent-revisions";
 
 export default function GenerateReviewsButton({
   manuscriptId,
-  hasCommercial,
   hasCraft,
+  literaryAgentViaWorkflow,
 }: {
   manuscriptId: string;
   hasCommercial: boolean;
   hasCraft: boolean;
+  /** When true, Literary Agent must use Publishing Workflow — not this control. */
+  literaryAgentViaWorkflow: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<string[]>([]);
-  const [running, setRunning] = useState<"openai" | "anthropic" | "both" | null>(null);
+  const [running, setRunning] = useState<"anthropic" | null>(null);
 
-  function run(mode: "openai" | "anthropic" | "both") {
+  function runCraft() {
     setErrors([]);
-    setRunning(mode);
+    setRunning("anthropic");
     startTransition(async () => {
-      const errs: string[] = [];
-
-      if (mode === "openai" || mode === "both") {
-        const status = await getRevisionGenerationStatus(manuscriptId);
-        if (status.hasAuthorResponses) {
-          errs.push(
-            `Cannot regenerate Literary Agent review: ${status.authorResponseCount} author response${
-              status.authorResponseCount === 1 ? " has" : "s have"
-            } already been recorded in Suggested Edits.`,
-          );
-          setErrors(errs);
-          setRunning(null);
-          return;
-        }
-
-        const literary = await runFreshEditorialGeneration(manuscriptId);
-        if (!literary.ok) {
-          errs.push(literary.error ?? "Literary Agent generation failed.");
-          setErrors(errs);
-          setRunning(null);
-          return;
-        }
-      }
-
-      if (mode === "anthropic" || mode === "both") {
-        const craft = await generateReviews(manuscriptId, ["anthropic"]);
-        if (!craft.ok) errs.push(...(craft.errors ?? []));
-      }
-
+      const craft = await generateReviews(manuscriptId, ["anthropic"]);
+      const errs = craft.ok ? [] : [...(craft.errors ?? ["Craft review failed."])];
       setErrors(errs);
       setRunning(null);
       if (errs.length === 0) router.refresh();
     });
   }
 
-  const label = (mode: "openai" | "anthropic", has: boolean) =>
-    pending && (running === mode || running === "both")
-      ? "…"
-      : has
-        ? "Regenerate"
-        : "Generate";
+  const craftLabel =
+    pending && running === "anthropic" ? "…" : hasCraft ? "Regenerate" : "Generate";
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-black/50 dark:text-white/50">Reviews:</span>
+        {literaryAgentViaWorkflow ? (
+          <span
+            className="rounded-md border border-black/10 px-3 py-1.5 text-sm text-black/45 dark:border-white/15 dark:text-white/45"
+            title="Use the Literary Agent Publishing Workflow control below."
+          >
+            Literary Agent → Publishing Workflow
+          </span>
+        ) : (
+          <span className="rounded-md border border-black/10 px-3 py-1.5 text-sm text-black/45 dark:border-white/15 dark:text-white/45">
+            Literary Agent unavailable
+          </span>
+        )}
         <button
           type="button"
-          onClick={() => run("openai")}
-          disabled={pending}
-          className="rounded-md border border-emerald-600/60 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
-        >
-          {label("openai", hasCommercial)} Literary Agent
-        </button>
-        <button
-          type="button"
-          onClick={() => run("anthropic")}
+          onClick={runCraft}
           disabled={pending}
           className="rounded-md border border-indigo-600/60 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-300 dark:hover:bg-accent-hover/10"
         >
-          {label("anthropic", hasCraft)} Claude
-        </button>
-        <button
-          type="button"
-          onClick={() => run("both")}
-          disabled={pending}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {pending && running === "both" ? "Generating…" : "Both"}
+          {craftLabel} Claude
         </button>
       </div>
-      {pending && (
+      {pending && running === "anthropic" && (
         <span className="text-xs text-black/50 dark:text-white/50">
-          {running === "anthropic"
-            ? "Reading the full manuscript — this can take a minute."
-            : running === "both"
-              ? "Publishing Literary Agent atomically, then generating Claude review…"
-              : "Publishing Literary Agent review and revision candidates atomically — up to several minutes…"}
+          Reading the full manuscript — this can take a minute.
         </span>
       )}
       {errors.length > 0 && (
         <ul className="list-disc space-y-0.5 pl-5 text-right text-sm text-red-600">
           {errors.map((e, i) => (
-            <li key={i} className="text-left">{e}</li>
+            <li key={i} className="text-left">
+              {e}
+            </li>
           ))}
         </ul>
       )}

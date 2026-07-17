@@ -108,3 +108,26 @@ supabase/
   RLS is intentionally off. Add auth + RLS before this ever leaves localhost.
 - Uploaded `.docx` files go to the private `manuscripts` Storage bucket; extracted
   plain text is saved on the row so later AI phases don't re-parse the file.
+
+### Publishing Workflow (Milestone 1 — off by default)
+
+Durable Literary Agent review runs via Trigger.dev + Supabase. See
+`docs/EDITORIAL-WORKFLOW-ENGINE.md` and `docs/EDITORIAL-WORKFLOW-M1-RUNBOOK.md`.
+
+```env
+# Feature flag — default off; no silent sync fallback when disabled
+EDITORIAL_WORKFLOW_ENABLED=0
+
+# Trigger.dev (Vercel + local dev)
+TRIGGER_SECRET_KEY=tr_dev_...
+TRIGGER_PROJECT_ID=proj_...
+
+# Realtime status on manuscript page (browser)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Trigger.dev worker env (also needs SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY)
+# Optional local-only sync fallback — never use in production:
+# EDITORIAL_WORKFLOW_DEV_SYNC_FALLBACK=1
+```
+
+Local: `npm run dev` + `npm run trigger:dev` (after migration `0023` is applied).

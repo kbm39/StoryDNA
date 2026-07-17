@@ -8,12 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test lib/*.test.ts lib/*/*.test.ts",
+    "trigger:dev": "npx trigger.dev@latest dev",
     "backfill:word-count": "node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
     "@supabase/supabase-js": "^2.108.2",
     "@tailwindcss/typography": "^0.5.20",
+    "@trigger.dev/build": "^4.5.4",
+    "@trigger.dev/sdk": "^4.5.4",
     "docx": "^9.7.1",
     "mammoth": "^1.12.0",
     "next": "16.2.9",

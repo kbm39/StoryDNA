@@ -1,33 +1,37 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   getRevisionGenerationStatus,
-  runFreshEditorialGeneration,
   type RevisionGenerationStatus,
 } from "@/app/actions/agent-revisions";
+import {
+  startLiteraryAgentPublishingWorkflow,
+} from "@/app/actions/editorial-workflows";
 
 const BLOCKED_MSG = (count: number) =>
   `Cannot regenerate: ${count} author response${
     count === 1 ? " has" : "s have"
   } already been recorded in Suggested Edits. Regenerating would invalidate those decisions. Complete or clear the author-review workflow first.`;
 
-/** Runs the Literary Agent review and revision candidates in one atomic publish. */
+/** Starts a durable Publishing Workflow for Literary Agent review (non-blocking). */
 export default function RunAgentReviewButton({
   manuscriptId,
   hasReview,
   generationStatus: initialStatus,
+  workflowEnabled,
+  hasActiveWorkflow,
+  onWorkflowStarted,
 }: {
   manuscriptId: string;
   hasReview: boolean;
   generationStatus: RevisionGenerationStatus;
+  workflowEnabled: boolean;
+  hasActiveWorkflow: boolean;
+  onWorkflowStarted?: (workflowId: string) => void;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [errors, setErrors] = useState<string[]>([]);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
   const [status, setStatus] = useState(initialStatus);
 
   const blockedByAuthorResponses = status.hasAuthorResponses;
@@ -36,43 +40,39 @@ export default function RunAgentReviewButton({
     (hasReview || status.existingIssueCount > 0 || status.existingCandidateCount > 0);
 
   function run() {
-    if (blockedByAuthorResponses) return;
+    if (blockedByAuthorResponses || !workflowEnabled || hasActiveWorkflow) return;
 
     setErrors([]);
-    setSuccess(null);
     start(async () => {
       const fresh = await getRevisionGenerationStatus(manuscriptId);
       setStatus(fresh);
       if (fresh.hasAuthorResponses) {
         setErrors([BLOCKED_MSG(fresh.authorResponseCount)]);
-        setRunning(false);
         return;
       }
 
-      setRunning(true);
-      const result = await runFreshEditorialGeneration(manuscriptId);
-      setRunning(false);
-
-      if (!result.ok) {
-        if (result.error) setErrors([result.error]);
+      const result = await startLiteraryAgentPublishingWorkflow(manuscriptId);
+      if (!result.ok || !result.workflowId) {
+        setErrors([result.error ?? "Could not start Publishing Workflow."]);
         return;
       }
-
-      const parts = [
-        `Published new Literary Agent review with ${result.issueCount ?? 0} issue${
-          result.issueCount === 1 ? "" : "s"
-        } and ${result.candidateCount ?? 0} candidate${result.candidateCount === 1 ? "" : "s"}.`,
-      ];
-      if (result.oldReviewId) {
-        parts.push("Prior review superseded; generated issues and candidates replaced.");
-      }
-      if (result.warnings?.length) {
-        parts.push(result.warnings.join(" "));
-      }
-      setSuccess(parts.join(" "));
-      setStatus(await getRevisionGenerationStatus(manuscriptId));
-      router.refresh();
+      onWorkflowStarted?.(result.workflowId);
     });
+  }
+
+  if (!workflowEnabled) {
+    return (
+      <div className="mb-4 rounded-lg border border-black/10 bg-paper p-3 dark:border-white/15 dark:bg-white/5">
+        <p className="text-sm font-medium text-black/80 dark:text-white/80">
+          Literary Agent review is temporarily unavailable
+        </p>
+        <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+          Literary Agent reviews are temporarily unavailable while Publishing Workflow is being
+          enabled. Full-manuscript generation will run in the background once enabled — not through
+          a blocking browser request.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -80,31 +80,32 @@ export default function RunAgentReviewButton({
       <button
         type="button"
         onClick={run}
-        disabled={pending || blockedByAuthorResponses}
+        disabled={pending || blockedByAuthorResponses || hasActiveWorkflow}
         className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Running…" : hasReview ? "Re-run Literary Agent Review" : "Run Literary Agent Review"}
+        {pending
+          ? "Starting…"
+          : hasActiveWorkflow
+            ? "Publishing Workflow in progress"
+            : hasReview
+              ? "Re-run Literary Agent Review"
+              : "Run Literary Agent Review"}
       </button>
       <span className="text-xs text-black/55 dark:text-white/55">
         {blockedByAuthorResponses
           ? `Regeneration blocked — ${status.authorResponseCount} author response${
               status.authorResponseCount === 1 ? " has" : "s have"
             } been recorded in Suggested Edits.`
-          : running
-            ? "Reading the full manuscript, generating revision candidates, then publishing atomically — up to several minutes…"
+          : hasActiveWorkflow
+            ? "A Publishing Workflow is already running for this manuscript version."
             : willReplacePrior
-              ? "Checks for author responses first, then publishes a new memo and atomically replaces the prior review generation."
-              : "Checks for author responses first, then publishes the memo and linked revision candidates."}
+              ? "Starts a Publishing Workflow, checks for author responses, then prepares your Literary Agent review in the background."
+              : "Starts a Publishing Workflow. You may leave this page while StoryDNA works."}
       </span>
       {blockedByAuthorResponses && (
         <p className="w-full text-sm text-amber-800 dark:text-amber-200">
           Author responses are preserved. The Literary Agent review will not start until Suggested
           Edits responses are cleared for this manuscript.
-        </p>
-      )}
-      {success && (
-        <p className="w-full text-sm text-emerald-700 dark:text-emerald-400" role="status">
-          {success}
         </p>
       )}
       {errors.length > 0 && (

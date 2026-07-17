@@ -41,7 +41,7 @@ import type {
   ConstitutionalStatus,
 } from "@/lib/types";
 import GenerateReviewsButton from "./GenerateReviewsButton";
-import RunAgentReviewButton from "./RunAgentReviewButton";
+import LiteraryAgentPublishingSection from "./LiteraryAgentPublishingSection";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
 import { ReviewGradingPanel } from "./ReviewGradingPanel";
 import { RevisionImpactPanel } from "./RevisionImpactPanel";
@@ -51,6 +51,10 @@ import { memoContentForDisplay } from "@/lib/review-display";
 import { ManuscriptWordCountReport } from "./ManuscriptWordCountReport";
 import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions";
 import { getRevisionGenerationStatus } from "@/app/actions/agent-revisions";
+import {
+  getActivePublishingWorkflow,
+  isPublishingWorkflowAvailable,
+} from "@/app/actions/editorial-workflows";
 import ExtractIssuesButton from "./ExtractIssuesButton";
 import AddIssueForm from "./AddIssueForm";
 import IssueItem from "./IssueItem";
@@ -374,10 +378,13 @@ export default async function ManuscriptPage({
   const currentSeries = manuscript.series_id
     ? allSeries.find((s) => s.id === manuscript.series_id) ?? null
     : null;
-  const [editorialIssues, revisionCandidates, revisionGenStatus] = await Promise.all([
+  const [editorialIssues, revisionCandidates, revisionGenStatus, workflowEnabled, activeWorkflow] =
+    await Promise.all([
     getEditorialIssues(id),
     getRevisionCandidates(id),
     getRevisionGenerationStatus(id),
+    isPublishingWorkflowAvailable(),
+    getActivePublishingWorkflow(id),
   ]);
   const groupedDocs = groupDocuments(documents);
   // External PKagentfinder DB — never let it break the page.
@@ -498,6 +505,7 @@ export default async function ManuscriptPage({
             manuscriptId={id}
             hasCommercial={Boolean(commercial)}
             hasCraft={Boolean(craft)}
+            literaryAgentViaWorkflow={workflowEnabled}
           />
         </div>
       </header>
@@ -533,10 +541,12 @@ export default async function ManuscriptPage({
       </nav>
 
       <section id="reviews" className="scroll-mt-20">
-        <RunAgentReviewButton
+        <LiteraryAgentPublishingSection
           manuscriptId={id}
           hasReview={Boolean(commercial)}
           generationStatus={revisionGenStatus}
+          workflowEnabled={workflowEnabled}
+          initialActiveWorkflow={activeWorkflow}
         />
         {(commercial || craft) && (
           <div className="mb-3 flex justify-end">

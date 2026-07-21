@@ -290,3 +290,71 @@ describe("Hold Fast two-call diagnostic replay (no AI)", () => {
     assert.doesNotMatch(memo, /STORYDNA_RUBRIC_JSON/);
   });
 });
+
+describe("memo repair — category ideal ranges (Phase 7)", () => {
+  const CANONICAL = 83_665;
+  const EXACT = `The manuscript is ${CANONICAL.toLocaleString("en-US")} words.`;
+
+  const ORIGINAL_FAILURE_MEMO = `${EXACT}
+
+The manuscript is significantly overlong for YA commercial fiction; at ${CANONICAL.toLocaleString()} words it exceeds the ideal 70,000–80,000 word range for the category.`;
+
+  const REPAIRED_MEMO = `${EXACT}
+
+The manuscript is significantly overlong for commercial YA. At ${CANONICAL.toLocaleString()} words, it exceeds the ideal 70,000–80,000 word range for the category. A 10% cut would bring the manuscript to roughly 75,298 words.`;
+
+  it("original failure: ideal category range is not treated as a current-total contradiction", () => {
+    const wordVal = validateWordCountClaims(ORIGINAL_FAILURE_MEMO, CANONICAL);
+    assert.equal(wordVal.valid, true, wordVal.contradictions.map((c) => c.reason).join("; "));
+  });
+
+  it("successful repair: canonical + ideal range + cut math passes memo gate", () => {
+    const wordVal = validateWordCountClaims(REPAIRED_MEMO, CANONICAL);
+    assert.equal(wordVal.valid, true, wordVal.contradictions.map((c) => c.reason).join("; "));
+
+    const memoGate = validateCommercialMemoOnly({
+      memoContent: REPAIRED_MEMO,
+      canonicalWordCount: CANONICAL,
+      repairAttempted: true,
+    });
+    assert.equal(memoGate.ok, true, memoGate.error ?? "");
+    assert.ok(hasExactCanonicalStatement(REPAIRED_MEMO, CANONICAL));
+  });
+
+  it("failed repair still fails closed on prohibited 150k current-total claim", () => {
+    const badRepair = `${EXACT}\n\nThis 150,000 word manuscript needs substantial cuts.`;
+    const wordVal = validateWordCountClaims(badRepair, CANONICAL);
+    assert.equal(wordVal.valid, false);
+
+    const memoGate = validateCommercialMemoOnly({
+      memoContent: badRepair,
+      canonicalWordCount: CANONICAL,
+      repairAttempted: true,
+    });
+    assert.equal(memoGate.ok, false);
+    assert.match(memoGate.error ?? "", /AUTHORITATIVE STATISTICS CONTRADICTED/);
+  });
+
+  it("83k-word compound descriptor does not contradict exact canonical sentence", () => {
+    const memo = `${EXACT}\n\nThis 83k-word thriller opens with a strong hook.`;
+    const wordVal = validateWordCountClaims(memo, CANONICAL);
+    assert.equal(wordVal.valid, true, wordVal.contradictions.map((c) => c.reason).join("; "));
+  });
+
+  it("genre target band is classified as category_target, not current_total", () => {
+    const memo = `${EXACT}\n\nCommercial fiction in this genre typically targets 80,000–90,000 words for debut authors.`;
+    const idx = memo.indexOf("80,000");
+    assert.equal(classifyLengthClaimContext(memo, idx, idx + 6), "category_target");
+    assert.equal(validateWordCountClaims(memo, CANONICAL).valid, true);
+  });
+
+  it("invalid memo without exact canonical sentence cannot pass memo gate", () => {
+    const memo = "Commercial fiction in this genre typically targets 80,000–90,000 words.";
+    const gate = validateCommercialMemoOnly({
+      memoContent: memo,
+      canonicalWordCount: CANONICAL,
+      repairAttempted: true,
+    });
+    assert.equal(gate.ok, false);
+  });
+});

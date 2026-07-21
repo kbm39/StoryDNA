@@ -72,7 +72,19 @@ const LENGTH_CONTEXT =
   /\b(word|words|manuscript|draft|novel|book|length|count|size|total|page|pages|reading time|read time)\b/i;
 
 const CATEGORY_TARGET_INDICATORS =
-  /\b(?:genre\s+target|market\s+range|target\s+range|ideal\s+length|commercial\s+fiction\s+typically|reader\s+expectations?\s+for\s+length|standard\s+range)\b/i;
+  /\b(?:genre\s+target|market\s+range|target\s+range|ideal\s+length|commercial\s+fiction\s+typically|reader\s+expectations?\s+for\s+length|standard\s+range|typically\s+targets?|for\s+(?:the\s+)?category|exceeds\s+the\s+ideal)\b/i;
+
+/** Market/genre ideal ranges — never authoritative current-total claims. */
+function isCategoryTargetContext(text: string, numberIndex: number, numberEnd: number): boolean {
+  const window = text
+    .slice(Math.max(0, numberIndex - 120), Math.min(text.length, numberEnd + 80))
+    .toLowerCase();
+  if (CATEGORY_TARGET_INDICATORS.test(window)) return true;
+  if (/\bideal\b/.test(window) && /\b(?:range|length|band|window)\b/.test(window)) return true;
+  if (/\bcommercial\s+fiction\b/.test(window) && /\btypically\b/.test(window)) return true;
+  if (/\bgenre\b/.test(window) && /\b(?:target|range|typical|ideal)\b/.test(window)) return true;
+  return false;
+}
 
 /** Unsupported qualitative length claims without mathematical basis from canonical count. */
 const UNSUPPORTED_LENGTH_PHRASE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
@@ -425,10 +437,7 @@ export function classifyLengthClaimContext(
   if (CUT_AMOUNT_INDICATORS.test(before)) return "cut_amount";
   if (RESULTING_TOTAL_INDICATORS.test(before)) return "resulting_total";
 
-  const clauseWindow = text
-    .slice(Math.max(0, numberIndex - 150), Math.min(text.length, numberEnd + 80))
-    .toLowerCase();
-  if (CATEGORY_TARGET_INDICATORS.test(clauseWindow)) return "category_target";
+  if (isCategoryTargetContext(text, numberIndex, numberEnd)) return "category_target";
 
   if (CURRENT_TOTAL_INDICATORS.test(before)) return "current_total";
 
@@ -657,6 +666,11 @@ function collectMatches(text: string, validatedSpans: Array<{ spanStart: number;
         skipExecMatch(re, matchIndex, matchEnd);
         continue;
       }
+      // "83k-word thriller" — compound descriptor, not a competing current total.
+      if (shorthand && /^-word\b/i.test(body.slice(matchEnd, matchEnd + 6))) {
+        skipExecMatch(re, matchIndex, matchEnd);
+        continue;
+      }
       if (!isManuscriptLengthContext(body, m.index) && !shorthand && !/page|hour|reading time/i.test(m[0])) {
         skipExecMatch(re, matchIndex, matchEnd);
         continue;
@@ -717,6 +731,10 @@ function collectRangeContradictions(text: string, canonicalWordCount: number): W
       // Skip ranges inside reduction clauses (handled by parseCompoundCutRanges)
       const clause = body.slice(Math.max(0, m.index - 120), m.index + m[0].length + 40).toLowerCase();
       if (REDUCTION_CLAUSE_INDICATORS.test(clause) && /\d+\s*[–—-]\s*\d+\s*%/.test(clause)) {
+        skipExecMatch(re, m.index, m.index + m[0].length);
+        continue;
+      }
+      if (isCategoryTargetContext(body, m.index, m.index + m[0].length)) {
         skipExecMatch(re, m.index, m.index + m[0].length);
         continue;
       }

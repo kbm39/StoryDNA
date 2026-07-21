@@ -116,6 +116,8 @@ export interface EditorialWorkflowHooks {
   onPhase?: (phase: InternalPhase) => Promise<void>;
   shouldCancel?: () => Promise<boolean>;
   assertVersionPin?: () => Promise<void>;
+  workflowId?: string;
+  triggerRunId?: string | null;
 }
 
 export class WorkflowCancelledError extends Error {

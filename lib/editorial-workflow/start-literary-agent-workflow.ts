@@ -130,11 +130,38 @@ export async function startLiteraryAgentWorkflow(
   return { ok: true, workflowId: workflow.id, existing: false };
 }
 
+async function persistUncaughtWorkflowFailure(workflowId: string, original: Error): Promise<void> {
+  try {
+    const current = await getWorkflowById(workflowId);
+    if (!current || isTerminalStatus(current.status)) {
+      return;
+    }
+    await markWorkflowFailed({
+      workflowId,
+      errorCode: "WORKER_INIT_FAILED",
+      safeErrorMessage: safeErrorForCode("WORKER_INIT_FAILED"),
+    });
+  } catch (persistErr) {
+    console.error("[Publishing Workflow] failed to persist workflow failure", {
+      workflowId,
+      originalError: original.name,
+      originalMessage: original.message.slice(0, 200),
+      persistMessage:
+        persistErr instanceof Error ? persistErr.message.slice(0, 200) : String(persistErr),
+    });
+  }
+}
+
 export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<{
   ok: boolean;
   cancelled?: boolean;
   skipped?: boolean;
 }> {
+  if (!workflowId) {
+    throw new Error("Missing workflow id.");
+  }
+
+  try {
   const workflow = await getWorkflowById(workflowId);
   if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
 
@@ -188,6 +215,8 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
   };
 
   const hooks: EditorialWorkflowHooks = {
+    workflowId,
+    triggerRunId: workflow.trigger_run_id,
     onPhase: async (phase) => {
       await setWorkflowPhase(workflowId, phase);
     },
@@ -210,6 +239,7 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         workflowId,
         errorCode: code,
         safeErrorMessage: safeErrorForCode(code, result.error),
+        diagnosticsStorageKey: result.diagnosticsStorageKey ?? null,
       });
       return { ok: false };
     }
@@ -259,6 +289,11 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
     return { ok: false };
   } finally {
     stopHeartbeat();
+  }
+  } catch (e) {
+    const original = e instanceof Error ? e : new Error(String(e));
+    await persistUncaughtWorkflowFailure(workflowId, original);
+    throw original;
   }
 }
 

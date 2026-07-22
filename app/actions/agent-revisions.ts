@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getManuscriptReviewContext } from "@/lib/reviews";
 import { getStoryDna } from "@/lib/storydna";
-import { locatePassage } from "@/lib/manuscript-context";
+import {
+  verifyOriginal,
+} from "@/lib/editorial-generation/replacement-payload";
 import {
   generateRevisionCandidates,
 } from "@/lib/ai/anthropic";
@@ -65,12 +67,6 @@ function intentFromDna(
     themes: d.themes.final ?? d.themes.proposed.map((t) => t.name),
     emotionalPromise: `Beginning: ${emo.beginning}; Middle: ${emo.middle}; Ending: ${emo.ending}; After: ${emo.after_finishing}`,
   };
-}
-
-/** Confidently locate the candidate's original passage in manuscript text. */
-function verifyOriginal(original: string, manuscriptText: string): boolean {
-  if (!original.trim() || original.trim().length < 8) return false;
-  return locatePassage(manuscriptText, original) !== null;
 }
 
 /** Preflight for regeneration UX — does not mutate data. */
@@ -323,7 +319,7 @@ export async function generateAgentRevisions(
       manuscriptId,
       review.id,
       issues,
-      text,
+      ctx.passageVerificationText,
     );
     revalidatePath(`/manuscripts/${manuscriptId}`);
     revalidatePath("/suggested-edits");

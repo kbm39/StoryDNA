@@ -686,7 +686,7 @@ export async function runFreshEditorialGeneration(
     };
   }
 
-  const payload = buildReplacementPayload(issues, text);
+  const payload = buildReplacementPayload(issues, ctx.passageVerificationText);
   const gateMeta = buildGatePublishMetadata(gateState, postScoring);
 
   const gradingRecord = buildReviewGradingRecord(validated, {

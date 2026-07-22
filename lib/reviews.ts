@@ -6,7 +6,10 @@ import { countManuscriptWords } from "@/lib/word-count";
 export interface ManuscriptReviewContext {
   manuscriptId: string;
   manuscriptVersionId: string | null;
+  /** Trimmed text for AI generation and statistics. */
   extractedText: string;
+  /** Raw manuscripts.extracted_text — same source SQL uses for passage verification. */
+  passageVerificationText: string;
   wordCount: number;
   characterCount: number;
   contentHash: string | null;
@@ -79,7 +82,8 @@ export async function getManuscriptReviewContext(
     }
   }
 
-  const text = (versionText ?? manuscript.extracted_text)?.trim() ?? "";
+  const passageVerificationText = manuscript.extracted_text ?? "";
+  const text = (versionText ?? passageVerificationText).trim();
   if (!text) return null;
 
   const wordCount =
@@ -93,6 +97,7 @@ export async function getManuscriptReviewContext(
     manuscriptId: manuscript.id,
     manuscriptVersionId: versionId ?? manuscript.current_version_id,
     extractedText: text,
+    passageVerificationText,
     wordCount,
     characterCount,
     contentHash,

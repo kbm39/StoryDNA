@@ -19,6 +19,7 @@ import { buildCanonicalReviewInput } from "@/lib/canonical-review-input";
 import {
   buildMemoTruncationDiagnostics,
   buildMemoRepairFailureDiagnostics,
+  buildPostScoringFailureDiagnostics,
   persistReviewFailureDiagnostics,
   reviewFailureDiagnosticsEnabled,
   writeMemoTruncationDiagnosticArtifact,
@@ -545,7 +546,32 @@ export async function runFreshEditorialGeneration(
   });
 
   if (!postScoring.valid) {
-    const diagPath = writeBlockedRunDiagnosticArtifact(
+    const failureError = `Post-scoring validation failed: ${postScoring.errors.slice(0, 5).join(" ")}${postScoring.errors.length > 5 ? ` … (+${postScoring.errors.length - 5} more)` : ""}`;
+    const diagnostics = buildPostScoringFailureDiagnostics({
+      manuscriptId,
+      manuscriptVersionId: ctx.manuscriptVersionId,
+      statistics,
+      storedWordCount: ctx.wordCount,
+      recomputedWordCount,
+      memoContent,
+      memoGenerationMeta: reviewResult.generationMeta ?? null,
+      rubricRawContent: rubricResult.content,
+      rubricGenerationMeta: rubricResult.generationMeta ?? null,
+      rubricRetryAttempted,
+      memoRepairAttempted,
+      failureError,
+      workflowId: hooks?.workflowId,
+      triggerRunId: hooks?.triggerRunId,
+      normalization: postScoring.normalization,
+      validationErrors: postScoring.errors,
+    });
+    const persisted = persistReviewFailureDiagnostics({
+      diagnostics,
+      filename: hooks?.workflowId
+        ? `post-scoring-failure-${hooks.workflowId}.json`
+        : "post-scoring-failure-latest.json",
+    });
+    writeBlockedRunDiagnosticArtifact(
       buildBlockedRunDiagnostics({
         manuscriptId,
         manuscriptVersionId: ctx.manuscriptVersionId,
@@ -566,36 +592,9 @@ export async function runFreshEditorialGeneration(
     );
     return {
       ok: false,
-      error: `Post-scoring validation failed: ${postScoring.errors.slice(0, 5).join(" ")}${postScoring.errors.length > 5 ? ` … (+${postScoring.errors.length - 5} more)` : ""}`,
-      diagnostics: diagPath
-        ? {
-            manuscriptId,
-            manuscriptVersionId: ctx.manuscriptVersionId,
-            canonicalWordCount: statistics.canonical_word_count,
-            storedWordCount: ctx.wordCount,
-            recomputedWordCount,
-            originalReviewText: memoContent,
-            repairAttempted: memoRepairAttempted,
-            originalPass: {
-              pass: "original",
-              ok: false,
-              error: postScoring.errors[0],
-              wordCountErrors: [],
-              wordCountContradictions: [],
-              proseGradeConflicts: [],
-              rubricValidationErrors: postScoring.errors,
-            },
-            capturedAt: new Date().toISOString(),
-            failurePhase: "rubric",
-            pipeline: "two_call_v1",
-            memoContent,
-            memoGenerationMeta: reviewResult.generationMeta ?? null,
-            rubricRawContent: rubricResult.content,
-            rubricGenerationMeta: rubricResult.generationMeta ?? null,
-            rubricRetryAttempted,
-            memoRepairAttempted,
-          }
-        : undefined,
+      error: failureError,
+      diagnostics,
+      diagnosticsStorageKey: persisted.storageKey,
     };
   }
 

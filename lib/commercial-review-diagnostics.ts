@@ -61,7 +61,7 @@ export interface CommercialReviewFailureDiagnostics {
   capturedAt: string;
   workflowId?: string;
   triggerRunId?: string | null;
-  pipelinePhase?: "memo_repair" | "memo" | "rubric" | "combined";
+  pipelinePhase?: "memo_repair" | "memo" | "rubric" | "combined" | "rubric_validation";
   originalLengthClaimExcerpts?: string[];
   repairedLengthClaimExcerpts?: string[];
   normalizedLengthClaimExcerpts?: string[];
@@ -78,6 +78,18 @@ export interface CommercialReviewFailureDiagnostics {
   failureKind?: CommercialReviewFailureKind;
   rubricRetryAttempted?: boolean;
   memoRepairAttempted?: boolean;
+  postScoringFailure?: PostScoringFailureDiagnostic;
+}
+
+export interface PostScoringFailureDiagnostic {
+  category_key: string;
+  deduction_label: string;
+  deduction_reason: string;
+  deduction_index: number;
+  examples: Array<{ text: string; location: string | null }>;
+  revision_to_recover: string | null;
+  normalization_disposition: string | null;
+  validator_errors: string[];
 }
 
 export function reviewFailureDiagnosticsEnabled(): boolean {
@@ -420,6 +432,126 @@ export function buildMemoTruncationDiagnostics(args: {
     memoContent: args.memoContent,
     memoGenerationMeta: args.memoGenerationMeta,
     memoRepairAttempted: false,
+  };
+}
+
+/** Diagnostics when post-scoring / rubric normalization validation fails. */
+export function buildPostScoringFailureDiagnostics(args: {
+  manuscriptId: string;
+  manuscriptVersionId: string | null;
+  statistics: ReviewStatistics;
+  storedWordCount: number | null;
+  recomputedWordCount: number;
+  memoContent: string;
+  memoGenerationMeta?: GenerationMeta | null;
+  rubricRawContent?: string;
+  rubricGenerationMeta?: GenerationMeta | null;
+  rubricRetryAttempted?: boolean;
+  memoRepairAttempted?: boolean;
+  failureError: string;
+  workflowId?: string;
+  triggerRunId?: string | null;
+  normalization: import("./contrary-evidence/normalize-rubric-against-gate.ts").NormalizeRubricResult;
+  validationErrors: string[];
+}): CommercialReviewFailureDiagnostics {
+  const offending = findOffendingPostScoringDeduction(
+    args.normalization,
+    args.validationErrors,
+  );
+
+  return {
+    manuscriptId: args.manuscriptId,
+    manuscriptVersionId: args.manuscriptVersionId,
+    canonicalWordCount: args.statistics.canonical_word_count,
+    storedWordCount: args.storedWordCount,
+    recomputedWordCount: args.recomputedWordCount,
+    originalReviewText: args.memoContent,
+    repairAttempted: args.memoRepairAttempted ?? false,
+    originalPass: {
+      pass: "original",
+      ok: false,
+      error: args.failureError,
+      wordCountErrors: [],
+      wordCountContradictions: [],
+      proseGradeConflicts: [],
+      rubricValidationErrors: args.validationErrors,
+    },
+    capturedAt: new Date().toISOString(),
+    pipeline: "two_call_v1",
+    failurePhase: "rubric",
+    pipelinePhase: "rubric_validation",
+    memoContent: args.memoContent,
+    memoGenerationMeta: args.memoGenerationMeta ?? null,
+    rubricRawContent: args.rubricRawContent,
+    rubricGenerationMeta: args.rubricGenerationMeta ?? null,
+    rubricRetryAttempted: args.rubricRetryAttempted ?? false,
+    memoRepairAttempted: args.memoRepairAttempted ?? false,
+    workflowId: args.workflowId,
+    triggerRunId: args.triggerRunId,
+    postScoringFailure: offending,
+  };
+}
+
+function findOffendingPostScoringDeduction(
+  normalization: import("./contrary-evidence/normalize-rubric-against-gate.ts").NormalizeRubricResult,
+  validationErrors: string[],
+): PostScoringFailureDiagnostic | undefined {
+  const priorityPatterns = [
+    /^([a-z_]+): broad deduction cannot be narrowed safely/,
+    /^([a-z_]+): broad deduction lacks narrowed finding/,
+    /^([a-z_]+)\[\d+\]: unmatched deduction/,
+    /^([a-z_]+): retained deduction/,
+    /^([a-z_]+):/,
+  ];
+
+  let categoryFromError: string | undefined;
+  for (const pattern of priorityPatterns) {
+    for (const error of validationErrors) {
+      const match = error.match(pattern);
+      if (match?.[1]) {
+        categoryFromError = match[1];
+        break;
+      }
+    }
+    if (categoryFromError) break;
+  }
+
+  const disposition =
+    (categoryFromError
+      ? normalization.dispositions.find((d) => d.category_key === categoryFromError)
+      : normalization.dispositions.find(
+          (d) =>
+            d.normalized_points > 0 &&
+            (d.disposition === "RETAINED_AS_NEW_CONCERN" ||
+              d.disposition === "REDUCED_TO_GATE_MAX" ||
+              d.disposition === "NARROWED_AND_REDUCED"),
+        )) ?? null;
+
+  if (!disposition) return undefined;
+
+  const cat = [...normalization.rawPayload.craft_categories, ...normalization.rawPayload.acquisition_categories].find(
+    (c) => c.category_key === disposition.category_key,
+  );
+  const reason =
+    normalization.normalizedPayload.craft_categories
+      .concat(normalization.normalizedPayload.acquisition_categories)
+      .find((c) => c.category_key === disposition.category_key)
+      ?.deduction_reasons?.[disposition.deduction_index] ??
+    cat?.deduction_reasons?.[disposition.deduction_index] ??
+    "";
+
+  return {
+    category_key: disposition.category_key,
+    deduction_label: cat?.deductions?.[disposition.deduction_index] ?? reason,
+    deduction_reason: reason,
+    deduction_index: disposition.deduction_index,
+    examples: (cat?.examples ?? []).map((e) => ({
+      text: e.text,
+      location: e.location ?? null,
+    })),
+    revision_to_recover: cat?.revision_to_recover ?? null,
+    normalization_disposition: disposition.disposition,
+    validator_errors: validationErrors,
   };
 }
 

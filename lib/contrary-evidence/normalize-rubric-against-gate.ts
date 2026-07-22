@@ -35,6 +35,11 @@ import {
   type CategoryScoreAudit,
 } from "./positive-evidence-ceiling.ts";
 import type { ComparisonMode, ConcernAssessment, UnifiedAssessmentStatus } from "./types.ts";
+import { isBroadCriticism } from "./scoring-gate.ts";
+import {
+  buildDeterministicNarrowedDeduction,
+  shouldDeterministicallyNarrowDeduction,
+} from "./narrow-broad-deduction.ts";
 
 const INVALID_DEDUCTION_DISPOSITIONS: Set<DeductionDisposition> = new Set([
   "REMOVED_UNSUPPORTED",
@@ -183,6 +188,7 @@ export function normalizeRubricAgainstGate(input: NormalizeRubricInput): Normali
   const { capAdjustments, capErrors } = applyRootIssueCaps(mutable, input.duplicatePolicy);
   errors.push(...capErrors);
   applyRepeatedEvidenceCap(mutable);
+  applyDeterministicBroadDeductionNarrowing(mutable, input.rawPayload, input.gateAssessments, errors);
 
   const normalizedPayload = rebuildPayloadFromMutable(input.rawPayload, mutable);
 
@@ -585,8 +591,11 @@ function rebuildPayloadFromMutable(
     labels.forEach((label, idx) => {
       const pts = indexMap.get(idx) ?? 0;
       if (pts > 0.01) {
-        newLabels.push(label);
-        newReasons.push(cat.deduction_reasons?.[idx] ?? label);
+        const item = mutable.find(
+          (m) => m.entry.category_key === cat.category_key && m.entry.deduction_index === idx,
+        );
+        newLabels.push(item?.entry.deduction_label ?? label);
+        newReasons.push(item?.entry.deduction_reason ?? cat.deduction_reasons?.[idx] ?? label);
         totalDeduction += pts;
       }
     });
@@ -775,6 +784,51 @@ function buildAdjustmentsSummary(
     valid_deductions_retained_points: round2(validRetained),
     lines,
   };
+}
+
+function applyDeterministicBroadDeductionNarrowing(
+  mutable: MutableDeduction[],
+  rawPayload: CommercialRubricPayload,
+  gateAssessments: ConcernAssessment[],
+  errors: string[],
+): void {
+  const assessmentById = indexAssessments(gateAssessments);
+
+  for (const item of mutable) {
+    if (
+      !shouldDeterministicallyNarrowDeduction(
+        item.entry.deduction_reason,
+        item.record.disposition,
+        item.record.normalized_points,
+      )
+    ) {
+      continue;
+    }
+
+    const category = findCategory(rawPayload, item.entry.category_key);
+    if (!category) {
+      errors.push(
+        `${item.entry.category_key}: broad deduction cannot be narrowed safely — category missing.`,
+      );
+      continue;
+    }
+
+    const match = matchDeductionToAssessment(item.entry, gateAssessments, assessmentById);
+    const narrowed = buildDeterministicNarrowedDeduction({
+      entry: item.entry,
+      category,
+      assessment: match.assessment,
+    });
+
+    if (!narrowed || isBroadCriticism(narrowed)) {
+      errors.push(`${item.entry.category_key}: broad deduction cannot be narrowed safely.`);
+      continue;
+    }
+
+    item.entry.deduction_reason = narrowed;
+    item.record.disposition = "NARROWED_AND_REDUCED";
+    item.record.reason = `Deterministic narrow rewrite from category evidence: ${narrowed.slice(0, 80)}`;
+  }
 }
 
 function findCategory(payload: CommercialRubricPayload, key: string): RubricCategoryScore | undefined {

@@ -78,6 +78,26 @@ describe("Literary Agent V1 certified parity — runtime definition", () => {
     assert.equal(repair!.exportName, "repairCommercialMemoValidation");
     const normalizer = def.normalization_plugins.find((p) => p.id === "memo_statistics");
     assert.equal(normalizer!.moduleId, "@/lib/commercial-review-repair");
+    assert.equal(normalizer!.exportName, "normalizeCommercialMemoStatistics");
+  });
+
+  it("6b. normalization metadata matches certified call graph", () => {
+    const def = literaryAgentRuntimeDefinition();
+    assert.deepEqual(
+      def.normalization_plugins.map((p) => p.id),
+      ["memo_statistics"],
+    );
+    assert.equal(
+      def.normalization_plugins.some((p) => p.id === "narrow_broad_deduction"),
+      false,
+    );
+    assert.equal(
+      def.normalization_plugins.some((p) => p.id === "rubric_against_gate"),
+      false,
+    );
+    const postScoring = def.validation_plugins.find((p) => p.id === "post_scoring_rubric");
+    assert.equal(postScoring!.moduleId, "@/lib/contrary-evidence/post-scoring-validation");
+    assert.equal(postScoring!.exportName, "validatePostScoringRubric");
   });
 
   it("7–8. registry resolves by key and commercial_analysis capability", () => {

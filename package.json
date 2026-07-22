@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test lib/*.test.ts lib/*/*.test.ts",
+    "test": "node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/*.test.ts lib/*/*.test.ts lib/*/*/*.test.ts",
     "trigger:dev": "npx trigger.dev@latest dev",
     "backfill:word-count": "node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply"
   },

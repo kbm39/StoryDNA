@@ -5,13 +5,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getManuscriptReviewContext } from "@/lib/reviews";
 import { getStoryDna } from "@/lib/storydna";
 import {
-  verifyOriginal,
+  buildReplacementPayload,
 } from "@/lib/editorial-generation/replacement-payload";
 import {
   generateRevisionCandidates,
 } from "@/lib/ai/anthropic";
 import { LITERARY_AGENT, type ParsedIssue } from "@/lib/ai/review-engine";
-import type { AuthorIntent, RevisionStatus, RevisionType } from "@/lib/types";
+import type { AuthorIntent, RevisionStatus } from "@/lib/types";
 import { buildReviewStatistics } from "@/lib/review-statistics";
 import {
   runFreshEditorialGeneration as runFreshEditorialGenerationCore,
@@ -34,9 +34,6 @@ const EDITORIAL_LIFECYCLE_STATUSES = new Set<RevisionStatus>([
   "rejected",
   "deferred",
 ]);
-
-// Structural / advisory revision types are exported as comments, not redlines.
-const COMMENT_TYPES = new Set<RevisionType>(["reorder", "move", "combine", "split", "comment_only"]);
 
 export interface RevisionGenerationStatus {
   hasAuthorResponses: boolean;
@@ -144,45 +141,6 @@ export async function setCandidateStatus(
   revalidatePath(`/manuscripts/${manuscriptId}`);
   revalidatePath("/suggested-edits");
   return { ok: true };
-}
-
-function buildReplacementPayload(
-  issues: ParsedIssue[],
-  manuscriptText: string,
-): { issues: Record<string, unknown>[] } {
-  return {
-    issues: issues.map((issue) => ({
-      text: issue.text,
-      area: issue.area || null,
-      severity: issue.severity,
-      source_section: issue.source_section || null,
-      success_criterion: issue.success_criterion || null,
-      candidates: issue.candidates.map((c) => {
-        const type = c.type as RevisionType;
-        return {
-          type,
-          original: c.original,
-          revised: c.revised,
-          locator: c.locator || null,
-          word_savings: c.word_savings,
-          reason: c.reason || null,
-          confidence: c.confidence,
-          confidence_reason: c.confidence_reason || null,
-          difficulty: c.difficulty || null,
-          story_risk: c.story_risk || null,
-          voice_risk: c.voice_risk || null,
-          commercial_impact: c.commercial_impact || null,
-          reader_impact: c.reader_impact || null,
-          grade_delta: c.grade_delta,
-          consequence_if_unchanged: c.consequence_if_unchanged || null,
-          dependencies: c.dependencies || null,
-          impacts: c.impacts,
-          export_mode: COMMENT_TYPES.has(type) ? "comment" : "track_change",
-          verified: verifyOriginal(c.original, manuscriptText),
-        };
-      }),
-    })),
-  };
 }
 
 /**

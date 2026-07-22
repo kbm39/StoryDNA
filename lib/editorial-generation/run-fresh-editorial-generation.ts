@@ -39,8 +39,6 @@ import {
   validateMemoBeforeRubric,
 } from "@/lib/commercial-review-generation";
 import { validateCommercialRubric } from "@/lib/rubric-validation";
-import { locatePassage } from "@/lib/manuscript-context";
-import type { RevisionType } from "@/lib/types";
 import {
   buildContraryEvidenceGatePromptBlock,
   buildGenreProfile,
@@ -53,6 +51,7 @@ import {
   type ConcernAssessment,
   type GateRunResult,
 } from "@/lib/contrary-evidence";
+import { buildReplacementPayload } from "@/lib/editorial-generation/replacement-payload";
 import { CONTRARY_EVIDENCE_GATE_VERSION } from "@/lib/contrary-evidence/constants.ts";
 import type {
   EditorialWorkflowHooks,
@@ -85,8 +84,6 @@ export interface FreshEditorialGenerationResult {
   diagnosticsStorageKey?: string | null;
 }
 
-const COMMENT_TYPES = new Set<RevisionType>(["reorder", "move", "combine", "split", "comment_only"]);
-
 function intentFromDna(
   dna: Awaited<ReturnType<typeof getStoryDna>>,
 ): AuthorIntent | null {
@@ -99,37 +96,6 @@ function intentFromDna(
     about: d.about.final ?? d.about.proposed,
     themes: d.themes.final ?? d.themes.proposed.map((t) => t.name),
     emotionalPromise: `Beginning: ${emo.beginning}; Middle: ${emo.middle}; Ending: ${emo.ending}; After: ${emo.after_finishing}`,
-  };
-}
-
-function verifyOriginal(original: string, manuscriptText: string): boolean {
-  if (!original.trim() || original.trim().length < 8) return false;
-  return locatePassage(manuscriptText, original) !== null;
-}
-
-function buildReplacementPayload(
-  issues: ParsedIssue[],
-  manuscriptText: string,
-): { issues: Record<string, unknown>[] } {
-  return {
-    issues: issues.map((issue) => ({
-      text: issue.text,
-      area: issue.area || null,
-      severity: issue.severity,
-      source_section: issue.source_section || null,
-      success_criterion: issue.success_criterion || null,
-      candidates: issue.candidates.map((c) => {
-        const type = c.type as RevisionType;
-        return {
-          type,
-          original: c.original,
-          revised: c.revised,
-          reason: c.reason || null,
-          locator: c.locator || null,
-          verified: COMMENT_TYPES.has(type) ? true : verifyOriginal(c.original, manuscriptText),
-        };
-      }),
-    })),
   };
 }
 

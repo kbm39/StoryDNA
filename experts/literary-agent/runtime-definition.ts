@@ -133,24 +133,15 @@ function buildLiteraryAgentRuntimeDefinitionBase(): Omit<
       },
     ],
 
+    // Certified top-level normalization: memo statistics only (run-fresh-editorial-generation).
+    // Rubric normalization (normalizeRubricAgainstGate, including narrow-broad deduction) runs
+    // inside validatePostScoringRubric — not as separate pipeline stages.
     normalization_plugins: [
       {
         id: "memo_statistics",
         moduleId: "@/lib/commercial-review-repair",
         exportName: "normalizeCommercialMemoStatistics",
         stage: "memo_stats",
-      },
-      {
-        id: "rubric_against_gate",
-        moduleId: "@/lib/contrary-evidence/normalize-rubric-against-gate",
-        exportName: "normalizeRubricAgainstGate",
-        stage: "rubric",
-      },
-      {
-        id: "narrow_broad_deduction",
-        moduleId: "@/lib/contrary-evidence/narrow-broad-deduction",
-        exportName: "narrowBroadDeductionsInPayload",
-        stage: "rubric",
       },
     ],
 

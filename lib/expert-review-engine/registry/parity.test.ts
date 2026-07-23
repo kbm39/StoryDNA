@@ -174,6 +174,8 @@ describe("Literary Agent V1 certified parity — runtime definition", () => {
     assert.equal(projected.display_name, LITERARY_AGENT.reviewer);
     assert.deepEqual(projected.recommendation_values, [...LITERARY_AGENT_RECOMMENDATION_VALUES]);
     assert.deepEqual(projected.personality, LITERARY_AGENT.personality);
+    assert.deepEqual(projected.priority, { tier: "core", base: 100 });
+    assert.equal("runOrder" in projected.priority, false);
   });
 
   it("recommendation labels preserved from output contract", () => {

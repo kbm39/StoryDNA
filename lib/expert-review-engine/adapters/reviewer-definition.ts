@@ -6,6 +6,13 @@
 
 import type { ExpertRuntimeDefinition } from "../types.ts";
 
+/** ReviewerDefinition priority may include orchestration-only fields excluded from runtime hash. */
+export interface ReviewerDefinitionPrioritySource {
+  tier: "core" | "standard" | "specialist";
+  base: number;
+  runOrder?: number;
+}
+
 /** Minimal ReviewerDefinition shape for adapter input (matches certified LITERARY_AGENT). */
 export interface ReviewerDefinitionSource {
   id: string;
@@ -17,7 +24,7 @@ export interface ReviewerDefinitionSource {
   knowledgeDomains: ExpertRuntimeDefinition["knowledge_domains"];
   triggers: ExpertRuntimeDefinition["trigger_conditions"];
   prerequisites: Array<{ key: string; description: string; requires: string; onUnmet: string }>;
-  priority: ExpertRuntimeDefinition["priority"];
+  priority: ReviewerDefinitionPrioritySource;
   failureConditions: Array<{
     key: string;
     condition: string;
@@ -48,6 +55,16 @@ export interface ReviewerRuntimeIdentityProjection {
   recommendation_values: string[];
 }
 
+/** Allowlisted runtime priority — excludes ReviewerDefinition-only orchestration fields. */
+export function projectRuntimePriority(
+  priority: ReviewerDefinitionPrioritySource,
+): ExpertRuntimeDefinition["priority"] {
+  return {
+    tier: priority.tier,
+    base: priority.base,
+  };
+}
+
 export function reviewerDefinitionToRuntimeIdentity(
   def: ReviewerDefinitionSource,
 ): ReviewerRuntimeIdentityProjection {
@@ -65,7 +82,7 @@ export function reviewerDefinitionToRuntimeIdentity(
     knowledge_domains: def.knowledgeDomains,
     prerequisites: def.prerequisites.map((p) => p.key),
     trigger_conditions: def.triggers,
-    priority: def.priority,
+    priority: projectRuntimePriority(def.priority),
     failure_conditions: def.failureConditions.map((f) => ({
       key: f.key,
       condition: f.condition,

@@ -13,6 +13,19 @@ import {
 
 const EXPERT_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
+export function validateOptionalModuleExportPair(
+  label: string,
+  moduleId: string | undefined,
+  exportName: string | undefined,
+): string | null {
+  const hasModule = Boolean(moduleId?.trim());
+  const hasExport = Boolean(exportName?.trim());
+  if (hasModule !== hasExport) {
+    return `${label}: moduleId and exportName must both be set or both be absent`;
+  }
+  return null;
+}
+
 export function isExpertCapability(value: string): value is ExpertCapability {
   return (EXPERT_CAPABILITIES as readonly string[]).includes(value);
 }
@@ -67,6 +80,20 @@ export function validateExpertRuntimeDefinition(
   if (!def.passage_verification_policy?.payloadBuilderModuleId) {
     errors.push("Missing passage_verification_policy");
   }
+
+  const rubricPairError = validateOptionalModuleExportPair(
+    "rubric_definition",
+    def.rubric_definition.moduleId,
+    def.rubric_definition.exportName,
+  );
+  if (rubricPairError) errors.push(rubricPairError);
+
+  const docxPairError = validateOptionalModuleExportPair(
+    "export_policy",
+    def.export_policy.docxModuleId,
+    def.export_policy.docxExportName,
+  );
+  if (docxPairError) errors.push(docxPairError);
 
   const versionCheck = validateReviewRuntimeVersionSet(def.runtime_versions);
   if (!versionCheck.ok) {

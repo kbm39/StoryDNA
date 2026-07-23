@@ -142,7 +142,34 @@ export interface EditorInChiefRules {
   duplicateReviewPolicy: "block_same_expert_same_version";
 }
 
-export interface ExpertRuntimeDefinition {
+/**
+ * Top-level runtime schema roots that may carry module path references.
+ *
+ * Every root here must have a corresponding entry in RUNTIME_MODULE_REF_ROOT_COLLECTORS.
+ * Module-only roots are documented there and do not produce export-verified refs.
+ */
+export interface ExpertRuntimeModuleReferenceFields {
+  prompt_builder: {
+    reviewerDefinitionModuleId: string;
+    reviewerDefinitionExport: string;
+    systemPromptExport: string;
+    reviewPromptExport: string;
+    revisionCandidatesPromptExport: string;
+  };
+
+  rubric_definition: RubricDefinitionRef;
+  validation_plugins: ValidationPluginRef[];
+  repair_plugins: RepairPluginRef[];
+  normalization_plugins: NormalizationPluginRef[];
+
+  contrary_evidence_policy: ContraryEvidencePolicy;
+  revision_candidate_policy: RevisionCandidatePolicy;
+  passage_verification_policy: PassageVerificationPolicy;
+  publishing_policy: PublishingPolicy;
+  export_policy: ExportPolicy;
+}
+
+export interface ExpertRuntimeDefinition extends ExpertRuntimeModuleReferenceFields {
   schema_version: typeof EXPERT_RUNTIME_SCHEMA_VERSION;
 
   expert_key: string;
@@ -195,27 +222,7 @@ export interface ExpertRuntimeDefinition {
 
   generation_profile: GenerationProfile;
 
-  prompt_builder: {
-    reviewerDefinitionModuleId: string;
-    reviewerDefinitionExport: string;
-    systemPromptExport: string;
-    reviewPromptExport: string;
-    revisionCandidatesPromptExport: string;
-  };
-
-  rubric_definition: RubricDefinitionRef;
   scoring_weights: Record<string, number> | null;
-
-  validation_plugins: ValidationPluginRef[];
-  repair_plugins: RepairPluginRef[];
-  normalization_plugins: NormalizationPluginRef[];
-
-  contrary_evidence_policy: ContraryEvidencePolicy;
-  revision_candidate_policy: RevisionCandidatePolicy;
-  passage_verification_policy: PassageVerificationPolicy;
-
-  publishing_policy: PublishingPolicy;
-  export_policy: ExportPolicy;
 
   required_context: Array<"storydna" | "prior_review" | "author_intent" | "series_bible">;
 

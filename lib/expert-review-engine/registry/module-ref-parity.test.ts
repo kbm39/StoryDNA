@@ -1,95 +1,69 @@
 /**
- * Dynamic import verification for Literary Agent runtime module references.
+ * Registry-wide dynamic import verification for advertised module references (P2-03).
  */
-import { describe, it } from "node:test";
+import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { literaryAgentRuntimeDefinition } from "@/experts/literary-agent/runtime-definition.ts";
-import type { ExpertRuntimeDefinition } from "../types.ts";
+import { collectAdvertisedModuleRefs } from "../collect-module-refs.ts";
+import { verifyAdvertisedModuleRefs } from "../verify-module-refs.ts";
+import {
+  bootstrapExpertRuntimeRegistry,
+  clearExpertRuntimeRegistryForTests,
+  listExpertRuntimeDefinitions,
+} from "./in-code.ts";
 
-interface ModuleExportRef {
-  label: string;
-  moduleId: string;
-  exportName: string;
-  kind: "function" | "object";
-}
+describe("registry-wide module ref parity — dynamic import", () => {
+  beforeEach(() => {
+    clearExpertRuntimeRegistryForTests();
+    bootstrapExpertRuntimeRegistry();
+  });
 
-function collectLiteraryAgentModuleRefs(def: ExpertRuntimeDefinition): ModuleExportRef[] {
-  const refs: ModuleExportRef[] = [];
+  it("verifies every registered expert runtime definition", async () => {
+    const entries = listExpertRuntimeDefinitions({ includeDisabled: true });
+    assert.ok(entries.length >= 1);
 
-  const pb = def.prompt_builder;
-  refs.push(
-    { label: "prompt_builder.reviewerDefinition", moduleId: pb.reviewerDefinitionModuleId, exportName: pb.reviewerDefinitionExport, kind: "object" },
-    { label: "prompt_builder.systemPrompt", moduleId: pb.reviewerDefinitionModuleId, exportName: pb.systemPromptExport, kind: "function" },
-    { label: "prompt_builder.reviewPrompt", moduleId: pb.reviewerDefinitionModuleId, exportName: pb.reviewPromptExport, kind: "function" },
-    { label: "prompt_builder.revisionCandidatesPrompt", moduleId: pb.reviewerDefinitionModuleId, exportName: pb.revisionCandidatesPromptExport, kind: "function" },
-  );
+    for (const entry of entries) {
+      const result = await verifyAdvertisedModuleRefs(entry.definition);
+      if (!result.ok) {
+        assert.fail(
+          `module ref verification failed for ${entry.definition.expert_key}: ${result.failures.map((f) => `${f.fieldPath} ${f.reason}`).join("; ")}`,
+        );
+      }
+    }
+  });
 
-  if (def.rubric_definition.moduleId && def.rubric_definition.exportName) {
-    refs.push({
-      label: "rubric_definition",
-      moduleId: def.rubric_definition.moduleId,
-      exportName: def.rubric_definition.exportName,
-      kind: "function",
-    });
-  }
-
-  for (const plugin of def.validation_plugins) {
-    refs.push({ label: `validation:${plugin.id}`, moduleId: plugin.moduleId, exportName: plugin.exportName, kind: "function" });
-  }
-
-  for (const plugin of def.repair_plugins) {
-    refs.push({ label: `repair:${plugin.id}`, moduleId: plugin.moduleId, exportName: plugin.exportName, kind: "function" });
-  }
-
-  for (const plugin of def.normalization_plugins) {
-    refs.push({ label: `normalization:${plugin.id}`, moduleId: plugin.moduleId, exportName: plugin.exportName, kind: "function" });
-  }
-
-  if (def.passage_verification_policy.payloadBuilderModuleId) {
-    refs.push({
-      label: "passage_verification_policy",
-      moduleId: def.passage_verification_policy.payloadBuilderModuleId,
-      exportName: def.passage_verification_policy.payloadBuilderExport,
-      kind: "function",
-    });
-  }
-
-  if (def.export_policy.docxModuleId && def.export_policy.docxExportName) {
-    refs.push({
-      label: "export_policy.docx",
-      moduleId: def.export_policy.docxModuleId,
-      exportName: def.export_policy.docxExportName,
-      kind: "function",
-    });
-  }
-
-  return refs;
-}
+  it("collects refs for every registered expert with stable provenance", () => {
+    const entries = listExpertRuntimeDefinitions({ includeDisabled: true });
+    for (const entry of entries) {
+      const refs = collectAdvertisedModuleRefs(entry.definition);
+      assert.ok(refs.length > 0, `expected refs for ${entry.definition.expert_key}`);
+      assert.ok(refs.every((r) => r.expertKey === entry.definition.expert_key));
+    }
+  });
+});
 
 describe("Literary Agent runtime module ref parity — dynamic import", () => {
   const def = literaryAgentRuntimeDefinition();
-  const refs = collectLiteraryAgentModuleRefs(def);
+  const refs = collectAdvertisedModuleRefs(def);
 
-  it("collects every advertised module export reference", () => {
-    assert.equal(refs.length, 13);
-    const labels = refs.map((r) => r.label);
+  it("collects every advertised module export reference for Literary Agent", () => {
+    const logicalIds = refs.map((r) => r.logicalId);
     assert.deepEqual(def.normalization_plugins.map((p) => p.id), ["memo_statistics"]);
-    assert.ok(labels.includes("normalization:memo_statistics"));
-    assert.ok(labels.includes("validation:post_scoring_rubric"));
-    assert.equal(labels.some((l) => l.includes("narrow_broad")), false);
-    assert.equal(labels.some((l) => l.includes("rubric_against_gate")), false);
+    assert.ok(logicalIds.includes("normalization:memo_statistics"));
+    assert.ok(logicalIds.includes("validation:post_scoring_rubric"));
+    assert.equal(logicalIds.some((id) => id.includes("narrow_broad")), false);
+    assert.equal(logicalIds.some((id) => id.includes("rubric_against_gate")), false);
   });
 
-  for (const ref of refs) {
-    it(`${ref.label} resolves ${ref.moduleId} → ${ref.exportName}`, async () => {
-      const mod = (await import(`${ref.moduleId}.ts`)) as Record<string, unknown>;
-      assert.ok(ref.exportName in mod, `missing export ${ref.exportName} on ${ref.moduleId}`);
-      const value = mod[ref.exportName];
-      if (ref.kind === "function") {
-        assert.equal(typeof value, "function", `${ref.exportName} must be a function`);
-      } else {
-        assert.ok(value !== undefined && value !== null, `${ref.exportName} must be defined`);
-      }
-    });
-  }
+  it("resolves every Literary Agent advertised ref via shared verifier", async () => {
+    const result = await verifyAdvertisedModuleRefs(def);
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.refs.length, refs.length);
+      assert.deepEqual(
+        result.refs.map((r) => r.fieldPath),
+        refs.map((r) => r.fieldPath),
+      );
+    }
+  });
 });

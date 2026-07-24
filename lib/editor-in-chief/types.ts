@@ -10,6 +10,14 @@ export type SelectionReasonCode =
   | "default_commercial"
   | "admin_inspection";
 
+export type UnresolvedExpertReason =
+  | "unknown_explicit_expert"
+  | "malformed_explicit_expert_key";
+
+export type UnresolvedCapabilityReason =
+  | "no_registered_expert_for_capability"
+  | "relationship_not_registered";
+
 export interface SelectionReason {
   code: SelectionReasonCode;
   detail: string;
@@ -37,14 +45,20 @@ export interface ExpertAssignment {
   reasons: SelectionReason[];
 }
 
+export interface UnresolvedExpert {
+  expertKey: string;
+  reason: UnresolvedExpertReason;
+}
+
 export interface UnresolvedCapability {
   capability: ExpertCapability;
-  reason: string;
+  reason: UnresolvedCapabilityReason;
 }
 
 export interface ExpertAssignmentPlan {
   assignments: ExpertAssignment[];
   unresolved: UnresolvedCapability[];
+  unresolvedExperts: UnresolvedExpert[];
   /** Phase 1: routing only — never executes reviews. */
   executionPlanned: false;
 }

@@ -10,6 +10,7 @@ import {
   hashExpertRuntimeDefinition,
   validateReviewRuntimeVersionSet,
 } from "./types.ts";
+import { validateEditorInChiefRelationshipRules } from "./expert-relationships.ts";
 
 const EXPERT_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -94,6 +95,10 @@ export function validateExpertRuntimeDefinition(
     def.export_policy.docxExportName,
   );
   if (docxPairError) errors.push(docxPairError);
+
+  errors.push(
+    ...validateEditorInChiefRelationshipRules(def.expert_key, def.editor_in_chief_rules),
+  );
 
   const versionCheck = validateReviewRuntimeVersionSet(def.runtime_versions);
   if (!versionCheck.ok) {

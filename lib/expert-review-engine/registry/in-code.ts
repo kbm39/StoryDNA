@@ -13,6 +13,7 @@ import {
   hashExpertRuntimeDefinition,
 } from "../types.ts";
 import { validateExpertRuntimeDefinition } from "../validate-runtime-definition.ts";
+import { deepFreeze } from "../deep-freeze.ts";
 
 export class ExpertRegistryError extends Error {
   constructor(message: string) {
@@ -43,7 +44,8 @@ export function registerExpertRuntimeDefinition(def: ExpertRuntimeDefinition): E
     throw new ExpertRegistryError(`Duplicate expert version: ${vKey}`);
   }
 
-  const frozen = Object.freeze(structuredClone(def)) as ExpertRuntimeDefinition;
+  const cloned = structuredClone(def) as ExpertRuntimeDefinition;
+  const frozen = deepFreeze(cloned);
   const entry: ExpertRuntimeRegistryEntry = Object.freeze({
     definition: frozen,
     definitionHash: validation.definitionHash,

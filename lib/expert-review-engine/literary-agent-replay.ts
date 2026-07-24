@@ -17,8 +17,10 @@ import {
   validateMemoBeforeRubric,
 } from "@/lib/commercial-review-generation.ts";
 import { buildReviewGradingRecord } from "@/lib/commercial-review-pipeline.ts";
-import { GRADING_FORMULA_VERSION } from "@/lib/commercial-fiction-rubric.ts";
+import { GRADING_FORMULA_VERSION, type RubricCategoryScore } from "@/lib/commercial-fiction-rubric.ts";
 import { normalizeCommercialMemoStatistics } from "@/lib/commercial-review-repair.ts";
+import { extractMemoRecommendation } from "@/lib/contrary-evidence/recommendation-consistency.ts";
+import type { ConcernAssessment } from "@/lib/contrary-evidence/types.ts";
 import { validatePostScoringRubric } from "@/lib/contrary-evidence/post-scoring-validation.ts";
 import { buildReplacementPayload } from "@/lib/editorial-generation/replacement-payload.ts";
 import { buildReviewStatistics, type ReviewStatistics } from "@/lib/review-statistics.ts";
@@ -35,11 +37,19 @@ import {
   readExpertLiteraryAgentReplayEnabled,
 } from "./feature-flags.ts";
 import {
+  assertReplayComparisonProjectionComplete,
   LITERARY_AGENT_REPLAY_DEFINITION_HASH,
   LITERARY_AGENT_REPLAY_EXPERT_KEY,
+  REPLAY_COMPARISON_PROJECTION_GROUPS,
   validateLiteraryAgentReplayArtifactBundle,
   type LiteraryAgentExpectedCertifiedResult,
   type LiteraryAgentReplayArtifactBundle,
+  type ReplayCategoryProjection,
+  type ReplayContraryEvidenceProjection,
+  type ReplayEditorialIssueProjection,
+  type ReplayNormalizationProjection,
+  type ReplayOutcomeProjection,
+  type ReplayRevisionCandidateProjection,
 } from "./replay-artifact-contract.ts";
 import {
   orderedLiteraryAgentReplayStages,
@@ -52,6 +62,7 @@ export {
   readExpertLiteraryAgentReplayEnabled,
   LITERARY_AGENT_REPLAY_DEFINITION_HASH,
   LITERARY_AGENT_REPLAY_EXPERT_KEY,
+  REPLAY_COMPARISON_PROJECTION_GROUPS,
 };
 
 export type LiteraryAgentReplayParityStatus =
@@ -212,25 +223,216 @@ function failureResult(
   };
 }
 
+/** Normalize text for deterministic identity hashing without exposing manuscript prose. */
+function normalizeDeterministicText(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** SHA-256 hash of normalized text for safe structured comparison. */
+function hashDeterministicText(text: string): string {
+  return hashCanonicalOutput({ text: normalizeDeterministicText(text) });
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
+}
+
+function projectCategory(cat: RubricCategoryScore): ReplayCategoryProjection {
+  return {
+    category_key: cat.category_key,
+    points_earned: cat.points_earned,
+    maximum_points: cat.maximum_points,
+    deduction: cat.deduction,
+    weighted_contribution: cat.weighted_contribution,
+    normalized_score:
+      cat.maximum_points > 0 ? roundScore(cat.points_earned / cat.maximum_points) : 0,
+    confidence: cat.confidence,
+    deduction_total: cat.deduction,
+    has_positive_evidence: cat.strengths.length > 0,
+    strength_count: cat.strengths.length,
+    deduction_reason_hashes: cat.deduction_reasons.map((reason) => hashDeterministicText(reason)),
+    example_hashes: cat.examples.map((example) => hashDeterministicText(example.text)),
+  };
+}
+
+function projectContraryEvidence(assessment: ConcernAssessment): ReplayContraryEvidenceProjection {
+  return {
+    concern_id: assessment.concern_id,
+    rubric_category: assessment.rubric_category,
+    status: assessment.status,
+    confidence: assessment.confidence,
+    points_invalidated: assessment.points_invalidated,
+    duplicate_points_removed: assessment.duplicate_points_removed,
+    overbreadth_points_removed: assessment.overbreadth_points_removed,
+    remaining_deduction: assessment.remaining_deduction,
+    accepted_final_deduction: assessment.remaining_deduction,
+    prior_deduction: assessment.prior_deduction,
+    duplicate_status: assessment.duplicate_points_removed > 0,
+    overbreadth_status: assessment.overbreadth_points_removed > 0,
+    invalidation_status: assessment.points_invalidated > 0,
+    narrowed_finding_hash: assessment.narrowed_current_finding
+      ? hashDeterministicText(assessment.narrowed_current_finding)
+      : null,
+  };
+}
+
+/**
+ * Derive a stable editorial issue identity from approved deterministic fields.
+ * Identity = category + severity + normalized title hash. Collisions append #N.
+ */
+function deriveEditorialIssueKey(
+  issue: Record<string, unknown>,
+  seen: Set<string>,
+): string {
+  const base = [
+    String(issue.area ?? "general"),
+    String(issue.severity ?? "unknown"),
+    hashDeterministicText(String(issue.text ?? "")),
+  ].join(":");
+  if (!seen.has(base)) {
+    seen.add(base);
+    return base;
+  }
+  let suffix = 2;
+  while (seen.has(`${base}#${suffix}`)) suffix += 1;
+  const disambiguated = `${base}#${suffix}`;
+  seen.add(disambiguated);
+  return disambiguated;
+}
+
+function projectEditorialIssue(
+  issue: Record<string, unknown>,
+  issueKey: string,
+): ReplayEditorialIssueProjection {
+  const candidates = Array.isArray(issue.candidates) ? issue.candidates : [];
+  return {
+    issue_key: issueKey,
+    category: typeof issue.area === "string" ? issue.area : null,
+    title_hash: hashDeterministicText(String(issue.text ?? "")),
+    severity: String(issue.severity ?? "unknown"),
+    status: "published_candidate",
+    deduction_amount: 0,
+    source_section: typeof issue.source_section === "string" ? issue.source_section : null,
+    success_criterion_hash:
+      typeof issue.success_criterion === "string"
+        ? hashDeterministicText(issue.success_criterion)
+        : null,
+    candidate_count: candidates.length,
+    recommended_action_hash:
+      typeof issue.success_criterion === "string"
+        ? hashDeterministicText(issue.success_criterion)
+        : null,
+  };
+}
+
+/**
+ * Derive a stable revision candidate identity from issue key, order, operation, and text hash.
+ */
+function deriveRevisionCandidateKey(
+  issueKey: string,
+  candidate: Record<string, unknown>,
+  order: number,
+): string {
+  return [
+    issueKey,
+    String(order),
+    String(candidate.type ?? "unknown"),
+    hashDeterministicText(String(candidate.original ?? "")),
+  ].join(":");
+}
+
+function projectRevisionCandidate(
+  issueKey: string,
+  candidate: Record<string, unknown>,
+  order: number,
+): ReplayRevisionCandidateProjection {
+  const candidateKey = deriveRevisionCandidateKey(issueKey, candidate, order);
+  return {
+    candidate_key: candidateKey,
+    linked_issue_key: issueKey,
+    operation: String(candidate.type ?? "unknown"),
+    location: typeof candidate.locator === "string" ? candidate.locator : null,
+    reason_hash: typeof candidate.reason === "string" ? hashDeterministicText(candidate.reason) : null,
+    status: candidate.verified === true ? "verified" : "unverified",
+    replacement_text_hash: hashDeterministicText(String(candidate.revised ?? "")),
+    original_text_hash: hashDeterministicText(String(candidate.original ?? "")),
+    order,
+    confidence: typeof candidate.confidence === "number" ? candidate.confidence : 0,
+  };
+}
+
 /** Explicit projection for certified-result comparison — only listed fields are compared. */
 export function projectCertifiedReplayComparison(
   state: ReplayPipelineState,
 ): LiteraryAgentExpectedCertifiedResult {
-  const candidateCount = state.replacementPayload.issues.reduce((sum, issue) => {
-    const candidates = (issue as { candidates?: unknown[] }).candidates;
-    return sum + (Array.isArray(candidates) ? candidates.length : 0);
-  }, 0);
+  const payload = state.postScoring.adjustedPayload;
+  const categories: Record<string, ReplayCategoryProjection> = {};
+  for (const cat of [...payload.craft_categories, ...payload.acquisition_categories]) {
+    categories[cat.category_key] = projectCategory(cat);
+  }
 
-  return {
-    manuscript_score: state.gradingRecord.manuscript_score as number,
-    manuscript_letter_grade: (state.gradingRecord.manuscript_letter_grade as string | null) ?? null,
-    craft_score: state.gradingRecord.craft_score as number,
-    acquisition_readiness_score: state.gradingRecord.acquisition_readiness_score as number,
+  const contraryEvidence: Record<string, ReplayContraryEvidenceProjection> = {};
+  for (const assessment of state.bundle.capturedValidationMetadata.preGateAssessments ?? []) {
+    contraryEvidence[assessment.concern_id] = projectContraryEvidence(assessment);
+  }
+
+  const editorialIssues: Record<string, ReplayEditorialIssueProjection> = {};
+  const revisionCandidates: Record<string, ReplayRevisionCandidateProjection> = {};
+  const seenIssueKeys = new Set<string>();
+  let candidateCount = 0;
+
+  for (const issue of state.replacementPayload.issues) {
+    const issueRecord = issue as Record<string, unknown>;
+    const issueKey = deriveEditorialIssueKey(issueRecord, seenIssueKeys);
+    editorialIssues[issueKey] = projectEditorialIssue(issueRecord, issueKey);
+    const candidates = Array.isArray(issueRecord.candidates) ? issueRecord.candidates : [];
+    candidates.forEach((candidate, index) => {
+      const candidateKey = deriveRevisionCandidateKey(issueKey, candidate as Record<string, unknown>, index);
+      revisionCandidates[candidateKey] = projectRevisionCandidate(
+        issueKey,
+        candidate as Record<string, unknown>,
+        index,
+      );
+      candidateCount += 1;
+    });
+  }
+
+  const outcome: ReplayOutcomeProjection = {
+    manuscript_score: state.adjustedGrading.manuscriptScore,
+    manuscript_letter_grade: state.adjustedGrading.letterGrade || null,
+    craft_score: state.adjustedGrading.craftScore,
+    acquisition_readiness_score: state.adjustedGrading.acquisitionScore,
+    recommendation: extractMemoRecommendation(state.memoContent),
+    grading_formula_version: GRADING_FORMULA_VERSION,
+    canonical_word_count: state.statistics.canonical_word_count,
+    grade_status: state.adjustedGrading.gradeStatus,
+    review_reliability_status: state.adjustedGrading.reviewReliabilityStatus,
+  };
+
+  const normalization: ReplayNormalizationProjection = {
     issue_count: state.replacementPayload.issues.length,
     candidate_count: candidateCount,
-    canonical_word_count: state.statistics.canonical_word_count,
-    grading_formula_version: GRADING_FORMULA_VERSION,
+    points_invalidated: state.postScoring.pointsInvalidatedTotal,
+    duplicate_points_removed: state.postScoring.duplicatePointsRemovedTotal,
+    overbreadth_points_removed: state.postScoring.overbreadthPointsRemovedTotal,
+    restored_points_total: state.postScoring.restoredPointsTotal,
+    duplicate_deduction_count: state.postScoring.duplicateDeductionCount,
+    blocked_stale_deduction_count: state.postScoring.blockedStaleDeductionCount,
+    overbroad_deductions_narrowed: state.postScoring.overbroadDeductionsNarrowed,
+    raw_model_score: state.postScoring.rawModelScore,
   };
+
+  const projection: LiteraryAgentExpectedCertifiedResult = {
+    outcome,
+    categories,
+    contrary_evidence: contraryEvidence,
+    editorial_issues: editorialIssues,
+    revision_candidates: revisionCandidates,
+    normalization,
+  };
+
+  assertReplayComparisonProjectionComplete(projection);
+  return projection;
 }
 
 function mapArtifactValidationFailure(

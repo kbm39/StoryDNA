@@ -6,12 +6,11 @@ import { fileURLToPath } from "node:url";
 import {
   ACQUISITION_CATEGORIES,
   CRAFT_CATEGORIES,
-  GRADING_FORMULA_VERSION,
 } from "@/lib/commercial-fiction-rubric.ts";
 import type { CommercialRubricPayload, RubricCategoryScore } from "@/lib/commercial-fiction-rubric.ts";
+import type { ConcernAssessment } from "@/lib/contrary-evidence/types.ts";
 import type { GenerationMeta } from "@/lib/ai/shared.ts";
 import type { ParsedIssue } from "@/lib/ai/review-engine.ts";
-import { letterGradeFromScore } from "@/lib/grade-calculation.ts";
 import { canonicalManuscriptLengthSentence } from "@/lib/word-count-reporting.ts";
 import {
   LITERARY_AGENT_EXPERT_VERSION,
@@ -34,7 +33,10 @@ import {
   LITERARY_AGENT_REPLAY_ARTIFACT_SCHEMA_VERSION,
   LITERARY_AGENT_REPLAY_DEFINITION_HASH,
   LITERARY_AGENT_REPLAY_EXPERT_KEY,
+  REPLAY_COMPARISON_PROJECTION_GROUPS,
+  assertReplayComparisonProjectionComplete,
   validateLiteraryAgentReplayArtifactBundle,
+  type LiteraryAgentExpectedCertifiedResult,
   type LiteraryAgentReplayArtifactBundle,
 } from "./replay-artifact-contract.ts";
 import {
@@ -108,6 +110,72 @@ const SYNTHETIC_ISSUE: ParsedIssue = {
   ],
 };
 
+const SYNTHETIC_ISSUE_2: ParsedIssue = {
+  key: "replay-issue-2",
+  text: "Synthetic character motivation gap for replay testing.",
+  area: "character",
+  severity: "high",
+  source_section: "memo",
+  success_criterion: "Clarify protagonist agency.",
+  candidates: [
+    {
+      type: "replace",
+      original: "She walked slowly toward the river bank.",
+      revised: "She strode toward the river bank with clear intent.",
+      locator: "Chapter One",
+      word_savings: 0,
+      reason: "stronger agency",
+      confidence: 75,
+      confidence_reason: "synthetic",
+      difficulty: "medium",
+      story_risk: "low",
+      voice_risk: "low",
+      commercial_impact: "high",
+      reader_impact: "high",
+      grade_delta: 2,
+      consequence_if_unchanged: "flat protagonist drive",
+      dependencies: "",
+      impacts: {
+        pacing: 0,
+        clarity: 1,
+        commercial_readiness: 1,
+        emotional_impact: 1,
+        voice_preservation: 0,
+        submission_readiness: 1,
+      },
+    },
+  ],
+};
+
+function syntheticConcernAssessment(
+  overrides: Partial<ConcernAssessment> = {},
+): ConcernAssessment {
+  return {
+    comparison_mode: "REVISION_COMPARISON",
+    concern_id: "concern-replay-1",
+    root_issue: "Synthetic pacing concern",
+    rubric_category: "pacing_narrative_tension",
+    prior_criticism: "Prior pacing issue in synthetic replay fixture.",
+    prior_evidence: ["Synthetic prior evidence passage one."],
+    current_supporting_evidence: [],
+    current_contrary_evidence: [],
+    revision_that_addresses_it: null,
+    original_basis_still_present: true,
+    status: "PARTIALLY_IMPROVED",
+    confidence: "high",
+    prior_deduction: 2,
+    points_restored: 1,
+    points_invalidated: 0,
+    duplicate_points_removed: 0,
+    overbreadth_points_removed: 0,
+    remaining_deduction: 1,
+    narrowed_current_finding: null,
+    explanation: "Synthetic contrary-evidence explanation.",
+    contrary_evidence_analysis: "Synthetic contrary-evidence analysis.",
+    ...overrides,
+  };
+}
+
 function sampleCategory(key: string, name: string, max: number, earned: number): RubricCategoryScore {
   const safeEarned = Math.min(earned, max);
   return {
@@ -150,11 +218,11 @@ function syntheticGenerationMeta(truncated = false): GenerationMeta {
 }
 
 function syntheticMemoContent(): string {
-  return `${canonicalManuscriptLengthSentence(SYNTHETIC_WORD_COUNT)}\n\nSynthetic acquisitions memo for replay harness testing.`;
+  return `${canonicalManuscriptLengthSentence(SYNTHETIC_WORD_COUNT)}\n\n**REQUEST**\n\nSynthetic acquisitions memo for replay harness testing.`;
 }
 
 function syntheticRevisionRaw(): string {
-  return JSON.stringify({ issues: [SYNTHETIC_ISSUE] });
+  return JSON.stringify({ issues: [SYNTHETIC_ISSUE, SYNTHETIC_ISSUE_2] });
 }
 
 function productionSourceFiles(): string[] {
@@ -174,6 +242,15 @@ function productionSourceFiles(): string[] {
   return files;
 }
 
+async function buildValidExpectedProjection(): Promise<LiteraryAgentExpectedCertifiedResult> {
+  const bundle = await buildSyntheticBundle({ skipDeriveExpected: true });
+  const derived = await deriveReplayCertifiedProjection(bundle);
+  if ("ok" in derived && derived.ok === false) {
+    throw new Error(`Failed to derive expected projection: ${derived.message}`);
+  }
+  return derived as LiteraryAgentExpectedCertifiedResult;
+}
+
 async function buildSyntheticBundle(
   overrides: Partial<LiteraryAgentReplayArtifactBundle> & {
     skipDeriveExpected?: boolean;
@@ -183,9 +260,6 @@ async function buildSyntheticBundle(
   } = {},
 ): Promise<LiteraryAgentReplayArtifactBundle> {
   const payload = syntheticRubricPayload();
-  const craftScore = payload.craft_categories.reduce((s, c) => s + c.points_earned, 0);
-  const acqScore = payload.acquisition_categories.reduce((s, c) => s + c.points_earned, 0);
-  const totalScore = craftScore + acqScore;
 
   const base: LiteraryAgentReplayArtifactBundle = {
     artifactSchemaVersion: LITERARY_AGENT_REPLAY_ARTIFACT_SCHEMA_VERSION,
@@ -201,7 +275,7 @@ async function buildSyntheticBundle(
       passageVerificationText: SYNTHETIC_PASSAGE,
     },
     manuscriptHash: "synthetic-manuscript-hash",
-    reviewIntent: null,
+    reviewIntent: "fresh_review",
     certifiedPipelineVersion: "two_call_v1",
     capturedMemoOutput: {
       rawContent: syntheticMemoContent(),
@@ -220,7 +294,7 @@ async function buildSyntheticBundle(
       storedWordCount: SYNTHETIC_WORD_COUNT,
       contentHash: "synthetic-content-hash",
       reviewMeta: null,
-      preGateAssessments: [],
+      preGateAssessments: [syntheticConcernAssessment()],
       preScoringGate: {
         valid: true,
         errors: [],
@@ -231,17 +305,9 @@ async function buildSyntheticBundle(
       gateRequired: false,
       gateRan: false,
       priorReviewId: null,
+      comparison_mode: "REVISION_COMPARISON",
     },
-    expectedCertifiedResult: {
-      manuscript_score: totalScore,
-      manuscript_letter_grade: letterGradeFromScore(totalScore),
-      craft_score: craftScore,
-      acquisition_readiness_score: acqScore,
-      issue_count: 1,
-      candidate_count: 1,
-      canonical_word_count: SYNTHETIC_WORD_COUNT,
-      grading_formula_version: GRADING_FORMULA_VERSION,
-    },
+    expectedCertifiedResult: {} as LiteraryAgentExpectedCertifiedResult,
     capturedAt: "2026-07-24T00:00:00.000Z",
     sourceType: "synthetic",
     redactionStatus: "fully_synthetic",
@@ -448,20 +514,12 @@ describe("runLiteraryAgentReplay", () => {
   });
 
   it("20. deterministic mismatch produces replay_mismatch", async () => {
-    const bundle = await buildSyntheticBundle({
-      expectedCertifiedResult: {
-        manuscript_score: 0,
-        manuscript_letter_grade: "F",
-        craft_score: 0,
-        acquisition_readiness_score: 0,
-        issue_count: 0,
-        candidate_count: 0,
-        canonical_word_count: SYNTHETIC_WORD_COUNT,
-        grading_formula_version: GRADING_FORMULA_VERSION,
-      },
-    });
+    const bundle = await buildSyntheticBundle();
+    const expected = structuredClone(bundle.expectedCertifiedResult);
+    expected.outcome.manuscript_score = 0;
+    expected.outcome.manuscript_letter_grade = "F";
     const result = await runLiteraryAgentReplay(
-      { artifactBundle: bundle, correlationId: "corr-replay-020" },
+      { artifactBundle: { ...bundle, expectedCertifiedResult: expected }, correlationId: "corr-replay-020" },
       BYPASS,
     );
     assert.equal(result.ok, true);
@@ -472,20 +530,11 @@ describe("runLiteraryAgentReplay", () => {
   });
 
   it("21. mismatch path is concise", async () => {
-    const bundle = await buildSyntheticBundle({
-      expectedCertifiedResult: {
-        manuscript_score: 1,
-        manuscript_letter_grade: "F",
-        craft_score: 1,
-        acquisition_readiness_score: 0,
-        issue_count: 1,
-        candidate_count: 1,
-        canonical_word_count: SYNTHETIC_WORD_COUNT,
-        grading_formula_version: GRADING_FORMULA_VERSION,
-      },
-    });
+    const bundle = await buildSyntheticBundle();
+    const expected = structuredClone(bundle.expectedCertifiedResult);
+    expected.outcome.manuscript_score = 1;
     const result = await runLiteraryAgentReplay(
-      { artifactBundle: bundle, correlationId: "corr-replay-021" },
+      { artifactBundle: { ...bundle, expectedCertifiedResult: expected }, correlationId: "corr-replay-021" },
       BYPASS,
     );
     assert.equal(result.ok, true);
@@ -496,20 +545,11 @@ describe("runLiteraryAgentReplay", () => {
   });
 
   it("22. sensitive values are redacted", async () => {
-    const bundle = await buildSyntheticBundle({
-      expectedCertifiedResult: {
-        manuscript_score: 1,
-        manuscript_letter_grade: "F",
-        craft_score: 1,
-        acquisition_readiness_score: 0,
-        issue_count: 99,
-        candidate_count: 1,
-        canonical_word_count: SYNTHETIC_WORD_COUNT,
-        grading_formula_version: GRADING_FORMULA_VERSION,
-      },
-    });
+    const bundle = await buildSyntheticBundle();
+    const expected = structuredClone(bundle.expectedCertifiedResult);
+    expected.normalization.issue_count = 99;
     const result = await runLiteraryAgentReplay(
-      { artifactBundle: bundle, correlationId: "corr-replay-022" },
+      { artifactBundle: { ...bundle, expectedCertifiedResult: expected }, correlationId: "corr-replay-022" },
       BYPASS,
     );
     assert.equal(result.ok, true);
@@ -636,22 +676,14 @@ describe("runLiteraryAgentReplay", () => {
   });
 
   it("36. validation failure requiring repair returns prohibited_stage_required", async () => {
+    const expected = await buildValidExpectedProjection();
     const bundle = await buildSyntheticBundle({
       skipDeriveExpected: true,
       capturedMemoOutput: {
         rawContent: `${canonicalManuscriptLengthSentence(SYNTHETIC_WORD_COUNT)}\n\n**Grade: A**`,
         generationMeta: syntheticGenerationMeta(false),
       },
-      expectedCertifiedResult: {
-        manuscript_score: 0,
-        manuscript_letter_grade: "F",
-        craft_score: 0,
-        acquisition_readiness_score: 0,
-        issue_count: 0,
-        candidate_count: 0,
-        canonical_word_count: SYNTHETIC_WORD_COUNT,
-        grading_formula_version: GRADING_FORMULA_VERSION,
-      },
+      expectedCertifiedResult: expected,
     });
     const result = await runLiteraryAgentReplay(
       { artifactBundle: bundle, correlationId: "corr-replay-036" },
@@ -662,22 +694,14 @@ describe("runLiteraryAgentReplay", () => {
   });
 
   it("37. no fallback occurs after prohibited repair", async () => {
+    const expected = await buildValidExpectedProjection();
     const bundle = await buildSyntheticBundle({
       skipDeriveExpected: true,
       capturedMemoOutput: {
         rawContent: "Missing canonical count entirely.",
         generationMeta: syntheticGenerationMeta(false),
       },
-      expectedCertifiedResult: {
-        manuscript_score: 0,
-        manuscript_letter_grade: "F",
-        craft_score: 0,
-        acquisition_readiness_score: 0,
-        issue_count: 0,
-        candidate_count: 0,
-        canonical_word_count: SYNTHETIC_WORD_COUNT,
-        grading_formula_version: GRADING_FORMULA_VERSION,
-      },
+      expectedCertifiedResult: expected,
     });
     const result = await runLiteraryAgentReplay(
       { artifactBundle: bundle, correlationId: "corr-replay-037" },
@@ -831,6 +855,44 @@ describe("replay artifact contract", () => {
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.code, "unsupported_artifact_schema");
   });
+
+  it("requires reviewIntent", async () => {
+    const bundle = await buildSyntheticBundle();
+    const missing = { ...bundle, reviewIntent: undefined };
+    const result = validateLiteraryAgentReplayArtifactBundle(missing);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "required_artifact_missing");
+  });
+
+  it("rejects empty reviewIntent", async () => {
+    const bundle = await buildSyntheticBundle();
+    const result = validateLiteraryAgentReplayArtifactBundle({ ...bundle, reviewIntent: "   " });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "required_artifact_missing");
+  });
+
+  it("rejects unsupported reviewIntent", async () => {
+    const bundle = await buildSyntheticBundle();
+    const result = validateLiteraryAgentReplayArtifactBundle({
+      ...bundle,
+      reviewIntent: "shadow_execution",
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "invalid_artifact_bundle");
+  });
+
+  it("accepts valid reviewIntent", async () => {
+    const bundle = await buildSyntheticBundle({ reviewIntent: "revision_comparison" });
+    const result = validateLiteraryAgentReplayArtifactBundle(bundle);
+    assert.equal(result.ok, true);
+  });
+
+  it("does not mutate input bundle during validation", async () => {
+    const bundle = await buildSyntheticBundle();
+    const snapshot = structuredClone(bundle);
+    validateLiteraryAgentReplayArtifactBundle(bundle);
+    assert.deepEqual(bundle, snapshot);
+  });
 });
 
 describe("replay feature flag contract", () => {
@@ -845,21 +907,149 @@ describe("replay feature flag contract", () => {
 });
 
 describe("projectCertifiedReplayComparison", () => {
-  it("lists only approved comparison fields", async () => {
+  it("includes all required structural projection groups", async () => {
     const bundle = await buildSyntheticBundle();
     const derived = await deriveReplayCertifiedProjection(bundle);
     assert.equal("ok" in derived, false);
-    const keys = Object.keys(derived as Record<string, unknown>).sort();
-    assert.deepEqual(keys, [
-      "acquisition_readiness_score",
-      "candidate_count",
-      "canonical_word_count",
-      "craft_score",
-      "grading_formula_version",
-      "issue_count",
-      "manuscript_letter_grade",
-      "manuscript_score",
-    ]);
+    assertReplayComparisonProjectionComplete(derived as LiteraryAgentExpectedCertifiedResult);
+    assert.deepEqual(
+      Object.keys(derived as Record<string, unknown>).sort(),
+      [...REPLAY_COMPARISON_PROJECTION_GROUPS].sort(),
+    );
+  });
+
+  it("fails invariant when a required comparison group is removed", async () => {
+    const bundle = await buildSyntheticBundle();
+    const derived = await deriveReplayCertifiedProjection(bundle);
+    assert.equal("ok" in derived, false);
+    const incomplete = structuredClone(derived as LiteraryAgentExpectedCertifiedResult);
+    delete (incomplete as { categories?: unknown }).categories;
+    assert.throws(
+      () => assertReplayComparisonProjectionComplete(incomplete),
+      /categories/,
+    );
+  });
+
+  it("requires recommendation in outcome projection", async () => {
+    const bundle = await buildSyntheticBundle();
+    const derived = await deriveReplayCertifiedProjection(bundle);
+    assert.equal("ok" in derived, false);
+    const projection = derived as LiteraryAgentExpectedCertifiedResult;
+    assert.equal(projection.outcome.recommendation, "REQUEST");
+    assert.ok(Object.keys(projection.categories).length > 0);
+    assert.ok(Object.keys(projection.editorial_issues).length >= 2);
+    assert.ok(Object.keys(projection.revision_candidates).length >= 2);
+  });
+});
+
+describe("structured replay comparison mismatches", () => {
+  async function runMismatch(
+    mutate: (expected: LiteraryAgentExpectedCertifiedResult) => void,
+    correlationId: string,
+  ) {
+    const bundle = await buildSyntheticBundle();
+    const expected = structuredClone(bundle.expectedCertifiedResult);
+    mutate(expected);
+    return runLiteraryAgentReplay(
+      { artifactBundle: { ...bundle, expectedCertifiedResult: expected }, correlationId },
+      BYPASS,
+    );
+  }
+
+  it("detects recommendation mismatch with matching scores", async () => {
+    const result = await runMismatch((expected) => {
+      expected.outcome.recommendation = "PASS";
+    }, "corr-replay-rec");
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.parityStatus, "replay_mismatch");
+      assert.ok(result.mismatchDiagnostics.some((m) => m.path.includes("recommendation")));
+    }
+  });
+
+  it("detects category score mismatch", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.categories)[0]!;
+      expected.categories[firstKey]!.points_earned = 0;
+    }, "corr-replay-cat");
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.parityStatus, "replay_mismatch");
+      assert.ok(result.mismatchDiagnostics.some((m) => m.path.includes("categories")));
+    }
+  });
+
+  it("detects issue deduction mismatch", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.editorial_issues)[0]!;
+      expected.editorial_issues[firstKey]!.deduction_amount = 99;
+    }, "corr-replay-deduction");
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.parityStatus, "replay_mismatch");
+  });
+
+  it("detects issue status mismatch", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.editorial_issues)[0]!;
+      expected.editorial_issues[firstKey]!.status = "closed";
+    }, "corr-replay-issue-status");
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.parityStatus, "replay_mismatch");
+  });
+
+  it("detects contrary-evidence outcome mismatch", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.contrary_evidence)[0]!;
+      expected.contrary_evidence[firstKey]!.status = "RESOLVED";
+    }, "corr-replay-contrary");
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.parityStatus, "replay_mismatch");
+      assert.ok(result.mismatchDiagnostics.some((m) => m.path.includes("contrary_evidence")));
+    }
+  });
+
+  it("detects revision candidate mismatch", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.revision_candidates)[0]!;
+      expected.revision_candidates[firstKey]!.operation = "delete";
+    }, "corr-replay-candidate");
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.parityStatus, "replay_mismatch");
+      assert.ok(result.mismatchDiagnostics.some((m) => m.path.includes("revision_candidates")));
+    }
+  });
+
+  it("returns replay_mismatch when issue count matches but issue content differs", async () => {
+    const bundle = await buildSyntheticBundle();
+    const expected = structuredClone(bundle.expectedCertifiedResult);
+    const firstKey = Object.keys(expected.editorial_issues)[0]!;
+    expected.editorial_issues[firstKey]!.title_hash = "deadbeef".repeat(8);
+    const result = await runLiteraryAgentReplay(
+      {
+        artifactBundle: { ...bundle, expectedCertifiedResult: expected },
+        correlationId: "corr-replay-issue-content",
+      },
+      BYPASS,
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.parityStatus, "replay_mismatch");
+      assert.equal(
+        Object.keys(expected.editorial_issues).length,
+        Object.keys(bundle.expectedCertifiedResult.editorial_issues).length,
+      );
+    }
+  });
+
+  it("returns replay_mismatch when candidate count matches but candidate content differs", async () => {
+    const result = await runMismatch((expected) => {
+      const firstKey = Object.keys(expected.revision_candidates)[0]!;
+      expected.revision_candidates[firstKey]!.replacement_text_hash = "deadbeef".repeat(8);
+    }, "corr-replay-candidate-content");
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.parityStatus, "replay_mismatch");
   });
 });
 

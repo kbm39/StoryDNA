@@ -12,9 +12,11 @@ import {
   EXPERT_REVIEW_ENGINE_VERSION,
   EXPERT_RUNTIME_SCHEMA_VERSION,
   hashExpertRuntimeDefinition,
+  REVIEW_RUNTIME_VERSION_SET_SCHEMA_VERSION,
   type ExpertRuntimeDefinition,
 } from "@/lib/expert-review-engine/types.ts";
 import { reviewerDefinitionToRuntimeIdentity } from "@/lib/expert-review-engine/adapters/reviewer-definition.ts";
+import { LITERARY_AGENT_CONSTITUTION_DEFINITION_HASH } from "@/lib/expert-review-engine/literary-agent-constitution-hash.ts";
 
 export const LITERARY_AGENT_EXPERT_VERSION = "v1.0.0-certified" as const;
 export const LITERARY_AGENT_GENERATION_PROFILE_ID = "memo_rubric_v1" as const;
@@ -207,6 +209,7 @@ function buildLiteraryAgentRuntimeDefinitionBase(): Omit<
 export function literaryAgentRuntimeDefinition(): ExpertRuntimeDefinition {
   const base = buildLiteraryAgentRuntimeDefinitionBase();
   const runtime_versionsWithoutHash = {
+    schema_version: REVIEW_RUNTIME_VERSION_SET_SCHEMA_VERSION,
     engine_version: EXPERT_REVIEW_ENGINE_VERSION,
     expert_version: LITERARY_AGENT_EXPERT_VERSION,
     prompt_version: LITERARY_AGENT_PROMPT_VERSION,
@@ -218,6 +221,8 @@ export function literaryAgentRuntimeDefinition(): ExpertRuntimeDefinition {
     passage_verification_version: LITERARY_AGENT_PASSAGE_VERIFICATION_VERSION,
     publishing_version: LITERARY_AGENT_PUBLISHING_VERSION,
     export_version: LITERARY_AGENT_EXPORT_VERSION,
+    constitution_definition_hash: LITERARY_AGENT_CONSTITUTION_DEFINITION_HASH,
+    workflow_definition_version: LITERARY_AGENT_DEFINITION_VERSION,
     definition_hash: "",
   };
   const definitionHash = hashExpertRuntimeDefinition({

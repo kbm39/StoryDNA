@@ -16,7 +16,7 @@ import { EXPERT_RUNTIME_SCHEMA_VERSION, hashExpertRuntimeDefinition } from "../t
 import { validateExpertRuntimeDefinition } from "../validate-runtime-definition.ts";
 
 const EXPECTED_LA_DEFINITION_HASH =
-  "d24ed5215515233b4e2819c0ea527dd8d843b7f2e949587380ca63c38c4c2588";
+  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
 
 function expectMutationFailure(fn: () => void): void {
   assert.throws(fn, TypeError);

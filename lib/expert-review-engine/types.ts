@@ -6,6 +6,7 @@
  */
 
 import { hashExpertDefinition, isValidDefinitionHash } from "@/lib/expert-registry/definition-hash.ts";
+import type { ExpertScoringWeights } from "./scoring-weights.ts";
 
 /** Engine semver — bump when orchestration contract changes. */
 export const EXPERT_REVIEW_ENGINE_VERSION = "expert_review_engine@v1.0.0-phase1" as const;
@@ -228,7 +229,7 @@ export interface ExpertRuntimeDefinition extends ExpertRuntimeModuleReferenceFie
 
   generation_profile: GenerationProfile;
 
-  scoring_weights: Record<string, number> | null;
+  scoring_weights: ExpertScoringWeights | null;
 
   required_context: Array<"storydna" | "prior_review" | "author_intent" | "series_bible">;
 

@@ -11,6 +11,7 @@ import {
   validateReviewRuntimeVersionSet,
 } from "./types.ts";
 import { validateEditorInChiefRelationshipRules } from "./expert-relationships.ts";
+import { validateExpertScoringWeights } from "./scoring-weights.ts";
 
 const EXPERT_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -99,6 +100,11 @@ export function validateExpertRuntimeDefinition(
   errors.push(
     ...validateEditorInChiefRelationshipRules(def.expert_key, def.editor_in_chief_rules),
   );
+
+  const scoringWeightsCheck = validateExpertScoringWeights(def.scoring_weights);
+  if (!scoringWeightsCheck.ok) {
+    errors.push(...scoringWeightsCheck.errors);
+  }
 
   const versionCheck = validateReviewRuntimeVersionSet(def.runtime_versions);
   if (!versionCheck.ok) {

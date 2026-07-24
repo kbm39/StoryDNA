@@ -235,8 +235,7 @@ export interface ExpertRuntimeDefinition extends ExpertRuntimeModuleReferenceFie
     candidateToActionItem: boolean;
   };
 
-  compatible_experts: string[];
-  escalation_experts: string[];
+  /** Authoritative Editor-in-Chief routing relationships (compatible, escalation, prerequisites). */
   editor_in_chief_rules: EditorInChiefRules;
 
   /** Per-component version pins for audit (Phase 1 contract only). */

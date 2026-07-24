@@ -195,9 +195,6 @@ function buildLiteraryAgentRuntimeDefinitionBase(): Omit<
       candidateToActionItem: true,
     },
 
-    compatible_experts: ["developmental_editor", "line_editor"],
-    escalation_experts: ["developmental_editor"],
-
     editor_in_chief_rules: {
       compatibleExperts: ["developmental_editor", "line_editor"],
       escalationExperts: ["developmental_editor"],

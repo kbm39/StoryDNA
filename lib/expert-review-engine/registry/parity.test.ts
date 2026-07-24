@@ -155,7 +155,7 @@ describe("Literary Agent V1 certified parity — runtime definition", () => {
     const def = literaryAgentRuntimeDefinition();
     const check = validateReviewRuntimeVersionSet(def.runtime_versions);
     assert.equal(check.ok, true);
-    assert.equal(REVIEW_RUNTIME_VERSION_FIELDS.length, 12);
+    assert.equal(REVIEW_RUNTIME_VERSION_FIELDS.length, 15);
     for (const field of REVIEW_RUNTIME_VERSION_FIELDS) {
       assert.ok(def.runtime_versions[field]);
     }

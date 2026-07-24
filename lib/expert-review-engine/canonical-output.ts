@@ -1,8 +1,18 @@
 /**
  * Deterministic canonical output comparison for expert parity harness (P2-23).
+ *
+ * Contract notes:
+ * - Object keys are sorted lexicographically at every depth; array order is preserved.
+ * - `null` is preserved; object properties with `undefined` values are omitted.
+ * - `-0` normalizes to `0` (JSON-compatible signed-zero handling).
+ * - Sparse arrays are rejected by index presence, not filled with null.
+ * - NaN and ±Infinity fail closed (never JSON.stringify-null collisions).
  */
 
 import { createHash } from "node:crypto";
+
+/** Aligned with P2-22 executor output safety limit. */
+export const MAX_CANONICAL_OUTPUT_BYTES = 512_000;
 
 export type CanonicalizationErrorCode =
   | "function"
@@ -11,12 +21,16 @@ export type CanonicalizationErrorCode =
   | "cycle"
   | "error_object"
   | "buffer"
+  | "non_finite_number"
+  | "sparse_array"
+  | "output_size_exceeded"
   | "unknown_type";
 
 export interface CanonicalizationFailure {
   ok: false;
   code: CanonicalizationErrorCode;
   path: string;
+  context?: Readonly<Record<string, string>>;
 }
 
 export interface CanonicalizationSuccess {
@@ -51,7 +65,9 @@ export type CompareCanonicalOutputsResponse =
   | CompareCanonicalOutputsFailure;
 
 const SENSITIVE_PATH_PATTERN =
-  /(manuscript|extractedText|memoContent|reviewMemo|content|text|original|revised)/i;
+  /(manuscript|extractedText|memoContent|reviewMemo|content|text|original|revised|prompt)/i;
+
+const textEncoder = new TextEncoder();
 
 function sanitizeDiagnosticValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
@@ -65,7 +81,34 @@ function sanitizeDiagnosticValue(value: unknown): unknown {
   return `[${typeof value}]`;
 }
 
-/** Canonicalize a value for deterministic hashing and comparison. */
+function canonicalNumber(value: number, path: string): CanonicalizationResult {
+  if (!Number.isFinite(value)) {
+    return { ok: false, code: "non_finite_number", path };
+  }
+  return { ok: true, value: Object.is(value, -0) ? 0 : value };
+}
+
+function measureUtf8Bytes(value: unknown): number {
+  return textEncoder.encode(JSON.stringify(value)).length;
+}
+
+function enforceCanonicalSize(value: unknown, path: string): CanonicalizationResult {
+  const bytes = measureUtf8Bytes(value);
+  if (bytes > MAX_CANONICAL_OUTPUT_BYTES) {
+    return {
+      ok: false,
+      code: "output_size_exceeded",
+      path,
+      context: {
+        actual_bytes: String(bytes),
+        max_bytes: String(MAX_CANONICAL_OUTPUT_BYTES),
+      },
+    };
+  }
+  return { ok: true, value };
+}
+
+/** Canonicalize a value for deterministic hashing and comparison. Does not mutate input. */
 export function canonicalizeOutputValue(
   value: unknown,
   path = "$",
@@ -82,7 +125,10 @@ export function canonicalizeOutputValue(
   if (valueType === "symbol") {
     return { ok: false, code: "symbol", path };
   }
-  if (valueType === "boolean" || valueType === "number" || valueType === "string") {
+  if (valueType === "number") {
+    return canonicalNumber(value as number, path);
+  }
+  if (valueType === "boolean" || valueType === "string") {
     return { ok: true, value };
   }
   if (valueType === "bigint") {
@@ -102,6 +148,9 @@ export function canonicalizeOutputValue(
     seen.add(value);
     const canonical: unknown[] = [];
     for (let index = 0; index < value.length; index++) {
+      if (!(index in value)) {
+        return { ok: false, code: "sparse_array", path: `${path}[${index}]` };
+      }
       const item = canonicalizeOutputValue(value[index], `${path}[${index}]`, seen);
       if (!item.ok) return item;
       canonical.push(item.value);
@@ -132,13 +181,24 @@ export function canonicalizeOutputValue(
   return { ok: false, code: "unknown_type", path };
 }
 
+function finalizeCanonicalValue(
+  canonical: CanonicalizationSuccess,
+  path: string,
+): CanonicalizationResult {
+  return enforceCanonicalSize(canonical.value, path);
+}
+
 /** Stable JSON string with sorted object keys at every level. */
 export function canonicalJsonString(value: unknown): string {
   const canonical = canonicalizeOutputValue(value);
   if (!canonical.ok) {
     throw new Error(`Cannot canonicalize output at ${canonical.path}: ${canonical.code}`);
   }
-  return JSON.stringify(canonical.value);
+  const sized = finalizeCanonicalValue(canonical, "$");
+  if (!sized.ok) {
+    throw new Error(`Cannot canonicalize output at ${sized.path}: ${sized.code}`);
+  }
+  return JSON.stringify(sized.value);
 }
 
 /** SHA-256 hash of canonical JSON representation. */
@@ -208,30 +268,36 @@ export function compareCanonicalOutputs(
   if (!engineCanonical.ok) {
     return { ok: false, side: "engine", error: engineCanonical };
   }
+  const engineSized = finalizeCanonicalValue(engineCanonical, "$");
+  if (!engineSized.ok) {
+    return { ok: false, side: "engine", error: engineSized };
+  }
 
   const directCanonical = canonicalizeOutputValue(directOutput);
   if (!directCanonical.ok) {
     return { ok: false, side: "direct", error: directCanonical };
   }
+  const directSized = finalizeCanonicalValue(directCanonical, "$");
+  if (!directSized.ok) {
+    return { ok: false, side: "direct", error: directSized };
+  }
 
   const engineHash = createHash("sha256")
-    .update(JSON.stringify(engineCanonical.value))
+    .update(JSON.stringify(engineSized.value))
     .digest("hex");
   const directHash = createHash("sha256")
-    .update(JSON.stringify(directCanonical.value))
+    .update(JSON.stringify(directSized.value))
     .digest("hex");
 
-  const mismatches = collectMismatches(engineCanonical.value, directCanonical.value).map(
-    (mismatch) => ({
-      path: mismatch.path,
-      engineValue: SENSITIVE_PATH_PATTERN.test(mismatch.path)
-        ? sanitizeDiagnosticValue(mismatch.engineValue)
-        : mismatch.engineValue,
-      directValue: SENSITIVE_PATH_PATTERN.test(mismatch.path)
-        ? sanitizeDiagnosticValue(mismatch.directValue)
-        : mismatch.directValue,
-    }),
-  );
+  const mismatches = collectMismatches(engineSized.value, directSized.value).map((mismatch) => ({
+    path: mismatch.path,
+    engineValue: SENSITIVE_PATH_PATTERN.test(mismatch.path)
+      ? sanitizeDiagnosticValue(mismatch.engineValue)
+      : mismatch.engineValue,
+    directValue: SENSITIVE_PATH_PATTERN.test(mismatch.path)
+      ? sanitizeDiagnosticValue(mismatch.directValue)
+      : mismatch.directValue,
+  }));
 
   return {
     ok: true,

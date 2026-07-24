@@ -13,19 +13,28 @@ import { LITERARY_AGENT_CONSTITUTION_DEFINITION_HASH } from "@/lib/expert-review
 import { hashExpertRuntimeDefinition } from "@/lib/expert-review-engine/types.ts";
 import { hashExpertDefinition } from "@/lib/expert-registry/definition-hash.ts";
 import { literaryAgentRegistryDefinitionV1 } from "@/lib/expert-registry/seed/literary-agent-registry.v1.ts";
-import { compareCanonicalOutputs, hashCanonicalOutput } from "./canonical-output.ts";
+import {
+  canonicalizeOutputValue,
+  compareCanonicalOutputs,
+  hashCanonicalOutput,
+  MAX_CANONICAL_OUTPUT_BYTES,
+} from "./canonical-output.ts";
+import { lookupAllowedPluginExport } from "./plugin-invocation-contracts.ts";
+import {
+  APPROVED_PARITY_EXPORTS,
+  DIRECT_INVOKE_PARITY_KEYS,
+  LITERARY_AGENT_PARITY_DEFINITION_HASH,
+  LITERARY_AGENT_PARITY_EXPERT_KEY,
+  PARITY_SYNTHETIC_FIXTURES,
+  runLiteraryAgentDeterministicParity,
+  type LiteraryAgentDeterministicParityInput,
+} from "./literary-agent-parity.ts";
 import {
   EXPERT_LITERARY_AGENT_PARITY_FLAG_NAME,
   readExpertLiteraryAgentParityEnabled,
 } from "./feature-flags.ts";
 import { clearExpertModuleResolverCache } from "./module-resolver.ts";
 import { runExpertReview } from "./run-expert-review.ts";
-import {
-  LITERARY_AGENT_PARITY_DEFINITION_HASH,
-  LITERARY_AGENT_PARITY_EXPERT_KEY,
-  runLiteraryAgentDeterministicParity,
-  type LiteraryAgentDeterministicParityInput,
-} from "./literary-agent-parity.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENGINE_DIR = join(dirname(fileURLToPath(import.meta.url)));
@@ -472,33 +481,23 @@ describe("runLiteraryAgentDeterministicParity", () => {
     if (result.ok) assert.equal(result.plan.executionAllowed, false);
   });
 
-  it("34. at least three real deterministic Literary Agent exports achieve parity", async () => {
-    const exportsToTest = [
-      baseInput(),
-      baseInput({
-        invocation: {
-          moduleId: "@/lib/ai/review-engine",
-          exportName: "buildSystemPrompt",
-          invocationKind: "prompt_builder",
-          args: LITERARY_AGENT as unknown as Record<string, unknown>,
-        },
-      }),
-      baseInput({
-        invocation: {
-          moduleId: "@/lib/commercial-review-repair",
-          exportName: "normalizeCommercialMemoStatistics",
-          invocationKind: "normalizer",
-          args: {
-            memoContent: "This manuscript is 50 words long.",
-            canonicalWordCount: 50,
+  it("34. all six approved exports achieve parity", async () => {
+    for (const entry of APPROVED_PARITY_EXPORTS) {
+      const fixtureKey = `${entry.moduleId}::${entry.exportName}`;
+      const args = PARITY_SYNTHETIC_FIXTURES[fixtureKey];
+      assert.ok(args, `missing synthetic fixture for ${fixtureKey}`);
+      const result = await runLiteraryAgentDeterministicParity(
+        baseInput({
+          invocation: {
+            moduleId: entry.moduleId,
+            exportName: entry.exportName,
+            invocationKind: entry.invocationKind,
+            args,
           },
-        },
-      }),
-    ];
-
-    for (const input of exportsToTest) {
-      const result = await runLiteraryAgentDeterministicParity(input, BYPASS);
-      assert.equal(result.ok, true, `${input.invocation.exportName} should parity match`);
+        }),
+        BYPASS,
+      );
+      assert.equal(result.ok, true, `${entry.exportName} should parity match`);
       if (result.ok) assert.equal(result.parityStatus, "parity_match");
     }
   });
@@ -509,7 +508,39 @@ describe("runLiteraryAgentDeterministicParity", () => {
     if (result.ok) assert.equal(result.parityStatus, "parity_match");
   });
 
-  it("36. one prompt builder achieves parity", async () => {
+  it("36. buildReviewPrompt achieves parity", async () => {
+    const result = await runLiteraryAgentDeterministicParity(
+      baseInput({
+        invocation: {
+          moduleId: "@/lib/ai/review-engine",
+          exportName: "buildReviewPrompt",
+          invocationKind: "prompt_builder",
+          args: PARITY_SYNTHETIC_FIXTURES["@/lib/ai/review-engine::buildReviewPrompt"]!,
+        },
+      }),
+      BYPASS,
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.parityStatus, "parity_match");
+  });
+
+  it("36b. buildRevisionCandidatesPrompt achieves parity", async () => {
+    const result = await runLiteraryAgentDeterministicParity(
+      baseInput({
+        invocation: {
+          moduleId: "@/lib/ai/review-engine",
+          exportName: "buildRevisionCandidatesPrompt",
+          invocationKind: "prompt_builder",
+          args: PARITY_SYNTHETIC_FIXTURES["@/lib/ai/review-engine::buildRevisionCandidatesPrompt"]!,
+        },
+      }),
+      BYPASS,
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.parityStatus, "parity_match");
+  });
+
+  it("36c. buildSystemPrompt achieves parity", async () => {
     const result = await runLiteraryAgentDeterministicParity(
       baseInput({
         invocation: {
@@ -547,7 +578,7 @@ describe("runLiteraryAgentDeterministicParity", () => {
     if (result.ok) assert.equal(result.parityStatus, "parity_match");
   });
 
-  it("38. abort behavior returns typed failure", async () => {
+  it("38. pre-aborted signal returns aborted", async () => {
     const controller = new AbortController();
     controller.abort();
     const result = await runLiteraryAgentDeterministicParity(
@@ -555,10 +586,14 @@ describe("runLiteraryAgentDeterministicParity", () => {
       BYPASS,
     );
     assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.parityStatus, "executor_failed");
+    if (!result.ok) {
+      assert.equal(result.parityStatus, "aborted");
+      assert.equal(result.failureReason, "aborted");
+      assert.equal(result.engineExecutionOccurred, false);
+    }
   });
 
-  it("39. timeout behavior returns typed failure", async () => {
+  it("39. timeout returns timeout", async () => {
     const result = await runLiteraryAgentDeterministicParity(baseInput({ timeoutMs: 1 }), {
       ...BYPASS,
       executePluginFn: async () => ({
@@ -568,7 +603,11 @@ describe("runLiteraryAgentDeterministicParity", () => {
       }),
     });
     assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.parityStatus, "executor_failed");
+    if (!result.ok) {
+      assert.equal(result.parityStatus, "timeout");
+      assert.equal(result.failureReason, "timeout");
+      assert.equal(result.engineExecutionOccurred, false);
+    }
   });
 
   it("40. canonical hashes remain unchanged", () => {
@@ -607,6 +646,172 @@ describe("compareCanonicalOutputs", () => {
     const hashA = hashCanonicalOutput({ b: 2, a: 1, nested: { z: 3, y: 2 } });
     const hashB = hashCanonicalOutput({ nested: { y: 2, z: 3 }, a: 1, b: 2 });
     assert.equal(hashA, hashB);
+  });
+
+  it("rejects NaN", () => {
+    const result = canonicalizeOutputValue(Number.NaN);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "non_finite_number");
+  });
+
+  it("rejects Infinity and -Infinity", () => {
+    for (const value of [Infinity, -Infinity]) {
+      const result = canonicalizeOutputValue(value);
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.code, "non_finite_number");
+    }
+  });
+
+  it("null remains valid and does not collide with NaN or Infinity hashes", () => {
+    assert.equal(canonicalizeOutputValue(null).ok, true);
+    const nullHash = hashCanonicalOutput(null);
+    assert.throws(() => hashCanonicalOutput(Number.NaN));
+    assert.throws(() => hashCanonicalOutput(Infinity));
+    assert.notEqual(nullHash, hashCanonicalOutput(0));
+  });
+
+  it("rejects nested non-finite numbers with paths", () => {
+    const arrayResult = canonicalizeOutputValue([1, Number.NaN]);
+    assert.equal(arrayResult.ok, false);
+    if (!arrayResult.ok) assert.equal(arrayResult.path, "$[1]");
+
+    const objectResult = canonicalizeOutputValue({ value: Infinity });
+    assert.equal(objectResult.ok, false);
+    if (!objectResult.ok) assert.equal(objectResult.path, "$.value");
+  });
+
+  it("normalizes -0 to 0 deterministically", () => {
+    const first = canonicalizeOutputValue(-0);
+    const second = canonicalizeOutputValue(0);
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    if (first.ok && second.ok) {
+      assert.equal(first.value, 0);
+      assert.deepEqual(first.value, second.value);
+    }
+    assert.equal(hashCanonicalOutput(-0), hashCanonicalOutput(0));
+  });
+
+  it("rejects sparse arrays and keeps explicit null distinct", () => {
+    const sparse: string[] = [];
+    sparse[1] = "present";
+    const sparseResult = canonicalizeOutputValue(sparse);
+    assert.equal(sparseResult.ok, false);
+    if (!sparseResult.ok) assert.equal(sparseResult.code, "sparse_array");
+
+    const explicitNull = canonicalizeOutputValue([null]);
+    assert.equal(explicitNull.ok, true);
+    if (explicitNull.ok) assert.deepEqual(explicitNull.value, [null]);
+  });
+
+  it("enforces canonical output byte limit without leaking oversized text", () => {
+    const below = "x".repeat(100);
+    assert.equal(compareCanonicalOutputs(below, below).ok, true);
+
+    const oversized = "€".repeat(MAX_CANONICAL_OUTPUT_BYTES);
+    const result = compareCanonicalOutputs(oversized, oversized);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, "output_size_exceeded");
+      assert.equal(result.error.context?.max_bytes, String(MAX_CANONICAL_OUTPUT_BYTES));
+      assert.ok(Number(result.error.context?.actual_bytes) > MAX_CANONICAL_OUTPUT_BYTES);
+      assert.doesNotMatch(JSON.stringify(result.error), /€{10}/);
+    }
+  });
+});
+
+describe("parity correlation identifiers", () => {
+  beforeEach(() => {
+    clearExpertModuleResolverCache();
+  });
+
+  it("preserves correlationId exactly on success", async () => {
+    const result = await runLiteraryAgentDeterministicParity(
+      baseInput({ correlationId: "corr-exact-abc" }),
+      BYPASS,
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.correlationId, "corr-exact-abc");
+  });
+
+  it("keeps invocationId deterministic and distinct per export", async () => {
+    const first = await runLiteraryAgentDeterministicParity(baseInput({ correlationId: "corr-shared" }), BYPASS);
+    const second = await runLiteraryAgentDeterministicParity(
+      baseInput({
+        correlationId: "corr-shared",
+        invocation: {
+          moduleId: "@/lib/ai/review-engine",
+          exportName: "buildSystemPrompt",
+          invocationKind: "prompt_builder",
+          args: PARITY_SYNTHETIC_FIXTURES["@/lib/ai/review-engine::buildSystemPrompt"]!,
+        },
+      }),
+      BYPASS,
+    );
+    assert.equal(first.invocationId, "corr-shared:@/lib/canonical-review-input:buildCanonicalReviewInput");
+    assert.equal(second.invocationId, "corr-shared:@/lib/ai/review-engine:buildSystemPrompt");
+    assert.notEqual(first.invocationId, second.invocationId);
+  });
+
+  it("preserves correlationId on failure", async () => {
+    const result = await runLiteraryAgentDeterministicParity(
+      baseInput({ expertKey: "wrong", correlationId: "corr-failure-001" }),
+      BYPASS,
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.correlationId, "corr-failure-001");
+  });
+});
+
+describe("approved parity subset invariant", () => {
+  it("every approved export has allowlist, direct invoke, fixture, and parity coverage", async () => {
+    for (const entry of APPROVED_PARITY_EXPORTS) {
+      const key = `${entry.moduleId}::${entry.exportName}`;
+      assert.ok(lookupAllowedPluginExport(entry.moduleId, entry.exportName));
+      assert.ok(DIRECT_INVOKE_PARITY_KEYS.has(key), `missing direct invoke key ${key}`);
+      assert.ok(PARITY_SYNTHETIC_FIXTURES[key], `missing fixture ${key}`);
+
+      clearExpertModuleResolverCache();
+      const result = await runLiteraryAgentDeterministicParity(
+        baseInput({
+          invocation: {
+            moduleId: entry.moduleId,
+            exportName: entry.exportName,
+            invocationKind: entry.invocationKind,
+            args: PARITY_SYNTHETIC_FIXTURES[key]!,
+          },
+        }),
+        BYPASS,
+      );
+      assert.equal(result.ok, true, `${key} must achieve parity`);
+      if (result.ok) assert.equal(result.parityStatus, "parity_match");
+    }
+  });
+});
+
+describe("executor failure distinctions", () => {
+  beforeEach(() => {
+    clearExpertModuleResolverCache();
+  });
+
+  it("ordinary executor failure remains executor_failed with failureReason", async () => {
+    const result = await runLiteraryAgentDeterministicParity(baseInput(), {
+      ...BYPASS,
+      executePluginFn: async () => ({
+        ok: false,
+        code: "invocation_failed",
+        message: "Synthetic invocation failure",
+      }),
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.parityStatus, "executor_failed");
+      assert.equal(result.failureReason, "invocation_failed");
+      assert.equal(result.engineExecutionOccurred, false);
+      assert.equal(result.productionExecutionOccurred, false);
+      assert.equal(result.modelCalls, 0);
+      assert.equal(result.writes, 0);
+    }
   });
 });
 

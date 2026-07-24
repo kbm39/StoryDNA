@@ -1,44 +1,20 @@
 /**
  * Adapter: ReviewerDefinition (code) → ExpertRuntimeDefinition identity fields.
  *
- * Does not alter ReviewerDefinition behavior — read-only projection for parity tests.
+ * Consumes the shared reviewer identity projection; applies runtime-specific mapping only.
  */
 
+import {
+  projectRuntimePriority,
+  projectSharedReviewerIdentity,
+} from "@/lib/reviewer-definition-projection/shared-identity.ts";
+import type {
+  ReviewerDefinitionPrioritySource,
+  ReviewerDefinitionSharedInput,
+} from "@/lib/reviewer-definition-projection/types.ts";
 import type { ExpertRuntimeDefinition } from "../types.ts";
 
-/** ReviewerDefinition priority may include orchestration-only fields excluded from runtime hash. */
-export interface ReviewerDefinitionPrioritySource {
-  tier: "core" | "standard" | "specialist";
-  base: number;
-  runOrder?: number;
-}
-
-/** Minimal ReviewerDefinition shape for adapter input (matches certified LITERARY_AGENT). */
-export interface ReviewerDefinitionSource {
-  id: string;
-  reviewer: string;
-  perspective: string;
-  mission: string;
-  personality: ExpertRuntimeDefinition["personality"];
-  expertise: { inScope: string[]; outOfScope: string[] };
-  knowledgeDomains: ExpertRuntimeDefinition["knowledge_domains"];
-  triggers: ExpertRuntimeDefinition["trigger_conditions"];
-  prerequisites: Array<{ key: string; description: string; requires: string; onUnmet: string }>;
-  priority: ReviewerDefinitionPrioritySource;
-  failureConditions: Array<{
-    key: string;
-    condition: string;
-    severity: string;
-    disclosure: string;
-  }>;
-  outputContract: {
-    requiredFields: Array<{ key: string; description: string; values?: string[] }>;
-  };
-  recommendation?: {
-    field: string;
-    values: Array<{ value: string; meaning: string }>;
-  };
-}
+export type { ReviewerDefinitionPrioritySource, ReviewerDefinitionSharedInput as ReviewerDefinitionSource };
 
 export interface ReviewerRuntimeIdentityProjection {
   expert_key: string;
@@ -55,41 +31,25 @@ export interface ReviewerRuntimeIdentityProjection {
   recommendation_values: string[];
 }
 
-/** Allowlisted runtime priority — excludes ReviewerDefinition-only orchestration fields. */
-export function projectRuntimePriority(
-  priority: ReviewerDefinitionPrioritySource,
-): ExpertRuntimeDefinition["priority"] {
-  return {
-    tier: priority.tier,
-    base: priority.base,
-  };
-}
+export { projectRuntimePriority };
 
 export function reviewerDefinitionToRuntimeIdentity(
-  def: ReviewerDefinitionSource,
+  def: ReviewerDefinitionSharedInput,
 ): ReviewerRuntimeIdentityProjection {
-  const recommendationValues =
-    def.recommendation?.values.map((v) => v.value) ??
-    def.outputContract.requiredFields.find((f) => f.key === "Decision")?.values ??
-    [];
+  const shared = projectSharedReviewerIdentity(def);
 
   return {
-    expert_key: def.id,
-    display_name: def.reviewer,
-    role: def.perspective,
-    purpose: def.mission,
-    personality: def.personality,
-    knowledge_domains: def.knowledgeDomains,
-    prerequisites: def.prerequisites.map((p) => p.key),
-    trigger_conditions: def.triggers,
-    priority: projectRuntimePriority(def.priority),
-    failure_conditions: def.failureConditions.map((f) => ({
-      key: f.key,
-      condition: f.condition,
-      severity: f.severity as "abort" | "degrade" | "warn",
-      disclosure: f.disclosure,
-    })),
-    recommendation_field_keys: def.outputContract.requiredFields.map((f) => f.key),
-    recommendation_values: recommendationValues,
+    expert_key: shared.expert_key,
+    display_name: shared.display_name,
+    role: shared.perspective,
+    purpose: shared.mission,
+    personality: shared.personality,
+    knowledge_domains: shared.knowledge_domains,
+    prerequisites: shared.prerequisite_keys,
+    trigger_conditions: shared.trigger_conditions,
+    priority: projectRuntimePriority(shared.priority_source),
+    failure_conditions: shared.failure_conditions,
+    recommendation_field_keys: shared.recommendation_field_keys,
+    recommendation_values: shared.recommendation_values,
   };
 }

@@ -1,28 +1,19 @@
 /**
  * Adapter: ReviewerDefinition (code) → ExpertDefinitionV1 (registry).
  * Does NOT import lib/ai/review-engine.ts — callers pass the definition in.
+ *
+ * Consumes the shared reviewer identity projection; applies constitution-specific mapping.
  */
 
+import { projectSharedReviewerIdentity } from "@/lib/reviewer-definition-projection/shared-identity.ts";
+import type { ReviewerDefinitionSharedInput } from "@/lib/reviewer-definition-projection/types.ts";
 import type { ExpertDefinitionV1 } from "../types.ts";
 
-/** Subset of ReviewerDefinition fields used for registry mirroring. */
-export interface ReviewerDefinitionSource {
-  id: string;
-  reviewer: string;
-  perspective: string;
+/** Full ReviewerDefinition shape for registry mirroring. */
+export interface ReviewerDefinitionSource extends ReviewerDefinitionSharedInput {
   depth: string;
-  mission: string;
   system: string;
-  personality: {
-    archetype: string;
-    traits: string[];
-    directness: string;
-    warmth: string;
-    humor: string;
-    voiceNotes: string;
-  };
   communicationPhilosophy: string[];
-  expertise: { inScope: string[]; outOfScope: string[] };
   evaluationFramework: {
     categories: Array<{ key: string; name: string; weight?: number; questions: string[] }>;
   };
@@ -35,22 +26,11 @@ export interface ReviewerDefinitionSource {
     unverifiedHandling: string;
   };
   constitution: { inherits: string; additionalRules: string[] };
-  outputContract: {
+  outputContract: ReviewerDefinitionSharedInput["outputContract"] & {
     format: string;
     sections: Array<{ heading: string; guidance: string }>;
-    requiredFields: Array<{ key: string; description: string; values?: string[] }>;
     rules: string[];
   };
-  knowledgeDomains: Array<{
-    name: string;
-    authorities: string[];
-    keyConcepts: string[];
-    commonErrors: string[];
-  }>;
-  triggers: Array<{ key: string; description: string; signal: string; match: string; weight: number }>;
-  prerequisites: Array<{ key: string; description: string; requires: string; onUnmet: string }>;
-  priority: { tier: "core" | "standard" | "specialist"; base: number };
-  failureConditions: Array<{ key: string; condition: string; severity: string; disclosure: string }>;
   revisionPermissions: {
     mayRevise: string[];
     prohibitions: string[];
@@ -65,6 +45,26 @@ export interface ReviewerDefinitionSource {
   estimatedCost: { perDepth: Record<string, { mode: string }> };
 }
 
+function cloneEvaluationCategories(
+  categories: ReviewerDefinitionSource["evaluationFramework"]["categories"],
+): ReviewerDefinitionSource["evaluationFramework"]["categories"] {
+  return categories.map((category) => ({
+    key: category.key,
+    name: category.name,
+    weight: category.weight,
+    questions: [...category.questions],
+  }));
+}
+
+function cloneOutputSections(
+  sections: ReviewerDefinitionSource["outputContract"]["sections"],
+): ReviewerDefinitionSource["outputContract"]["sections"] {
+  return sections.map((section) => ({
+    heading: section.heading,
+    guidance: section.guidance,
+  }));
+}
+
 export function reviewerDefinitionToExpertDefinition(
   def: ReviewerDefinitionSource,
   options: {
@@ -77,45 +77,53 @@ export function reviewerDefinitionToExpertDefinition(
     changeSummary?: string;
   },
 ): ExpertDefinitionV1 {
+  const shared = projectSharedReviewerIdentity(def);
   const runtimeClass =
     def.capabilities.fullText && def.estimatedCost?.perDepth?.professional?.mode === "async"
       ? "long"
       : "medium";
+  const evaluationCategories = cloneEvaluationCategories(def.evaluationFramework.categories);
+  const outputSections = cloneOutputSections(def.outputContract.sections);
+  const communicationPhilosophy = [...def.communicationPhilosophy];
+  const constitutionRules = [...def.constitution.additionalRules];
+  const outputRules = [...def.outputContract.rules];
+  const revisionProhibitions = [...def.revisionPermissions.prohibitions];
+  const scopeCompatibility = [...def.scopeCompatibility];
 
   return {
     schema_version: "expert_definition@v1",
     identity: {
-      expert_key: def.id,
-      display_name: def.reviewer,
-      title: def.reviewer,
-      description: def.mission,
+      expert_key: shared.expert_key,
+      display_name: shared.display_name,
+      title: shared.display_name,
+      description: shared.mission,
       department: options.department,
       category: options.category,
-      role_boundaries: def.expertise.outOfScope,
-      collaboration_role: def.perspective,
+      role_boundaries: shared.expertise_out_of_scope,
+      collaboration_role: shared.perspective,
     },
     purpose: {
-      mission: def.mission,
-      responsibilities: def.expertise.inScope,
-      non_responsibilities: def.expertise.outOfScope,
-      intended_use: def.scopeCompatibility,
-      prerequisites: def.prerequisites.map((p) => p.description),
-      trigger_conditions: def.triggers,
-      priority: def.priority,
+      mission: shared.mission,
+      responsibilities: shared.expertise_in_scope,
+      non_responsibilities: shared.expertise_out_of_scope,
+      intended_use: scopeCompatibility,
+      prerequisites: shared.prerequisites.map((prerequisite) => prerequisite.description),
+      trigger_conditions: shared.trigger_conditions,
+      priority: shared.priority_source,
     },
     professional_standards: {
-      principles: def.communicationPhilosophy,
+      principles: communicationPhilosophy,
       ethics: [
         "Never insult, dismiss, or discourage the author.",
         "Preserve author intent and vision unless explicitly asked otherwise.",
       ],
-      author_respect_rules: def.communicationPhilosophy.filter((r) =>
-        /author|respect|vision|story/i.test(r),
+      author_respect_rules: communicationPhilosophy.filter((rule) =>
+        /author|respect|vision|story/i.test(rule),
       ),
       evidence_standards: [
         "Every material claim requires verifiable evidence.",
         "Evidence-first reasoning: evidence → reasoning → observation → recommendation.",
-        ...def.constitution.additionalRules.filter((r) => /evidence|quote|cite/i.test(r)),
+        ...constitutionRules.filter((rule) => /evidence|quote|cite/i.test(rule)),
       ],
       verification_standards: [
         def.evidenceRules.requireVerification
@@ -137,13 +145,13 @@ export function reviewerDefinitionToExpertDefinition(
         block_on_insufficient: true,
       },
       source_integrity_rules: ["Do not fabricate quotations, citations, or passage locations."],
-      non_fabrication_rules: def.revisionPermissions.prohibitions,
+      non_fabrication_rules: revisionProhibitions,
       contrary_evidence_obligations: [
         "Before repeating prior criticism, search for contrary evidence or repair.",
       ],
       escalation_rules: ["Escalate domain realism concerns to appropriate specialist experts."],
-      specialist_deference_rules: def.expertise.outOfScope.map(
-        (o) => `Defer to specialist for: ${o}`,
+      specialist_deference_rules: shared.expertise_out_of_scope.map(
+        (item) => `Defer to specialist for: ${item}`,
       ),
       prediction_and_market_limitations: [
         "Never promise a sale; assess likelihood candidly.",
@@ -151,26 +159,21 @@ export function reviewerDefinitionToExpertDefinition(
       ],
     },
     evaluation_framework: {
-      categories: def.evaluationFramework.categories,
+      categories: evaluationCategories,
       review_methodology: [
         def.capabilities.fullText
           ? "Read the full manuscript before concluding."
           : "Review available segments before concluding.",
       ],
-      reasoning_rules: def.outputContract.rules.filter((r) => !/JSON|Grade/i.test(r)),
+      reasoning_rules: outputRules.filter((rule) => !/JSON|Grade/i.test(rule)),
       issue_priority_rules: ["Prioritize highest-impact revisions over minor notes."],
       completion_requirements: def.outputContract.requiredFields.map(
-        (f) => `Include ${f.key}: ${f.description}`,
+        (field) => `Include ${field.key}: ${field.description}`,
       ),
-      failure_conditions: def.failureConditions.map((f) => ({
-        key: f.key,
-        condition: f.condition,
-        severity: f.severity as "abort" | "degrade" | "warn",
-        disclosure: f.disclosure,
-      })),
-      safety_boundaries: def.revisionPermissions.prohibitions,
+      failure_conditions: shared.failure_conditions,
+      safety_boundaries: revisionProhibitions,
       collaboration_rules: ["Defer out-of-scope assessments to named specialists."],
-      exclusions: def.expertise.outOfScope,
+      exclusions: shared.expertise_out_of_scope,
     },
     evidence_policy: {
       profile_refs: options.evidenceProfileRefs,
@@ -232,13 +235,13 @@ export function reviewerDefinitionToExpertDefinition(
       },
     },
     knowledge: {
-      knowledge_domains: def.knowledgeDomains,
-      competencies: def.expertise.inScope,
-      limitations: def.expertise.outOfScope,
+      knowledge_domains: shared.knowledge_domains,
+      competencies: shared.expertise_in_scope,
+      limitations: shared.expertise_out_of_scope,
       professional_responsibility: {
-        should_evaluate: def.expertise.inScope,
+        should_evaluate: shared.expertise_in_scope,
         may_evaluate: [],
-        must_not_evaluate: def.expertise.outOfScope,
+        must_not_evaluate: shared.expertise_out_of_scope,
       },
       research_permissions: {
         allow_external_lookup: def.id !== "literary_agent",
@@ -255,10 +258,10 @@ export function reviewerDefinitionToExpertDefinition(
         def.id === "literary_agent"
           ? ["storydna/commercial_rubric@v1", "storydna/commercial_memo@v1"]
           : [`storydna/${def.id}_report@v1`],
-      artifact_types: def.outputContract.sections.map((s) => s.heading),
+      artifact_types: outputSections.map((section) => section.heading),
       issue_types: ["structural", "commercial", "craft"],
       recommendation_types: ["revision_priority", "decision"],
-      completion_requirements: def.outputContract.rules,
+      completion_requirements: outputRules,
     },
     execution_profile: {
       preferred_model_capabilities: ["long_context", "structured_output"],

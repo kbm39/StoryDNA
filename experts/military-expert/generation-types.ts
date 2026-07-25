@@ -8,6 +8,7 @@ import {
   type MilitaryExpertReviewScope,
 } from "./contracts.ts";
 import type { MilitaryExpertReview } from "./contracts.ts";
+import type { MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
 
 export type MilitaryExpertRepairDecision =
   | "no_repair_needed"
@@ -91,5 +92,6 @@ export interface MilitaryExpertGenerationContractResult {
   productionExecutionOccurred: false;
   durationMs: number;
   failureReason?: string;
+  enumNormalizationAudits?: readonly MilitaryExpertEnumNormalizationAudit[];
   review?: MilitaryExpertReview;
 }

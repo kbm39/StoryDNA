@@ -35,14 +35,14 @@ describe("deterministic USD cost serialization", () => {
     assert.equal(serializeUsd(raw), 0.0156);
   });
 
-  it("2 three-call total serializes to 0.0477", () => {
+  it("2 three-call total serializes to 0.0489", () => {
     const plan = buildLiveCalibrationCallPlan({
       args: smokeArgs(),
       providerSpec: resolveProviderSpec("anthropic", ANTHROPIC_HAIKU_45_ALIAS),
       correlationPrefix: "cost-ser",
     });
-    assert.equal(plan.totalEstimatedCostUsd, 0.0477);
-    assert.equal(sumSerializedUsd(plan.calls.map((c) => c.estimatedCostUsd)), 0.0477);
+    assert.equal(plan.totalEstimatedCostUsd, 0.0489);
+    assert.equal(sumSerializedUsd(plan.calls.map((c) => c.estimatedCostUsd)), 0.0489);
   });
 
   it("3 JSON output contains no floating-point noise", () => {
@@ -52,16 +52,16 @@ describe("deterministic USD cost serialization", () => {
       correlationPrefix: "cost-ser",
     });
     const json = JSON.stringify({ estimated_cost_usd: plan.totalEstimatedCostUsd });
-    assert.equal(json, '{"estimated_cost_usd":0.0477}');
+    assert.equal(json, '{"estimated_cost_usd":0.0489}');
   });
 
-  it("4 micro-USD total for smoke plan is 47700", () => {
+  it("4 micro-USD total for smoke plan is 48900", () => {
     const plan = buildLiveCalibrationCallPlan({
       args: smokeArgs(),
       providerSpec: resolveProviderSpec("anthropic", ANTHROPIC_HAIKU_45_ALIAS),
       correlationPrefix: "cost-ser",
     });
-    assert.equal(usdToMicroUsd(plan.totalEstimatedCostUsd), 47_700);
+    assert.equal(usdToMicroUsd(plan.totalEstimatedCostUsd), 48_900);
   });
 
   it("5 dry-run manifest serializes cost deterministically", async () => {
@@ -79,9 +79,9 @@ describe("deterministic USD cost serialization", () => {
       startedAt: Date.now(),
       writeArtifacts: false,
     });
-    assert.equal(result.manifest.estimated_cost_usd, 0.0477);
+    assert.equal(result.manifest.estimated_cost_usd, 0.0489);
     const manifestJson = JSON.stringify(result.manifest);
-    assert.match(manifestJson, /"estimated_cost_usd":0\.0477/);
+    assert.match(manifestJson, /"estimated_cost_usd":0\.0489/);
     assert.doesNotMatch(manifestJson, /999999999994/);
   });
 });

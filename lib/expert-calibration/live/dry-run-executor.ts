@@ -77,7 +77,9 @@ export async function executeDryRun(input: DryRunExecutorInput): Promise<DryRunE
         total_estimated_cost_usd: input.callPlan.totalEstimatedCostUsd,
         total_authorized_worst_case_cost_usd: input.callPlan.totalAuthorizedWorstCaseCostUsd,
         output_token_policy_version: input.callPlan.outputTokenPolicyVersion,
+        token_budget_policy_version: input.callPlan.tokenBudgetPolicyVersion,
         provider_max_output_tokens: input.callPlan.providerMaxOutputTokens,
+        run_max_output_tokens: input.callPlan.runMaxOutputTokens,
         model_lifecycle: input.callPlan.modelLifecycle,
       },
     }, input.args.overwrite);

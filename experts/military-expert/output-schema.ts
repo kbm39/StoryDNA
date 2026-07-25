@@ -86,6 +86,42 @@ function isNegativeRealismStatus(status: string): boolean {
   return (MILITARY_EXPERT_NEGATIVE_REALISM_STATUSES as readonly string[]).includes(status);
 }
 
+/** Deterministic summary balance check — applied after findings are parsed. */
+export function validateMilitaryExpertSummaryBalance(
+  summary: string,
+  findings: readonly { realism_status: string }[],
+  errors: string[],
+): void {
+  if (!summary.trim()) {
+    errors.push("summary is required");
+    return;
+  }
+
+  const summaryLower = summary.toLowerCase();
+  const mentionsStrength =
+    /\bstrength|\bworks\b|\bcredible\b|\beffective\b|\bplausible\b|no material inaccuracies|no negative findings|no material concerns in scope/.test(
+      summaryLower,
+    ) ||
+    (/\baccurate\b/.test(summaryLower) && !/\binaccurate\b/.test(summaryLower));
+  const hasNegativeFinding = findings.some((finding) =>
+    isNegativeRealismStatus(finding.realism_status),
+  );
+
+  if (!mentionsStrength) {
+    errors.push("summary must acknowledge material strengths");
+  }
+
+  if (hasNegativeFinding) {
+    const mentionsConcern =
+      /\bconcern|\binaccurate\b|\bissue|\buncertain\b|\bweak\b|\bproblem|\binaccuracy|\braises\b|\brequires\b/.test(
+        summaryLower,
+      );
+    if (!mentionsConcern) {
+      errors.push("summary must acknowledge material concerns when negative findings exist");
+    }
+  }
+}
+
 function pushEnumError(
   errors: string[],
   label: string,
@@ -102,7 +138,11 @@ function parseEvidenceRecord(
   label: string,
   errors: string[],
 ): MilitaryExpertEvidenceRecord | null {
-  if (!raw || typeof raw !== "object") {
+  if (typeof raw === "string") {
+    errors.push(`${label}: must be an object with excerpt/locator fields, not a string`);
+    return null;
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     errors.push(`${label}: must be an object`);
     return null;
   }
@@ -358,18 +398,8 @@ export function validateMilitaryExpertGenerationPayload(
   }
 
   const summary = str(root.summary);
-  if (!summary) {
-    errors.push("summary is required");
-  } else {
-    const summaryLower = summary.toLowerCase();
-    const mentionsStrength = /strength|works|accurate|credible|effective/.test(summaryLower);
-    const mentionsConcern = /concern|inaccurate|issue|uncertain|weak|problem/.test(summaryLower);
-    if (!mentionsStrength || !mentionsConcern) {
-      errors.push("summary must acknowledge both strengths and concerns");
-    }
-    if (LETTER_GRADE_PATTERN.test(summary)) {
-      errors.push("summary must not include letter grades");
-    }
+  if (LETTER_GRADE_PATTERN.test(summary)) {
+    errors.push("summary must not include letter grades");
   }
 
   const strengths = strArray(root.strengths);
@@ -393,6 +423,8 @@ export function validateMilitaryExpertGenerationPayload(
   if (!Array.isArray(root.findings)) {
     errors.push("findings must be an array");
   }
+
+  validateMilitaryExpertSummaryBalance(summary, findings, errors);
 
   const categoryAssessments = Array.isArray(root.category_assessments)
     ? root.category_assessments
@@ -426,9 +458,6 @@ export function validateMilitaryExpertGenerationPayload(
   if (SERVICE_HISTORY_PATTERN.test(summary)) {
     errors.push("summary must not claim personal service history");
   }
-
-  void findings;
-  void categoryAssessments;
 
   return { ok: errors.length === 0, errors };
 }
@@ -482,6 +511,16 @@ export const MILITARY_EXPERT_PROHIBITED_TOP_LEVEL_FIELDS = [
 
 /** JSON schema description embedded in review prompts — single authoritative contract block. */
 export function militaryExpertOutputSchemaPromptBlock(): string {
+  const evidenceShapeExample = JSON.stringify(
+    {
+      excerpt: "quoted passage from supplied text",
+      locator: "optional scene/chapter label",
+      verification_note: "optional editorial note",
+    },
+    null,
+    0,
+  );
+
   return [
     "OUTPUT CONTRACT — respond with ONE JSON object only.",
     "- No markdown fences. No prose before or after the JSON.",
@@ -492,24 +531,46 @@ export function militaryExpertOutputSchemaPromptBlock(): string {
     "Required top-level keys (all must be present):",
     MILITARY_EXPERT_OUTPUT_TOP_LEVEL_KEYS.map((key) => `- ${key}`).join("\n"),
     "",
-    "Exact enum values — synonyms are invalid; use the nearest allowed value; never invent a new enum:",
+    "Exact enum values — synonyms are invalid; empty string is invalid; use the nearest allowed value; never invent a new enum:",
     `- confidence: ${MILITARY_EXPERT_CONFIDENCE_LEVELS.join(" | ")}`,
     `- severity: ${MILITARY_EXPERT_SEVERITY_LEVELS.join(" | ")}`,
     `- realism_status: ${MILITARY_EXPERT_REALISM_STATUSES.join(" | ")}`,
     `- recommendation_type: ${MILITARY_EXPERT_RECOMMENDATION_TYPES.join(" | ")}`,
     `- category: ${MILITARY_EXPERT_CATEGORIES.join(" | ")}`,
+    `- category_assessment.status: ${MILITARY_EXPERT_CATEGORY_ASSESSMENT_STATUSES.join(" | ")} (required; never omit; never empty string; use not_applicable for true-negative categories with no issue)`,
+    "",
+    "manuscript_evidence contract (every item must be an object — strings and bare quotation arrays are invalid):",
+    `- Required object shape: ${evidenceShapeExample}`,
+    "- excerpt: required; quote or paraphrase only from supplied passages — do not invent text.",
+    "- locator: optional scene/chapter label.",
+    "- verification_note: optional editorial note.",
+    "- Every negative finding must include at least one valid manuscript_evidence object.",
+    "",
+    "contrary_evidence contract:",
+    "- Use the contrary_evidence array with the same object shape as manuscript_evidence.",
+    "- When no contrary evidence exists, set contrary_evidence: [] AND include an explicit no-contrary-evidence statement in uncertainty_note (e.g. \"No contrary evidence was found in the supplied scope.\").",
+    "- Do not create substitute fields such as contrary_evidence_note or evidence_strings.",
     "",
     "Finding object required fields:",
     "- finding_id, category, title, observation, manuscript_evidence[], confidence, severity, realism_status, operational_impact, story_impact, recommendation, recommendation_type, preservation_note, author_challenge_allowed (true)",
-    "Negative findings must include manuscript_evidence, contrary_evidence OR an explicit no-contrary-evidence statement in uncertainty_note, confidence, preservation_note.",
     `Evidence excerpts must be <= ${MILITARY_EXPERT_MAX_EVIDENCE_EXCERPT_WORDS} words.`,
     "Do not assign letter grades or school-style percentages.",
     "Do not claim personal military service or classified knowledge.",
     "Do not fabricate sources or citations.",
     "",
+    "Summary balance:",
+    "- Identify material strengths (specific accurate depictions or credible elements).",
+    "- When negative findings exist, also identify material concerns proportionately.",
+    "- When findings is empty (true negative), do NOT fabricate concerns; acknowledge scope reviewed and any residual uncertainty.",
+    "- Do not contradict the findings array.",
+    "",
+    "Category assessment examples (synthetic):",
+    '- Positive: {"category":"command_and_organization","status":"credible","confidence":"medium",...}',
+    '- True-negative: {"category":"operations_and_tactics","status":"not_applicable","confidence":"medium",...}',
+    "",
     "True-negative shape (zero findings):",
     "- findings: []",
-    "- summary: acknowledge both strengths and concerns (e.g. no material inaccuracies found; note what was reviewed and any residual uncertainty).",
+    "- summary: acknowledge material strengths and scope reviewed; note residual uncertainty without inventing inaccuracies.",
     "- strengths: non-empty array of specific accurate depictions.",
     "- next_step: actionable author guidance even when no changes are required.",
     "- author_challenge_supported: true",

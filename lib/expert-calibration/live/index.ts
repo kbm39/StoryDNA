@@ -72,11 +72,17 @@ export {
 export { buildLiveCalibrationCallPlan } from "./call-planner.ts";
 export {
   createBudgetController,
+  createBudgetControllerFromTokenLimits,
   usdToMicroUsd,
   microUsdToUsd,
   serializeUsd,
   sumSerializedUsd,
 } from "./budget-controller.ts";
+export {
+  resolveTokenBudgetLimits,
+  resolveTokenBudgetFromCliArgs,
+  LIVE_CALIBRATION_TOKEN_BUDGET_POLICY_VERSION,
+} from "./token-budget.ts";
 export { createAbortController, isAbortError } from "./abort-controller.ts";
 export {
   writeAtomicArtifact,

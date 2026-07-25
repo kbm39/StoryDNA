@@ -4,7 +4,9 @@ export {
   LIVE_CALIBRATION_DEFAULTS,
   LIVE_CALIBRATION_ESTIMATED_INPUT_TOKENS_PER_CASE,
   LIVE_CALIBRATION_ESTIMATED_OUTPUT_TOKENS_PER_CASE,
+  LIVE_CALIBRATION_LIVE_SMOKE,
   LIVE_CALIBRATION_SCHEMA_VERSION,
+  LIVE_CALIBRATION_SESSION_DEFAULTS,
 } from "./constants.ts";
 
 export type {
@@ -14,6 +16,9 @@ export type {
   LiveCalibrationResult,
   LiveCalibrationRunManifest,
   LiveCalibrationSubsetId,
+  LiveCalibrationProviderInvoker,
+  LiveCalibrationSessionBudget,
+  LiveCalibrationAuditEvent,
   SyntheticScenarioId,
 } from "./contracts.ts";
 
@@ -34,7 +39,17 @@ export {
 } from "./feature-flags.ts";
 
 export { parseLiveCalibrationCliArgs, formatCliArgsForManifest } from "./cli-parser.ts";
-export { validateOperatorAuthorization, validateLiveModeNotImplemented } from "./operator-auth.ts";
+export { validateOperatorAuthorization } from "./operator-auth.ts";
+export { validateLiveSmokeAuthorization } from "./live-authorization.ts";
+export { readAnthropicApiKey, hasAnthropicApiKey, ANTHROPIC_API_KEY_ENV } from "./api-key.ts";
+export {
+  loadSessionBudget,
+  reserveSessionBudget,
+  commitSessionSpend,
+  canSessionAfford,
+  getSessionRemainingMicroUsd,
+} from "./session-budget.ts";
+export { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
 export { resolveProviderSpec, ANTHROPIC_HAIKU_MODEL_ID, ANTHROPIC_HAIKU_MODEL_ALIAS } from "./provider-allowlist.ts";
 export {
   LIVE_CALIBRATION_SUBSETS,
@@ -58,4 +73,6 @@ export {
 } from "./synthetic-adapter.ts";
 export { executeDryRun } from "./dry-run-executor.ts";
 export { executeSynthetic } from "./synthetic-executor.ts";
+export { executeLive } from "./live-executor.ts";
+export { createAnthropicProviderInvoker } from "./providers/anthropic/invoke.ts";
 export { runLiveCalibration, runLiveCalibrationFromArgv } from "./orchestrator.ts";

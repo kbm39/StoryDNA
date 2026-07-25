@@ -74,6 +74,13 @@ function parseSubset(value: string | undefined): LiveCalibrationSubsetId {
   return subset;
 }
 
+const REJECTED_CLI_FLAGS = Object.freeze([
+  "api-key",
+  "anthropic-api-key",
+  "base-url",
+  "endpoint",
+] as const);
+
 export function parseLiveCalibrationCliArgs(argv: readonly string[]): LiveCalibrationCliArgs {
   const flags = new Map<string, string>();
 
@@ -87,6 +94,15 @@ export function parseLiveCalibrationCliArgs(argv: readonly string[]): LiveCalibr
       i++;
     } else {
       flags.set(key, "true");
+    }
+  }
+
+  for (const rejected of REJECTED_CLI_FLAGS) {
+    if (flags.has(rejected)) {
+      throw new LiveCalibrationError(
+        "invalid_configuration",
+        `Rejected CLI flag: --${rejected} (use ANTHROPIC_API_KEY env var)`,
+      );
     }
   }
 
@@ -132,6 +148,16 @@ export function parseLiveCalibrationCliArgs(argv: readonly string[]): LiveCalibr
     ackToken: flags.get("ack-token")?.trim(),
     syntheticScenario: flags.get("synthetic-scenario")?.trim() as LiveCalibrationCliArgs["syntheticScenario"],
     correlationId: flags.get("correlation-id")?.trim(),
+    sessionId: flags.get("session-id")?.trim(),
+    sessionMaxCostUsd: parsePositiveFloat(
+      "--session-max-cost",
+      flags.get("session-max-cost"),
+      LIVE_CALIBRATION_DEFAULTS.sessionMaxCostUsd,
+    ),
+    retainRawResponses: parseBoolean(
+      flags.get("retain-raw-responses"),
+      LIVE_CALIBRATION_DEFAULTS.retainRawResponses,
+    ),
   });
 
   if (mode === "live") {
@@ -182,5 +208,8 @@ export function formatCliArgsForManifest(args: LiveCalibrationCliArgs): Record<s
     maxRuntimeMs: args.maxRuntimeMs,
     outputDir: args.outputDir,
     overwrite: args.overwrite,
+    sessionId: args.sessionId ?? "",
+    sessionMaxCostUsd: args.sessionMaxCostUsd,
+    retainRawResponses: args.retainRawResponses,
   };
 }

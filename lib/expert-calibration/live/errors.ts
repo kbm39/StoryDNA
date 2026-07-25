@@ -24,7 +24,7 @@ const CODE_TO_EXIT: Record<LiveCalibrationFailureCode, LiveCalibrationExitCode> 
   scoring_failure: LIVE_CALIBRATION_EXIT.scoringFailure,
   invalid_configuration: LIVE_CALIBRATION_EXIT.invalidConfiguration,
   provider_error: LIVE_CALIBRATION_EXIT.providerError,
-  live_execution_not_implemented: LIVE_CALIBRATION_EXIT.authorizationFailure,
+  missing_api_key: LIVE_CALIBRATION_EXIT.authorizationFailure,
   synthetic_scenario_unknown: LIVE_CALIBRATION_EXIT.invalidConfiguration,
   result_store_rejected: LIVE_CALIBRATION_EXIT.invalidConfiguration,
   budget_exhausted: LIVE_CALIBRATION_EXIT.costLimitExceeded,

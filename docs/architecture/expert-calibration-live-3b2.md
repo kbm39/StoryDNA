@@ -94,7 +94,7 @@ These flags are explicitly rejected to prevent credential leakage:
 - `--session-max-cost` defaults to `$1.00`
 - Per-run `--max-total-cost` defaults to `$0.08` (spending ceiling, not expected cost)
 - Per-call `--max-cost-per-call` defaults to `$0.03`
-- Three-case smoke estimate at Haiku 4.5 rates (~9,342 input + 7,500 output tokens): approximately **$0.047** worst-case (planner-derived; label as estimate)
+- Three-case smoke estimate at Haiku 4.5 rates (planner-derived from prompt tokenization; label as estimate): approximately **$0.0477** expected, **$0.0717** authorized worst-case for three calls at default 4096 output-token cap
 - Session state stored atomically at `.calibration-results/sessions/{sessionId}.json`
 - Version field enables conflict detection across concurrent runs
 
@@ -153,6 +153,39 @@ Dry-run and synthetic modes remain zero provider calls:
 npm run calibrate:military -- --mode dry-run ...
 npm run calibrate:military -- --mode synthetic ...
 ```
+
+### Haiku 4.5 smoke output-contract remediation (2026-07-25)
+
+The first paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v1`, run `cal-ms0samur-3nmhun`) succeeded at the provider layer but failed calibration parsing (0/3). Those artifacts are immutable — do not modify, delete, or reuse that session ID or run ID.
+
+**Authoritative output contract:** `experts/military-expert/output-schema.ts` (`military_expert_output@v1-draft`).
+
+| Policy | Value |
+|--------|-------|
+| Required top-level fields | `summary`, `strengths`, `findings`, `category_assessments`, `overall_realism_assessment`, `critical_issues`, `priority_actions`, `verification_requests`, `escalation_recommendations`, `uncertainty_summary`, `next_step`, `author_challenge_supported` |
+| Prohibited extra top-level fields | `author_challenge_note`, `closing_note`, `author_notes`, `review_notes`, `metadata` |
+| Confidence enum | `high`, `medium`, `low` |
+| Severity enum | `critical`, `major`, `moderate`, `minor`, `informational` |
+| Recommendation type enum | `correct`, `clarify`, `narrow`, `verify`, `preserve`, `escalate`, `no_change` |
+| True-negative shape | `findings: []` with non-empty `summary`, `strengths`, and `next_step` |
+
+**Schema-alignment strategy:** Prompts embed one canonical contract block (`militaryExpertOutputSchemaPromptBlock`). Parser and validator remain mandatory downstream gates — the schema is not loosened for arbitrary model output.
+
+**Structured output decision:** The installed `@anthropic-ai/sdk` exposes `output_config.format` with `json_schema`, but the Military Expert contract includes conditional rules beyond JSON Schema. Native structured output was **not adopted** for this remediation; rely on prompt-contract enforcement plus existing parser/validator gates.
+
+**Deterministic normalization (`military_expert_enum_normalization@v1`):** Only exact aliases: confidence `moderate→medium`, severity `medium→moderate`. Reject `context_clarification`, `context_required`, and all other unknown enums. Original values are preserved in normalization audit metadata during parse.
+
+**Expected vs authorized cost:**
+
+| Metric | Source | Smoke example |
+|--------|--------|---------------|
+| Expected cost | Calibrated token estimate from prompts (~3430 input + 2500 output per case) | ~$0.0477 run total |
+| Authorized worst-case | Pricing-derived bound using provider `max_tokens` cap | ~$0.0717 run total (3 × ~$0.0239) |
+| Provider output cap | `live_calibration_output_tokens@v1` (4096 default) | Fits $0.03/call and $0.08/run at Haiku 4.5 rates |
+
+Reservation uses authorized worst-case; settlement uses actual usage. Over-budget token configuration fails at plan time before any provider invocation.
+
+**Next paid smoke:** Use a **new** session ID and run ID. Do not retry `military-smoke-haiku45-20260725-v1` or `cal-ms0samur-3nmhun`.
 
 ## Invariants
 

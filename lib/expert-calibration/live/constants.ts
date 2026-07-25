@@ -14,7 +14,9 @@ export const LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION =
 export const LIVE_CALIBRATION_ESTIMATED_INPUT_TOKENS_PER_CASE = 3_114 as const;
 export const LIVE_CALIBRATION_ESTIMATED_OUTPUT_TOKENS_PER_CASE = 2_500 as const;
 
-/** Micro-USD precision for budget arithmetic (6 decimal places). */
+/** Default bounded provider output cap for live calibration (pricing-derived; see budget-policy.ts). */
+export const LIVE_CALIBRATION_DEFAULT_PROVIDER_MAX_OUTPUT_TOKENS = 4_096 as const;
+
 export const LIVE_CALIBRATION_MICRO_USD_SCALE = 1_000_000 as const;
 
 export const LIVE_CALIBRATION_DEFAULTS = Object.freeze({
@@ -22,7 +24,7 @@ export const LIVE_CALIBRATION_DEFAULTS = Object.freeze({
   maxTotalCostUsd: 0.08,
   maxCostPerCallUsd: 0.03,
   maxInputTokens: 50_000,
-  maxOutputTokens: 50_000,
+  maxOutputTokens: LIVE_CALIBRATION_DEFAULT_PROVIDER_MAX_OUTPUT_TOKENS,
   timeoutMs: 120_000,
   maxRuntimeMs: 600_000,
   runs: 1,

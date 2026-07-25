@@ -23,6 +23,11 @@ import {
   validateModelLifecycleForLivePlan,
 } from "./model-lifecycle.ts";
 import { exceedsUsdLimit, serializeUsd, sumSerializedUsd } from "./budget-controller.ts";
+import {
+  deriveAuthorizedOutputTokenPolicy,
+  LIVE_CALIBRATION_OUTPUT_TOKEN_POLICY_VERSION,
+  validateAuthorizedTokenPolicy,
+} from "./budget-policy.ts";
 
 export interface BuildCallPlanInput {
   readonly args: LiveCalibrationCliArgs;
@@ -73,6 +78,7 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
   );
 
   const calls: LiveCalibrationPlannedCall[] = [];
+  let maxPlannedInputTokens: number = LIVE_CALIBRATION_ESTIMATED_INPUT_TOKENS_PER_CASE;
 
   for (let runIndex = 0; runIndex < input.args.runs; runIndex++) {
     for (const caseId of subset.caseIds) {
@@ -103,6 +109,7 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
         request.systemPrompt,
         request.reviewPrompt,
       );
+      maxPlannedInputTokens = Math.max(maxPlannedInputTokens, inputTokens);
       const estimatedCostUsd = serializeUsd(
         estimateTokenCost(
           inputTokens,
@@ -119,6 +126,9 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
           estimatedInputTokens: inputTokens,
           estimatedOutputTokens: outputTokens,
           estimatedCostUsd,
+          authorizedOutputTokens: 0,
+          authorizedWorstCaseCostUsd: 0,
+          providerMaxOutputTokens: 0,
           requestHash,
           systemPromptHash,
           reviewPromptHash,
@@ -127,14 +137,45 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     }
   }
 
-  const totalEstimatedInputTokens = calls.reduce((s, c) => s + c.estimatedInputTokens, 0);
-  const totalEstimatedOutputTokens = calls.reduce((s, c) => s + c.estimatedOutputTokens, 0);
-  const totalEstimatedCostUsd = sumSerializedUsd(calls.map((c) => c.estimatedCostUsd));
+  const tokenPolicy = deriveAuthorizedOutputTokenPolicy({
+    maxCostPerCallUsd: input.args.maxCostPerCallUsd,
+    maxTotalCostUsd: input.args.maxTotalCostUsd,
+    plannedCallCount: calls.length,
+    plannedInputTokensPerCall: maxPlannedInputTokens,
+    pricingProfileId: input.providerSpec.pricingProfileId,
+    cliMaxOutputTokens: input.args.maxOutputTokens,
+  });
 
-  if (calls.length > input.args.maxCalls) {
+  validateAuthorizedTokenPolicy({
+    policy: tokenPolicy,
+    maxCostPerCallUsd: input.args.maxCostPerCallUsd,
+    maxTotalCostUsd: input.args.maxTotalCostUsd,
+    plannedCallCount: calls.length,
+  });
+
+  const authorizedCalls = calls.map((call) =>
+    Object.freeze({
+      ...call,
+      authorizedOutputTokens: tokenPolicy.authorizedOutputTokensPerCall,
+      authorizedWorstCaseCostUsd: tokenPolicy.authorizedWorstCaseCostUsd,
+      providerMaxOutputTokens: tokenPolicy.providerMaxOutputTokens,
+    }),
+  );
+
+  const totalEstimatedInputTokens = authorizedCalls.reduce((s, c) => s + c.estimatedInputTokens, 0);
+  const totalEstimatedOutputTokens = authorizedCalls.reduce(
+    (s, c) => s + c.estimatedOutputTokens,
+    0,
+  );
+  const totalEstimatedCostUsd = sumSerializedUsd(authorizedCalls.map((c) => c.estimatedCostUsd));
+  const totalAuthorizedWorstCaseCostUsd = sumSerializedUsd(
+    authorizedCalls.map((c) => c.authorizedWorstCaseCostUsd),
+  );
+
+  if (authorizedCalls.length > input.args.maxCalls) {
     throw new LiveCalibrationError(
       "cost_limit_exceeded",
-      `Planned calls (${calls.length}) exceed --max-calls (${input.args.maxCalls})`,
+      `Planned calls (${authorizedCalls.length}) exceed --max-calls (${input.args.maxCalls})`,
     );
   }
 
@@ -145,11 +186,17 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     );
   }
 
-  for (const call of calls) {
+  for (const call of authorizedCalls) {
     if (exceedsUsdLimit(call.estimatedCostUsd, input.args.maxCostPerCallUsd)) {
       throw new LiveCalibrationError(
         "cost_limit_exceeded",
         `Per-call estimate for ${call.caseId} exceeds --max-cost-per-call`,
+      );
+    }
+    if (exceedsUsdLimit(call.authorizedWorstCaseCostUsd, input.args.maxCostPerCallUsd)) {
+      throw new LiveCalibrationError(
+        "cost_limit_exceeded",
+        `Authorized worst-case for ${call.caseId} exceeds --max-cost-per-call`,
       );
     }
   }
@@ -162,10 +209,13 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     providerSpec: input.providerSpec,
     modelLifecycle,
     runs: input.args.runs,
-    calls: Object.freeze(calls),
+    calls: Object.freeze(authorizedCalls),
     totalEstimatedInputTokens,
     totalEstimatedOutputTokens,
     totalEstimatedCostUsd,
+    totalAuthorizedWorstCaseCostUsd,
+    outputTokenPolicyVersion: LIVE_CALIBRATION_OUTPUT_TOKEN_POLICY_VERSION,
+    providerMaxOutputTokens: tokenPolicy.providerMaxOutputTokens,
   });
 }
 

@@ -87,6 +87,48 @@ export const ALLOWED_PLUGIN_EXPORTS: readonly AllowedPluginExportEntry[] = [
     invocationKind: "payload_builder",
     classification: "payload_builder",
   },
+  {
+    moduleId: "@/experts/military-expert/prompts",
+    exportName: "buildMilitaryExpertSystemPrompt",
+    invocationKind: "prompt_builder",
+    classification: "prompt_builder",
+  },
+  {
+    moduleId: "@/experts/military-expert/prompts",
+    exportName: "buildMilitaryExpertReviewPrompt",
+    invocationKind: "prompt_builder",
+    classification: "prompt_builder",
+  },
+  {
+    moduleId: "@/experts/military-expert/generation-contract",
+    exportName: "buildMilitaryExpertGenerationRequest",
+    invocationKind: "payload_builder",
+    classification: "payload_builder",
+  },
+  {
+    moduleId: "@/experts/military-expert/parsing",
+    exportName: "parseMilitaryExpertGenerationResponse",
+    invocationKind: "validator",
+    classification: "validation_function",
+  },
+  {
+    moduleId: "@/experts/military-expert/repair-classification",
+    exportName: "classifyMilitaryExpertRepairNeed",
+    invocationKind: "validator",
+    classification: "validation_function",
+  },
+  {
+    moduleId: "@/experts/military-expert/validation",
+    exportName: "validateMilitaryExpertReview",
+    invocationKind: "validator",
+    classification: "validation_function",
+  },
+  {
+    moduleId: "@/experts/military-expert/normalization",
+    exportName: "normalizeMilitaryExpertReview",
+    invocationKind: "normalizer",
+    classification: "normalizer",
+  },
 ] as const;
 
 /** Export categories explicitly blocked from P2-22 invocation. */

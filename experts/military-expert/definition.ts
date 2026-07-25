@@ -4,6 +4,11 @@
 
 import type { ReviewerDefinition } from "@/lib/ai/review-engine.ts";
 import { MILITARY_EXPERT_CATEGORIES, MILITARY_EXPERT_KEY } from "./contracts.ts";
+import {
+  buildMilitaryExpertReviewPrompt,
+  buildMilitaryExpertRevisionCandidatesPrompt,
+  buildMilitaryExpertSystemPrompt,
+} from "./prompts.ts";
 
 const CATEGORY_DISPLAY: Record<(typeof MILITARY_EXPERT_CATEGORIES)[number], string> = {
   command_and_organization: "Command & Organization",
@@ -552,32 +557,48 @@ export const MILITARY_EXPERT: ReviewerDefinition = {
   grounding: true,
 };
 
-/** Stub — not sent to providers in PR 1. */
+/** Real system prompt builder — not sent to providers in PR 2. */
 export function buildSystemPrompt(_def: typeof MILITARY_EXPERT): string {
   void _def;
-  return "[MILITARY_EXPERT_DRAFT_STUB] system prompt not wired to providers in PR 1.";
+  return buildMilitaryExpertSystemPrompt(MILITARY_EXPERT);
 }
 
-/** Stub — not sent to providers in PR 1. */
+/** Real review prompt builder — not sent to providers in PR 2. */
 export function buildReviewPrompt(
   _def: typeof MILITARY_EXPERT,
   _intent: unknown,
-  _options?: { wordCount?: number | null },
+  options?: {
+    wordCount?: number | null;
+    manuscriptText?: string;
+    manuscriptVersionId?: string;
+    reviewScope?: import("./contracts.ts").MilitaryExpertReviewScope;
+    manuscriptHash?: string;
+    genreContext?: string | null;
+    countryPeriod?: string | null;
+  },
 ): string {
   void _def;
   void _intent;
-  void _options;
-  return "[MILITARY_EXPERT_DRAFT_STUB] review prompt not wired to providers in PR 1.";
+  return buildMilitaryExpertReviewPrompt({
+    def: MILITARY_EXPERT,
+    intent: (_intent as import("@/lib/types.ts").AuthorIntent | null) ?? null,
+    manuscriptVersionId: options?.manuscriptVersionId ?? "unspecified-manuscript-version",
+    reviewScope: options?.reviewScope ?? "full_manuscript",
+    manuscriptText: options?.manuscriptText ?? "[manuscript text not supplied to prompt builder]",
+    canonicalWordCount: options?.wordCount ?? 0,
+    manuscriptHash: options?.manuscriptHash ?? "unspecified-manuscript-hash",
+    genreContext: options?.genreContext ?? null,
+    countryPeriod: options?.countryPeriod ?? null,
+  });
 }
 
-/** Stub — not sent to providers in PR 1. */
+/** Revision candidates disabled in v1 draft. */
 export function buildRevisionCandidatesPrompt(
   _def: typeof MILITARY_EXPERT,
-  _args: { reviewMemo: string },
+  args: { reviewMemo: string },
 ): string {
   void _def;
-  void _args;
-  return "[MILITARY_EXPERT_DRAFT_STUB] revision candidates prompt not wired to providers in PR 1.";
+  return buildMilitaryExpertRevisionCandidatesPrompt(args);
 }
 
 /** Draft passage payload builder — not wired to production publishing. */

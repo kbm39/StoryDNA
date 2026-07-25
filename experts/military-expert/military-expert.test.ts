@@ -537,14 +537,16 @@ describe("Military Expert PR 1", () => {
     assert.doesNotMatch(read("lib/expert-registry/seed/platform-seeds.ts"), /0024/);
   });
 
-  it("59. no environment flag enables Military Expert", () => {
+  it("59. generation contract flag default off", () => {
     const runtime = militaryExpertRuntimeDefinition();
     assert.equal(runtime.enabled, false);
-    assert.doesNotMatch(read("lib/expert-review-engine/feature-flags.ts"), /military_expert/);
+    assert.match(read("lib/expert-review-engine/feature-flags.ts"), /EXPERT_MILITARY_GENERATION_CONTRACT_ENABLED/);
   });
 
   it("60. no certified tag created", () => {
     assert.notEqual(militaryExpertRuntimeDefinition().expert_version, "v1.0.0-certified");
-    assert.match(buildSystemPrompt(MILITARY_EXPERT), /DRAFT_STUB/);
+    const systemPrompt = buildSystemPrompt(MILITARY_EXPERT);
+    assert.doesNotMatch(systemPrompt, /DRAFT_STUB/);
+    assert.match(systemPrompt, /MILITARY EXPERT CHARTER/);
   });
 });

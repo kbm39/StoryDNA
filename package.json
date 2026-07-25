@@ -12,7 +12,8 @@
     "lint": "eslint",
     "test": "node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test \"lib/**/*.test.ts\" \"experts/**/*.test.ts\"",
     "trigger:dev": "npx trigger.dev@latest dev",
-    "backfill:word-count": "node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply"
+    "backfill:word-count": "node --env-file=.env.local --experimental-strip-types scripts/validate-word-count.ts --apply",
+    "calibrate:military": "node --import ./scripts/test-path-alias.mjs --experimental-strip-types scripts/expert-calibration/run-live-calibration.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

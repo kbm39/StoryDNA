@@ -49,7 +49,7 @@ describe("Live calibration budget policy", () => {
 
     assert.ok(policy.providerMaxOutputTokens <= 4_500);
     assert.ok(policy.providerMaxOutputTokens >= 512);
-    assert.equal(policy.policyVersion, "live_calibration_output_tokens@v1");
+    assert.equal(policy.policyVersion, "live_calibration_output_tokens@v2");
   });
 
   it("keeps expected and authorized worst-case costs distinct", () => {

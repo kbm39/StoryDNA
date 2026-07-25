@@ -17,7 +17,8 @@ import type {
   LiveCalibrationRunManifest,
 } from "./contracts.ts";
 import { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
-import { createBudgetController } from "./budget-controller.ts";
+import { createBudgetControllerFromTokenLimits } from "./budget-controller.ts";
+import { resolveTokenBudgetFromCliArgs } from "./token-budget.ts";
 import { LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION } from "./constants.ts";
 import { LIVE_CALIBRATION_EXIT } from "./errors.ts";
 import { formatCliArgsForManifest } from "./cli-parser.ts";
@@ -97,12 +98,12 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
   const now = input.now ?? (() => Date.now());
   const cwd = input.cwd ?? process.cwd();
   const sessionId = input.args.sessionId!;
-  const budget = createBudgetController({
+  const tokenLimits = resolveTokenBudgetFromCliArgs(input.args);
+  const budget = createBudgetControllerFromTokenLimits({
     maxCalls: input.args.maxCalls,
     maxTotalCostUsd: input.args.maxTotalCostUsd,
     maxCostPerCallUsd: input.args.maxCostPerCallUsd,
-    maxInputTokens: input.args.maxInputTokens,
-    maxOutputTokens: input.args.maxOutputTokens,
+    tokenLimits,
   });
 
   appendAuditEvent(

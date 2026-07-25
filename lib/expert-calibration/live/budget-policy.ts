@@ -7,7 +7,7 @@ import { serializeUsd, sumSerializedUsd, exceedsUsdLimit } from "./budget-contro
 import { LiveCalibrationError } from "./errors.ts";
 
 export const LIVE_CALIBRATION_OUTPUT_TOKEN_POLICY_VERSION =
-  "live_calibration_output_tokens@v1" as const;
+  "live_calibration_output_tokens@v2" as const;
 
 /** Safety margin applied after ceiling-derived token math (basis points). */
 export const LIVE_CALIBRATION_OUTPUT_TOKEN_SAFETY_BPS = 500 as const;

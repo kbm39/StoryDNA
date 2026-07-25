@@ -373,7 +373,7 @@ describe("Expert Calibration Live PR 3B-1", () => {
       });
       const sum = sumSerializedUsd(plan.calls.map((c) => c.estimatedCostUsd));
       assert.equal(plan.totalEstimatedCostUsd, sum);
-      assert.equal(plan.totalEstimatedCostUsd, 0.0477);
+      assert.equal(plan.totalEstimatedCostUsd, 0.0489);
     });
     it("55 rejects unknown suite", () => {
       assert.throws(
@@ -408,8 +408,9 @@ describe("Expert Calibration Live PR 3B-1", () => {
         maxCalls: 3,
         maxTotalCostUsd: 0.05,
         maxCostPerCallUsd: 0.02,
-        maxInputTokens: 50_000,
-        maxOutputTokens: 50_000,
+        runMaxInputTokens: 50_000,
+        runMaxOutputTokens: 50_000,
+        providerMaxOutputTokensPerCall: 4096,
       });
       assert.equal(bc.canAffordCall(0.01, 3000, 2500), true);
     });
@@ -418,8 +419,9 @@ describe("Expert Calibration Live PR 3B-1", () => {
         maxCalls: 1,
         maxTotalCostUsd: 1,
         maxCostPerCallUsd: 1,
-        maxInputTokens: 50_000,
-        maxOutputTokens: 50_000,
+        runMaxInputTokens: 50_000,
+        runMaxOutputTokens: 50_000,
+        providerMaxOutputTokensPerCall: 4096,
       });
       bc.recordCall(0.01, 100, 100);
       assert.equal(bc.canAffordCall(0.01, 100, 100), false);
@@ -429,8 +431,9 @@ describe("Expert Calibration Live PR 3B-1", () => {
         maxCalls: 10,
         maxTotalCostUsd: 1,
         maxCostPerCallUsd: 0.01,
-        maxInputTokens: 50_000,
-        maxOutputTokens: 50_000,
+        runMaxInputTokens: 50_000,
+        runMaxOutputTokens: 50_000,
+        providerMaxOutputTokensPerCall: 4096,
       });
       assert.equal(bc.canAffordCall(0.02, 100, 100), false);
     });
@@ -439,8 +442,9 @@ describe("Expert Calibration Live PR 3B-1", () => {
         maxCalls: 3,
         maxTotalCostUsd: 0.05,
         maxCostPerCallUsd: 0.02,
-        maxInputTokens: 50_000,
-        maxOutputTokens: 50_000,
+        runMaxInputTokens: 50_000,
+        runMaxOutputTokens: 50_000,
+        providerMaxOutputTokensPerCall: 4096,
       });
       bc.recordCall(0.01, 3000, 2500);
       const snap = bc.snapshot();

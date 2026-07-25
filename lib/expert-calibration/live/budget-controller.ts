@@ -1,12 +1,14 @@
 import type { LiveCalibrationBudgetSnapshot } from "./contracts.ts";
 import { LIVE_CALIBRATION_MICRO_USD_SCALE } from "./constants.ts";
+import type { LiveCalibrationTokenBudgetLimits } from "./token-budget.ts";
 
 export interface BudgetControllerLimits {
   readonly maxCalls: number;
   readonly maxTotalCostUsd: number;
   readonly maxCostPerCallUsd: number;
-  readonly maxInputTokens: number;
-  readonly maxOutputTokens: number;
+  readonly runMaxInputTokens: number;
+  readonly runMaxOutputTokens: number;
+  readonly providerMaxOutputTokensPerCall: number;
 }
 
 export interface BudgetControllerState {
@@ -39,10 +41,30 @@ export function exceedsUsdLimit(amountUsd: number, limitUsd: number): boolean {
   return usdToMicroUsd(amountUsd) > usdToMicroUsd(limitUsd);
 }
 
+export function createBudgetControllerFromTokenLimits(input: {
+  readonly maxCalls: number;
+  readonly maxTotalCostUsd: number;
+  readonly maxCostPerCallUsd: number;
+  readonly tokenLimits: LiveCalibrationTokenBudgetLimits;
+}): ReturnType<typeof createBudgetController> {
+  return createBudgetController({
+    maxCalls: input.maxCalls,
+    maxTotalCostUsd: input.maxTotalCostUsd,
+    maxCostPerCallUsd: input.maxCostPerCallUsd,
+    runMaxInputTokens: input.tokenLimits.runMaxInputTokens,
+    runMaxOutputTokens: input.tokenLimits.runMaxOutputTokens,
+    providerMaxOutputTokensPerCall: input.tokenLimits.providerMaxOutputTokensPerCall,
+  });
+}
+
 export function createBudgetController(limits: BudgetControllerLimits): {
   state: () => BudgetControllerState;
   snapshot: () => LiveCalibrationBudgetSnapshot;
-  canAffordCall: (estimatedCostUsd: number, inputTokens: number, outputTokens: number) => boolean;
+  canAffordCall: (
+    authorizedWorstCaseCostUsd: number,
+    authorizedInputTokens: number,
+    authorizedOutputTokensForCall: number,
+  ) => boolean;
   recordCall: (actualCostUsd: number, inputTokens: number, outputTokens: number) => void;
 } {
   let callsUsed = 0;
@@ -68,25 +90,29 @@ export function createBudgetController(limits: BudgetControllerLimits): {
       costRemainingUsd: serializeUsd(microUsdToUsd(costRemainingMicroUsd)),
       inputTokensUsed,
       outputTokensUsed,
+      runMaxInputTokens: limits.runMaxInputTokens,
+      runMaxOutputTokens: limits.runMaxOutputTokens,
+      providerMaxOutputTokensPerCall: limits.providerMaxOutputTokensPerCall,
       budgetExhausted:
         callsUsed >= limits.maxCalls ||
         totalCostMicroUsd >= maxTotalCostMicroUsd ||
-        inputTokensUsed >= limits.maxInputTokens ||
-        outputTokensUsed >= limits.maxOutputTokens,
+        inputTokensUsed >= limits.runMaxInputTokens ||
+        outputTokensUsed >= limits.runMaxOutputTokens,
     };
   }
 
   function canAffordCall(
-    estimatedCostUsd: number,
-    inputTokens: number,
-    outputTokens: number,
+    authorizedWorstCaseCostUsd: number,
+    authorizedInputTokens: number,
+    authorizedOutputTokensForCall: number,
   ): boolean {
     if (callsUsed >= limits.maxCalls) return false;
-    const estimatedMicro = usdToMicroUsd(estimatedCostUsd);
-    if (estimatedMicro > maxCostPerCallMicroUsd) return false;
-    if (totalCostMicroUsd + estimatedMicro > maxTotalCostMicroUsd) return false;
-    if (inputTokensUsed + inputTokens > limits.maxInputTokens) return false;
-    if (outputTokensUsed + outputTokens > limits.maxOutputTokens) return false;
+    const authorizedMicro = usdToMicroUsd(authorizedWorstCaseCostUsd);
+    if (authorizedMicro > maxCostPerCallMicroUsd) return false;
+    if (totalCostMicroUsd + authorizedMicro > maxTotalCostMicroUsd) return false;
+    if (inputTokensUsed + authorizedInputTokens > limits.runMaxInputTokens) return false;
+    if (outputTokensUsed + authorizedOutputTokensForCall > limits.runMaxOutputTokens) return false;
+    if (authorizedOutputTokensForCall > limits.providerMaxOutputTokensPerCall) return false;
     return true;
   }
 

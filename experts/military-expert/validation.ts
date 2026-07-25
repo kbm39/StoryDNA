@@ -17,6 +17,7 @@ import {
   type MilitaryExpertReview,
   type MilitaryExpertValidationResult,
 } from "./contracts.ts";
+import { validateMilitaryExpertSummaryBalance } from "./output-schema.ts";
 
 const LETTER_GRADE_PATTERN = /\b(?:grade\s*[A-F][+-]?|[A-F]\s*grade|letter\s*grade)\b/i;
 
@@ -180,12 +181,7 @@ export function validateMilitaryExpertReview(
   if (!review.summary?.trim()) {
     errors.push("summary is required");
   } else {
-    const summaryLower = review.summary.toLowerCase();
-    const mentionsStrength = /strength|works|accurate|credible|effective/.test(summaryLower);
-    const mentionsConcern = /concern|inaccurate|issue|uncertain|weak|problem/.test(summaryLower);
-    if (!mentionsStrength || !mentionsConcern) {
-      errors.push("summary must acknowledge both strengths and concerns");
-    }
+    validateMilitaryExpertSummaryBalance(review.summary, review.findings ?? [], errors);
   }
 
   if (!Array.isArray(review.strengths) || review.strengths.length === 0) {

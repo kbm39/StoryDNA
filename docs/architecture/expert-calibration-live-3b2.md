@@ -94,7 +94,7 @@ These flags are explicitly rejected to prevent credential leakage:
 - `--session-max-cost` defaults to `$1.00`
 - Per-run `--max-total-cost` defaults to `$0.08` (spending ceiling, not expected cost)
 - Per-call `--max-cost-per-call` defaults to `$0.03`
-- Three-case smoke estimate at Haiku 4.5 rates (planner-derived from prompt tokenization; label as estimate): approximately **$0.0477** expected, **$0.0717** authorized worst-case for three calls at default 4096 output-token cap
+- Three-case smoke estimate at Haiku 4.5 rates (planner-derived from prompt tokenization; label as estimate): approximately **$0.0489** expected, **$0.0729** authorized worst-case for three calls at default 4096 output-token cap
 - Session state stored atomically at `.calibration-results/sessions/{sessionId}.json`
 - Version field enables conflict detection across concurrent runs
 
@@ -154,6 +154,43 @@ npm run calibrate:military -- --mode dry-run ...
 npm run calibrate:military -- --mode synthetic ...
 ```
 
+### Haiku 4.5 smoke v2 budget regression (2026-07-25)
+
+The second paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v2`, run `cal-ms0tbw2n-rbso0j`) succeeded at the provider layer for call 1 but stopped with `budget_exhausted` before call 2. Dollar budget was not exhausted (~$0.014 of $0.08). Those artifacts are immutable — do not modify, delete, or reuse that session ID or run ID.
+
+**Root cause:** `--max-output-tokens` was conflated with both the Anthropic per-call `max_tokens` cap and the cumulative run output-token ceiling. After call 1 used 2175 output tokens, call 2 was blocked because `2175 + 4096 > 4096`.
+
+**Token budget model (`live_calibration_token_budget@v2`):**
+
+| Concept | CLI / source | Smoke default |
+|---------|--------------|---------------|
+| Provider per-call max output tokens | `--max-output-tokens` | 4096 |
+| Cumulative run output-token ceiling | `--max-run-output-tokens` (optional) | Derived: 4096 × 3 = 12288 |
+| Cumulative run input-token ceiling | `--max-input-tokens` | 50000 |
+| Max calls | `--max-calls` | 3 |
+
+When `--max-run-output-tokens` is omitted, the cumulative ceiling is derived deterministically as `providerMaxOutputTokensPerCall × maxCalls`, subject to dollar-budget authorization at plan time. Both values are recorded in manifests and audit logs.
+
+**Dollar authorization (unchanged):**
+
+| Gate | Limit |
+|------|-------|
+| Per-call authorized worst-case | $0.03 |
+| Run authorized worst-case | $0.08 |
+| Session ceiling | $1.00 |
+
+Reservation uses authorized worst-case dollar cost; settlement uses actual usage-derived cost. Token telemetry and dollar accounting remain separate.
+
+**Output contract v2 clarifications:**
+
+- `manuscript_evidence[]` items must be objects `{ excerpt, locator?, verification_note? }` — strings are invalid.
+- Negative findings require at least one valid evidence object plus contrary-evidence handling via `contrary_evidence[]` or an explicit no-contrary statement in `uncertainty_note`.
+- `category_assessments[].status` must be one of: `strong | credible | mixed | weak | insufficient_evidence | not_applicable` — empty string and synonyms are invalid.
+- Summary must acknowledge material strengths; material concerns are required only when negative findings exist (true-negative summaries must not fabricate concerns).
+- Normalization audit records (`moderate→medium`, `medium→moderate`) persist in contract metadata.
+
+**Next paid smoke:** Use a **new** session ID and run ID. Do not retry `military-smoke-haiku45-20260725-v2` or `cal-ms0tbw2n-rbso0j`.
+
 ### Haiku 4.5 smoke output-contract remediation (2026-07-25)
 
 The first paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v1`, run `cal-ms0samur-3nmhun`) succeeded at the provider layer but failed calibration parsing (0/3). Those artifacts are immutable — do not modify, delete, or reuse that session ID or run ID.
@@ -179,8 +216,8 @@ The first paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v1`
 
 | Metric | Source | Smoke example |
 |--------|--------|---------------|
-| Expected cost | Calibrated token estimate from prompts (~3430 input + 2500 output per case) | ~$0.0477 run total |
-| Authorized worst-case | Pricing-derived bound using provider `max_tokens` cap | ~$0.0717 run total (3 × ~$0.0239) |
+| Expected cost | Calibrated token estimate from prompts (~3824 input + 2500 output per case) | ~$0.0489 run total |
+| Authorized worst-case | Pricing-derived bound using provider `max_tokens` cap | ~$0.0729 run total (3 × ~$0.0243) |
 | Provider output cap | `live_calibration_output_tokens@v1` (4096 default) | Fits $0.03/call and $0.08/run at Haiku 4.5 rates |
 
 Reservation uses authorized worst-case; settlement uses actual usage. Over-budget token configuration fails at plan time before any provider invocation.

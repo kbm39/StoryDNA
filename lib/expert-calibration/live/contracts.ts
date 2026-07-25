@@ -62,7 +62,10 @@ export interface LiveCalibrationCliArgs {
   readonly maxTotalCostUsd: number;
   readonly maxCostPerCallUsd: number;
   readonly maxInputTokens: number;
+  /** Provider per-call max output tokens (Anthropic max_tokens). */
   readonly maxOutputTokens: number;
+  /** Cumulative run output-token ceiling; derived when omitted. */
+  readonly maxRunOutputTokens?: number;
   readonly timeoutMs: number;
   readonly maxRuntimeMs: number;
   readonly outputDir: string;
@@ -119,7 +122,9 @@ export interface LiveCalibrationCallPlan {
   readonly totalEstimatedCostUsd: number;
   readonly totalAuthorizedWorstCaseCostUsd: number;
   readonly outputTokenPolicyVersion: string;
+  readonly tokenBudgetPolicyVersion: string;
   readonly providerMaxOutputTokens: number;
+  readonly runMaxOutputTokens: number;
 }
 
 export interface LiveCalibrationBudgetSnapshot {
@@ -131,6 +136,9 @@ export interface LiveCalibrationBudgetSnapshot {
   readonly costRemainingUsd: number;
   readonly inputTokensUsed: number;
   readonly outputTokensUsed: number;
+  readonly runMaxInputTokens: number;
+  readonly runMaxOutputTokens: number;
+  readonly providerMaxOutputTokensPerCall: number;
   readonly budgetExhausted: boolean;
 }
 

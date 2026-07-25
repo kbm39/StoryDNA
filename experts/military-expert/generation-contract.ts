@@ -377,6 +377,7 @@ export async function runMilitaryExpertGenerationContract(
     generationStatus: "success",
     repairDecision,
     durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
+    enumNormalizationAudits: parsed.enumNormalizationAudits,
     review: normalized,
   };
 }

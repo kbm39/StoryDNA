@@ -137,6 +137,13 @@ export function parseLiveCalibrationCliArgs(argv: readonly string[]): LiveCalibr
       flags.get("max-output-tokens"),
       LIVE_CALIBRATION_DEFAULTS.maxOutputTokens,
     ),
+    maxRunOutputTokens: flags.has("max-run-output-tokens")
+      ? parsePositiveInt(
+          "--max-run-output-tokens",
+          flags.get("max-run-output-tokens"),
+          0,
+        )
+      : undefined,
     timeoutMs: parsePositiveInt("--timeout-ms", flags.get("timeout-ms"), LIVE_CALIBRATION_DEFAULTS.timeoutMs),
     maxRuntimeMs: parsePositiveInt(
       "--max-runtime-ms",
@@ -204,6 +211,7 @@ export function formatCliArgsForManifest(args: LiveCalibrationCliArgs): Record<s
     maxCostPerCallUsd: args.maxCostPerCallUsd,
     maxInputTokens: args.maxInputTokens,
     maxOutputTokens: args.maxOutputTokens,
+    maxRunOutputTokens: args.maxRunOutputTokens ?? "",
     timeoutMs: args.timeoutMs,
     maxRuntimeMs: args.maxRuntimeMs,
     outputDir: args.outputDir,

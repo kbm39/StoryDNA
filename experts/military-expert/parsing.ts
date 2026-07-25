@@ -3,7 +3,7 @@
  */
 
 import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
-import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts";
+import { normalizeMilitaryExpertGenerationEnums, type MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
 import {
   coerceMilitaryExpertGenerationPayload,
   validateMilitaryExpertGenerationPayload,
@@ -28,6 +28,7 @@ export interface MilitaryExpertParseSuccess {
   ok: true;
   payload: MilitaryExpertGenerationPayload;
   cleanedText: string;
+  enumNormalizationAudits: readonly MilitaryExpertEnumNormalizationAudit[];
 }
 
 export interface MilitaryExpertParseFailure {
@@ -139,7 +140,6 @@ export function parseMilitaryExpertGenerationResponse(
     }
 
     const { normalized, audits } = normalizeMilitaryExpertGenerationEnums(parsed);
-    void audits;
 
     const validation = validateMilitaryExpertGenerationPayload(normalized);
     if (!validation.ok) {
@@ -159,7 +159,7 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    return { ok: true, payload, cleanedText: jsonText };
+    return { ok: true, payload, cleanedText: jsonText, enumNormalizationAudits: audits };
   } catch (error) {
     return {
       ok: false,

@@ -28,6 +28,10 @@ import {
   LIVE_CALIBRATION_OUTPUT_TOKEN_POLICY_VERSION,
   validateAuthorizedTokenPolicy,
 } from "./budget-policy.ts";
+import {
+  LIVE_CALIBRATION_TOKEN_BUDGET_POLICY_VERSION,
+  resolveTokenBudgetFromCliArgs,
+} from "./token-budget.ts";
 
 export interface BuildCallPlanInput {
   readonly args: LiveCalibrationCliArgs;
@@ -153,6 +157,15 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     plannedCallCount: calls.length,
   });
 
+  const tokenLimits = resolveTokenBudgetFromCliArgs(input.args);
+  const minimumRunOutputTokens = tokenPolicy.providerMaxOutputTokens * calls.length;
+  if (tokenLimits.runMaxOutputTokens < minimumRunOutputTokens) {
+    throw new LiveCalibrationError(
+      "invalid_configuration",
+      `Cumulative run output ceiling (${tokenLimits.runMaxOutputTokens}) is insufficient for ${calls.length} calls at ${tokenPolicy.providerMaxOutputTokens} tokens per call (requires ${minimumRunOutputTokens})`,
+    );
+  }
+
   const authorizedCalls = calls.map((call) =>
     Object.freeze({
       ...call,
@@ -215,7 +228,9 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     totalEstimatedCostUsd,
     totalAuthorizedWorstCaseCostUsd,
     outputTokenPolicyVersion: LIVE_CALIBRATION_OUTPUT_TOKEN_POLICY_VERSION,
+    tokenBudgetPolicyVersion: LIVE_CALIBRATION_TOKEN_BUDGET_POLICY_VERSION,
     providerMaxOutputTokens: tokenPolicy.providerMaxOutputTokens,
+    runMaxOutputTokens: tokenLimits.runMaxOutputTokens,
   });
 }
 

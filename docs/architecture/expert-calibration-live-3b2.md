@@ -5,10 +5,37 @@ Developer runbook for Military Expert live smoke calibration with real Anthropic
 ## Scope
 
 - **Provider:** Anthropic only
-- **Model:** `claude-3-5-haiku-20241022` (`haiku-v1`)
+- **Model:** `claude-haiku-4-5-20251001` (`haiku-4-5-v1`) — pinned ID only; do not use convenience alias `claude-haiku-4-5` in provider requests
 - **Live gate:** smoke subset only — `military_expert_smoke_v1`, `runs=1`, exactly 3 calls
 - **No retries, no provider repair, sequential execution**
 - **SDK isolated** to `lib/expert-calibration/live/providers/anthropic/invoke.ts`
+
+## Model lifecycle (Haiku 4.5 migration)
+
+| Item | Value |
+|------|-------|
+| Retired model | `claude-3-5-haiku-20241022` (`haiku-v1`) |
+| Retirement date | 2026-02-19 |
+| Replacement | `claude-haiku-4-5-20251001` (`haiku-4-5-v1`) |
+| Pricing profile | `calibration_anthropic_haiku_4_5_v1` |
+| Input rate | $1.00 / million tokens |
+| Output rate | $5.00 / million tokens |
+
+**Official sources:** Anthropic model deprecations documentation (`anthropic-model-deprecations`); Anthropic pricing page for Claude Haiku 4.5 (verified 2026-07-25).
+
+Retired models, the old alias `haiku-v1`, and the convenience alias `claude-haiku-4-5` are rejected for new live plans. The historical pricing profile `calibration_anthropic_haiku_v1` ($0.25/M input, $1.25/M output) remains readable for historical replay only.
+
+### Model-lifecycle guard
+
+Version-controlled lifecycle metadata in `lib/expert-calibration/live/model-lifecycle.ts` records provider, model ID, StoryDNA alias, status (`active` / `deprecated` / `retired`), retirement dates, recommended replacement, and pricing profile. Lifecycle is checked before API-key read, session reservation, and provider invocation. No automatic network lookup during execution.
+
+### Historical failed-run preservation
+
+The first paid smoke attempt (session `military-smoke-20260725-v2`, run `.calibration-results/military-smoke-live-20260725-v2-001`) failed with `404 not_found_error` on the retired model. Those artifacts are immutable audit evidence — do not modify, delete, or reconcile them. Do not reuse that session ID or run ID for a new paid run.
+
+### Next step after migration
+
+Run a **fresh preflight dry-run** with `--model haiku-4-5-v1` and revised spending ceilings. Do not immediately execute another paid run or automatically retry the failed session.
 
 ## Prerequisites
 
@@ -40,11 +67,11 @@ npm run calibrate:military -- \
   --suite military_expert_v1_draft_golden \
   --subset military_expert_smoke_v1 \
   --provider anthropic \
-  --model haiku-v1 \
+  --model haiku-4-5-v1 \
   --runs 1 \
   --max-calls 3 \
-  --max-total-cost 0.05 \
-  --max-cost-per-call 0.02 \
+  --max-total-cost 0.08 \
+  --max-cost-per-call 0.03 \
   --session-id my-session-20260725 \
   --session-max-cost 1.00 \
   --ack-token I-ACKNOWLEDGE-LIVE-CALIBRATION-SPEND \
@@ -65,7 +92,9 @@ These flags are explicitly rejected to prevent credential leakage:
 
 - `--session-id` is **required** for live mode
 - `--session-max-cost` defaults to `$1.00`
-- Per-run `--max-total-cost` defaults to `$0.05`
+- Per-run `--max-total-cost` defaults to `$0.08` (spending ceiling, not expected cost)
+- Per-call `--max-cost-per-call` defaults to `$0.03`
+- Three-case smoke estimate at Haiku 4.5 rates (~9,342 input + 7,500 output tokens): approximately **$0.047** worst-case (planner-derived; label as estimate)
 - Session state stored atomically at `.calibration-results/sessions/{sessionId}.json`
 - Version field enables conflict detection across concurrent runs
 
@@ -102,6 +131,11 @@ Live run manifests and audit events record explicit Anthropic provider metadata 
 | `api_version` | Anthropic Messages API version used for the call |
 | `sdk_version` | Installed `@anthropic-ai/sdk` package version |
 | `response_schema_version` | Military Expert output schema version parsed from the response |
+| `pricing_profile_id` | Pinned pricing profile (e.g. `calibration_anthropic_haiku_4_5_v1`) |
+| `model_lifecycle_status` | Lifecycle status at plan time (`active`, `deprecated`, `retired`) |
+| `model_lifecycle_verified_date` | Date lifecycle metadata was last verified |
+| `model_lifecycle_source` | Documentation reference label |
+| `recommended_replacement` | Replacement model ID when applicable |
 
 `api_version` is never `null`, empty, or omitted on live runs:
 

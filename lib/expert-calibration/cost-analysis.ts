@@ -5,10 +5,31 @@ import { roundRate } from "./scoring.ts";
 /** Default synthetic pricing profile — zero cost in test/replay mode. */
 export const CALIBRATION_SYNTHETIC_PRICING_PROFILE = "calibration_synthetic_v1" as const;
 
+/** Historical Haiku 3.5 pricing — replay of prior artifacts only. */
+export const CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE =
+  "calibration_anthropic_haiku_v1" as const;
+
+/** Active Haiku 4.5 pricing — $1/M input, $5/M output. */
+export const CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE =
+  "calibration_anthropic_haiku_4_5_v1" as const;
+
 const PRICING: Record<string, { inputPer1k: number; outputPer1k: number }> = {
   [CALIBRATION_SYNTHETIC_PRICING_PROFILE]: { inputPer1k: 0, outputPer1k: 0 },
-  calibration_anthropic_haiku_v1: { inputPer1k: 0.00025, outputPer1k: 0.00125 },
+  [CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE]: { inputPer1k: 0.00025, outputPer1k: 0.00125 },
+  [CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE]: { inputPer1k: 0.001, outputPer1k: 0.005 },
 };
+
+const LIVE_ELIGIBLE_PRICING_PROFILES = new Set<string>([
+  CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE,
+]);
+
+export function isHistoricalPricingProfile(pricingProfileId: string): boolean {
+  return pricingProfileId === CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE;
+}
+
+export function isLiveEligiblePricingProfile(pricingProfileId: string): boolean {
+  return LIVE_ELIGIBLE_PRICING_PROFILES.has(pricingProfileId);
+}
 
 export function estimateTokenCost(
   inputTokens: number,

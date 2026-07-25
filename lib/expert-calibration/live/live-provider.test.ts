@@ -28,7 +28,7 @@ import { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
 import { validateLiveSmokeAuthorization } from "./live-authorization.ts";
 import { parseLiveCalibrationCliArgs } from "./cli-parser.ts";
 import { buildLiveCalibrationCallPlan } from "./call-planner.ts";
-import { resolveProviderSpec } from "./provider-allowlist.ts";
+import { resolveProviderSpec, ANTHROPIC_HAIKU_45_PRICING_PROFILE } from "./provider-allowlist.ts";
 import { executeLive } from "./live-executor.ts";
 import { runLiveCalibration } from "./orchestrator.ts";
 import { buildSyntheticSuccessRawResponse } from "./synthetic-adapter.ts";
@@ -55,11 +55,11 @@ function smokeArgs(overrides: Partial<LiveCalibrationCliArgs> = {}): LiveCalibra
     suite: "military_expert_v1_draft_golden",
     subset: "military_expert_smoke_v1" as const,
     provider: "anthropic" as const,
-    model: "haiku-v1",
+    model: "haiku-4-5-v1",
     runs: 1,
     maxCalls: 3,
-    maxTotalCostUsd: 0.05,
-    maxCostPerCallUsd: 0.02,
+    maxTotalCostUsd: 0.08,
+    maxCostPerCallUsd: 0.03,
     maxInputTokens: 50_000,
     maxOutputTokens: 50_000,
     timeoutMs: 120_000,
@@ -88,11 +88,11 @@ function cliArgv(overrides: Record<string, string> = {}): string[] {
     suite: "military_expert_v1_draft_golden",
     subset: "military_expert_smoke_v1",
     provider: "anthropic",
-    model: "haiku-v1",
+    model: "haiku-4-5-v1",
     runs: "1",
     "max-calls": "3",
-    "max-total-cost": "0.05",
-    "max-cost-per-call": "0.02",
+    "max-total-cost": "0.08",
+    "max-cost-per-call": "0.03",
     "max-input-tokens": "50000",
     "max-output-tokens": "50000",
     "timeout-ms": "120000",
@@ -108,6 +108,19 @@ function cliArgv(overrides: Record<string, string> = {}): string[] {
   return argv;
 }
 
+function mockProviderMetadata(modelId: string, apiVersion?: string) {
+  return buildAnthropicProviderMetadata({
+    modelId,
+    sdkVersion: "mock-sdk",
+    apiVersion: apiVersion ?? ANTHROPIC_SDK_DEFAULT_API_VERSION,
+    pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
+    modelLifecycleStatus: "active",
+    modelLifecycleVerifiedDate: "2026-07-25",
+    modelLifecycleSource: "test-fixture",
+    recommendedReplacement: null,
+  });
+}
+
 function createMockInvoker(
   options: { failOnCase?: string; failAll?: boolean; apiVersion?: string } = {},
 ): LiveCalibrationProviderInvoker {
@@ -116,22 +129,14 @@ function createMockInvoker(
       return {
         ok: false,
         providerError: { code: "mock_error", message: "Mock provider failure" },
-        providerMetadata: buildAnthropicProviderMetadata({
-          modelId: input.modelId,
-          sdkVersion: "mock-sdk",
-          apiVersion: options.apiVersion ?? ANTHROPIC_SDK_DEFAULT_API_VERSION,
-        }),
+        providerMetadata: mockProviderMetadata(input.modelId, options.apiVersion),
         durationMs: 1,
       };
     }
     return {
       ok: true,
       rawResponse: buildSyntheticSuccessRawResponse(input.correlationId, input.caseId),
-      providerMetadata: buildAnthropicProviderMetadata({
-        modelId: input.modelId,
-        sdkVersion: "mock-sdk",
-        apiVersion: options.apiVersion ?? ANTHROPIC_SDK_DEFAULT_API_VERSION,
-      }),
+      providerMetadata: mockProviderMetadata(input.modelId, options.apiVersion),
       durationMs: 5,
     };
   };
@@ -158,8 +163,8 @@ describe("Expert Calibration Live PR 3B-2", () => {
     it("4 session default max cost is 1.00", () => {
       assert.equal(LIVE_CALIBRATION_SESSION_DEFAULTS.sessionMaxCostUsd, 1.0);
     });
-    it("5 run default max cost is 0.05", () => {
-      assert.equal(LIVE_CALIBRATION_SESSION_DEFAULTS.runMaxCostUsd, 0.05);
+    it("5 run default max cost is 0.08", () => {
+      assert.equal(LIVE_CALIBRATION_SESSION_DEFAULTS.runMaxCostUsd, 0.08);
     });
     it("6 defaults include sessionMaxCostUsd", () => {
       assert.equal(LIVE_CALIBRATION_DEFAULTS.sessionMaxCostUsd, 1.0);
@@ -833,13 +838,14 @@ describe("Expert Calibration Live PR 3B-2", () => {
       });
       assert.equal(plan.calls.length, 3);
     });
-    it("72 live auth accepts model id directly", () => {
+    it("72 live auth rejects retired model id", () => {
       const r = validateLiveSmokeAuthorization({
         args: liveSmokeArgs({ model: "claude-3-5-haiku-20241022" }),
         ackToken: LIVE_CALIBRATION_ACK_TOKEN,
         bypassFeatureFlags: true,
       });
-      assert.equal(r.ok, true);
+      assert.equal(r.ok, false);
+      assert.equal(r.failureCode, "allowlist_violation");
     });
     it("73 runbook doc exists", () => {
       const path = join(ROOT, "docs/architecture/expert-calibration-live-3b2.md");

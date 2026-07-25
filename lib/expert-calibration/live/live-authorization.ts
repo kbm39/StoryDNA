@@ -5,19 +5,17 @@ import {
 } from "./constants.ts";
 import { readLiveCalibrationFeatureFlagStatus } from "./feature-flags.ts";
 import {
-  ANTHROPIC_HAIKU_MODEL_ALIAS,
-  ANTHROPIC_HAIKU_MODEL_ID,
-} from "./provider-allowlist.ts";
+  ANTHROPIC_HAIKU_45_ALIAS,
+  ANTHROPIC_HAIKU_45_MODEL_ID,
+  validateLiveCliModelAlias,
+  validateModelLifecycleForLivePlan,
+} from "./model-lifecycle.ts";
 
 export interface LiveAuthorizationInput {
   readonly args: LiveCalibrationCliArgs;
   readonly ackToken?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly bypassFeatureFlags?: boolean;
-}
-
-function isAllowedLiveModel(model: string): boolean {
-  return model === ANTHROPIC_HAIKU_MODEL_ALIAS || model === ANTHROPIC_HAIKU_MODEL_ID;
 }
 
 export function validateLiveSmokeAuthorization(
@@ -97,11 +95,23 @@ export function validateLiveSmokeAuthorization(
     };
   }
 
-  if (!isAllowedLiveModel(args.model)) {
+  try {
+    validateLiveCliModelAlias(args.model);
+    validateModelLifecycleForLivePlan(ANTHROPIC_HAIKU_45_MODEL_ID);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Live model alias rejected";
     return {
       ok: false,
       failureCode: "allowlist_violation",
-      message: `Live mode restricted to model ${ANTHROPIC_HAIKU_MODEL_ALIAS}`,
+      message,
+    };
+  }
+
+  if (args.model !== ANTHROPIC_HAIKU_45_ALIAS) {
+    return {
+      ok: false,
+      failureCode: "allowlist_violation",
+      message: `Live mode restricted to model ${ANTHROPIC_HAIKU_45_ALIAS}`,
     };
   }
 

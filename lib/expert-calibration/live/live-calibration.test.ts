@@ -27,7 +27,7 @@ import {
   resolveProviderSpec,
   ANTHROPIC_HAIKU_MODEL_ID,
   ANTHROPIC_HAIKU_MODEL_ALIAS,
-  ANTHROPIC_HAIKU_PRICING_PROFILE,
+  ANTHROPIC_HAIKU_45_PRICING_PROFILE,
   listAllowedProviderSpecs,
 } from "./provider-allowlist.ts";
 import {
@@ -38,7 +38,7 @@ import {
   validateSubsetCaseIds,
 } from "./subsets.ts";
 import { buildLiveCalibrationCallPlan } from "./call-planner.ts";
-import { createBudgetController, usdToMicroUsd, microUsdToUsd } from "./budget-controller.ts";
+import { createBudgetController, usdToMicroUsd, microUsdToUsd, sumSerializedUsd } from "./budget-controller.ts";
 import { createAbortController, isAbortError, TimeoutAbortController } from "./abort-controller.ts";
 import {
   rejectPathTraversal,
@@ -71,11 +71,11 @@ function smokeArgs(overrides: Partial<LiveCalibrationCliArgs> = {}): LiveCalibra
     suite: "military_expert_v1_draft_golden",
     subset: "military_expert_smoke_v1" as const,
     provider: "anthropic" as const,
-    model: "haiku-v1",
+    model: "haiku-4-5-v1",
     runs: 1,
     maxCalls: 3,
-    maxTotalCostUsd: 0.05,
-    maxCostPerCallUsd: 0.02,
+    maxTotalCostUsd: 0.08,
+    maxCostPerCallUsd: 0.03,
     maxInputTokens: 50_000,
     maxOutputTokens: 50_000,
     timeoutMs: 120_000,
@@ -95,11 +95,11 @@ function cliArgv(overrides: Record<string, string> = {}): string[] {
     suite: "military_expert_v1_draft_golden",
     subset: "military_expert_smoke_v1",
     provider: "anthropic",
-    model: "haiku-v1",
+    model: "haiku-4-5-v1",
     runs: "1",
     "max-calls": "3",
-    "max-total-cost": "0.05",
-    "max-cost-per-call": "0.02",
+    "max-total-cost": "0.08",
+    "max-cost-per-call": "0.03",
     "max-input-tokens": "50000",
     "max-output-tokens": "50000",
     "timeout-ms": "120000",
@@ -132,8 +132,8 @@ describe("Expert Calibration Live PR 3B-1", () => {
     it("5 defaults maxCalls is 3", () => {
       assert.equal(LIVE_CALIBRATION_DEFAULTS.maxCalls, 3);
     });
-    it("6 defaults maxTotalCostUsd is 0.05", () => {
-      assert.equal(LIVE_CALIBRATION_DEFAULTS.maxTotalCostUsd, 0.05);
+    it("6 defaults maxTotalCostUsd is 0.08", () => {
+      assert.equal(LIVE_CALIBRATION_DEFAULTS.maxTotalCostUsd, 0.08);
     });
   });
 
@@ -215,7 +215,7 @@ describe("Expert Calibration Live PR 3B-1", () => {
     it("25 parses numeric limits", () => {
       const args = parseLiveCalibrationCliArgs(cliArgv());
       assert.equal(args.maxCalls, 3);
-      assert.equal(args.maxTotalCostUsd, 0.05);
+      assert.equal(args.maxTotalCostUsd, 0.08);
     });
   });
 
@@ -241,6 +241,7 @@ describe("Expert Calibration Live PR 3B-1", () => {
       const r = validateOperatorAuthorization({
         mode: "live",
         ackToken: LIVE_CALIBRATION_ACK_TOKEN,
+        env: {},
       });
       assert.equal(r.ok, false);
     });
@@ -255,16 +256,16 @@ describe("Expert Calibration Live PR 3B-1", () => {
   });
 
   describe("provider allowlist", () => {
-    it("32 resolves haiku alias", () => {
-      const spec = resolveProviderSpec("anthropic", "haiku-v1");
+    it("32 resolves haiku-4-5 alias", () => {
+      const spec = resolveProviderSpec("anthropic", "haiku-4-5-v1");
       assert.equal(spec.modelId, ANTHROPIC_HAIKU_MODEL_ID);
     });
     it("33 resolves haiku model id", () => {
       const spec = resolveProviderSpec("anthropic", ANTHROPIC_HAIKU_MODEL_ID);
       assert.equal(spec.modelAlias, ANTHROPIC_HAIKU_MODEL_ALIAS);
     });
-    it("34 pricing profile is calibration_anthropic_haiku_v1", () => {
-      assert.equal(ANTHROPIC_HAIKU_PRICING_PROFILE, "calibration_anthropic_haiku_v1");
+    it("34 pricing profile is calibration_anthropic_haiku_4_5_v1", () => {
+      assert.equal(ANTHROPIC_HAIKU_45_PRICING_PROFILE, "calibration_anthropic_haiku_4_5_v1");
     });
     it("35 rejects openai", () => {
       assert.throws(() => resolveProviderSpec("openai", "gpt-4"), LiveCalibrationError);
@@ -370,15 +371,16 @@ describe("Expert Calibration Live PR 3B-1", () => {
         providerSpec: resolveProviderSpec(args.provider, args.model),
         correlationPrefix: "test-corr",
       });
-      const sum = plan.calls.reduce((s, c) => s + c.estimatedCostUsd, 0);
+      const sum = sumSerializedUsd(plan.calls.map((c) => c.estimatedCostUsd));
       assert.equal(plan.totalEstimatedCostUsd, sum);
+      assert.equal(plan.totalEstimatedCostUsd, 0.0468);
     });
     it("55 rejects unknown suite", () => {
       assert.throws(
         () =>
           buildLiveCalibrationCallPlan({
             args: smokeArgs({ suite: "unknown_suite" }),
-            providerSpec: resolveProviderSpec("anthropic", "haiku-v1"),
+            providerSpec: resolveProviderSpec("anthropic", "haiku-4-5-v1"),
             correlationPrefix: "x",
           }),
         LiveCalibrationError,
@@ -389,7 +391,7 @@ describe("Expert Calibration Live PR 3B-1", () => {
         () =>
           buildLiveCalibrationCallPlan({
             args: smokeArgs({ maxCalls: 1 }),
-            providerSpec: resolveProviderSpec("anthropic", "haiku-v1"),
+            providerSpec: resolveProviderSpec("anthropic", "haiku-4-5-v1"),
             correlationPrefix: "x",
           }),
         (e: LiveCalibrationError) => e.code === "cost_limit_exceeded",

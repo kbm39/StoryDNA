@@ -108,6 +108,7 @@ export interface LiveCalibrationCallPlan {
   readonly suiteId: string;
   readonly expertKey: LiveCalibrationExpertKey;
   readonly providerSpec: LiveCalibrationProviderSpec;
+  readonly modelLifecycle: LiveCalibrationModelLifecycleSnapshot;
   readonly runs: number;
   readonly calls: readonly LiveCalibrationPlannedCall[];
   readonly totalEstimatedInputTokens: number;
@@ -133,7 +134,15 @@ export interface LiveCalibrationProviderMetadata {
   readonly sdk_version: string;
   readonly api_version: string;
   readonly response_schema_version: string;
+  readonly pricing_profile_id: string;
+  readonly model_lifecycle_status: import("./model-lifecycle.ts").LiveCalibrationModelLifecycleStatus;
+  readonly model_lifecycle_verified_date: string;
+  readonly model_lifecycle_source: string;
+  readonly recommended_replacement: string | null;
 }
+
+export type LiveCalibrationModelLifecycleSnapshot =
+  import("./model-lifecycle.ts").LiveCalibrationModelLifecycleSnapshot;
 
 export interface LiveCalibrationRunManifest {
   readonly schema_version: typeof LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION;
@@ -155,6 +164,7 @@ export interface LiveCalibrationRunManifest {
   readonly synthetic_scenario: SyntheticScenarioId | null;
   readonly flags_acknowledged: boolean;
   readonly provider_metadata?: LiveCalibrationProviderMetadata;
+  readonly model_lifecycle?: LiveCalibrationModelLifecycleSnapshot;
 }
 
 export interface LiveCalibrationSideEffectGuards {

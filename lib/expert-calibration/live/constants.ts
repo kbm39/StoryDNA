@@ -10,7 +10,7 @@ export const LIVE_CALIBRATION_SCHEMA_VERSION = "expert_calibration_live@v1" as c
 export const LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION =
   "expert_calibration_run_manifest@v1" as const;
 
-/** Provisional token estimates per case from design report (Haiku v1). */
+/** Provisional token estimates per case from design report (Haiku 4.5 smoke). */
 export const LIVE_CALIBRATION_ESTIMATED_INPUT_TOKENS_PER_CASE = 3_114 as const;
 export const LIVE_CALIBRATION_ESTIMATED_OUTPUT_TOKENS_PER_CASE = 2_500 as const;
 
@@ -19,8 +19,8 @@ export const LIVE_CALIBRATION_MICRO_USD_SCALE = 1_000_000 as const;
 
 export const LIVE_CALIBRATION_DEFAULTS = Object.freeze({
   maxCalls: 3,
-  maxTotalCostUsd: 0.05,
-  maxCostPerCallUsd: 0.02,
+  maxTotalCostUsd: 0.08,
+  maxCostPerCallUsd: 0.03,
   maxInputTokens: 50_000,
   maxOutputTokens: 50_000,
   timeoutMs: 120_000,
@@ -43,7 +43,7 @@ export const LIVE_CALIBRATION_LIVE_SMOKE = Object.freeze({
 
 export const LIVE_CALIBRATION_SESSION_DEFAULTS = Object.freeze({
   sessionMaxCostUsd: 1.0,
-  runMaxCostUsd: 0.05,
+  runMaxCostUsd: 0.08,
 });
 
 export const LIVE_CALIBRATION_ALLOWED_EXPERTS = Object.freeze(["military_expert"] as const);

@@ -48,6 +48,7 @@ export async function executeDryRun(input: DryRunExecutorInput): Promise<DryRunE
     completed_at: new Date(input.startedAt).toISOString(),
     synthetic_scenario: null,
     flags_acknowledged: false,
+    model_lifecycle: input.callPlan.modelLifecycle,
   });
 
   let filesWritten = 0;
@@ -71,6 +72,7 @@ export async function executeDryRun(input: DryRunExecutorInput): Promise<DryRunE
         total_estimated_input_tokens: input.callPlan.totalEstimatedInputTokens,
         total_estimated_output_tokens: input.callPlan.totalEstimatedOutputTokens,
         total_estimated_cost_usd: input.callPlan.totalEstimatedCostUsd,
+        model_lifecycle: input.callPlan.modelLifecycle,
       },
     }, input.args.overwrite);
     filesWritten += 1;

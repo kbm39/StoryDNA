@@ -2,7 +2,7 @@
  * Military Expert live calibration CLI (PR 3B-2).
  *
  * Developer-only controlled calibration — not production execution.
- * Live mode supports one pinned Anthropic model (`haiku-v1`) and the
+ * Live mode supports one pinned Anthropic model (`haiku-4-5-v1`) and the
  * three-case smoke subset only. It requires explicit authorization,
  * all live feature flags, session/run budgets, `--session-id`, and
  * `ANTHROPIC_API_KEY` in the environment.
@@ -14,6 +14,9 @@
  */
 const { runLiveCalibrationFromArgv } = await import(
   "@/lib/expert-calibration/live/orchestrator.ts"
+);
+const { serializeUsd } = await import(
+  "@/lib/expert-calibration/live/budget-controller.ts"
 );
 
 const argv = process.argv.slice(2);
@@ -31,7 +34,7 @@ try {
           mode: result.mode,
           run_id: result.runId,
           planned_calls: result.callPlan.calls.length,
-          estimated_cost_usd: result.callPlan.totalEstimatedCostUsd,
+          estimated_cost_usd: serializeUsd(result.callPlan.totalEstimatedCostUsd),
           model_calls: result.modelCalls,
           provider_calls: result.providerCalls,
         },

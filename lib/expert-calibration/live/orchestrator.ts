@@ -123,7 +123,11 @@ export async function runLiveCalibration(
           sessionId: args.sessionId ?? "",
         });
       }
+    }
 
+    const providerSpec = resolveProviderSpec(args.provider, args.model);
+
+    if (args.mode === "live") {
       const apiKey = readAnthropicApiKey(env);
       if (!apiKey) {
         appendAuditEvent(
@@ -147,7 +151,6 @@ export async function runLiveCalibration(
       }
     }
 
-    const providerSpec = resolveProviderSpec(args.provider, args.model);
     const callPlan = buildLiveCalibrationCallPlan({
       args,
       providerSpec,

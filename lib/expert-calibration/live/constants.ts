@@ -27,6 +27,23 @@ export const LIVE_CALIBRATION_DEFAULTS = Object.freeze({
   maxRuntimeMs: 600_000,
   runs: 1,
   overwrite: false,
+  sessionMaxCostUsd: 1.0,
+  retainRawResponses: false,
+});
+
+/** Live smoke gate — only this configuration may execute paid provider calls. */
+export const LIVE_CALIBRATION_LIVE_SMOKE = Object.freeze({
+  expert: "military_expert" as const,
+  suite: "military_expert_v1_draft_golden" as const,
+  subset: "military_expert_smoke_v1" as const,
+  provider: "anthropic" as const,
+  runs: 1,
+  maxCalls: 3,
+});
+
+export const LIVE_CALIBRATION_SESSION_DEFAULTS = Object.freeze({
+  sessionMaxCostUsd: 1.0,
+  runMaxCostUsd: 0.05,
 });
 
 export const LIVE_CALIBRATION_ALLOWED_EXPERTS = Object.freeze(["military_expert"] as const);

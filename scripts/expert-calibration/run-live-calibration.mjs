@@ -1,6 +1,14 @@
 /**
- * Military Expert live calibration CLI (PR 3B-1).
- * Dry-run and synthetic modes only — live mode rejected until PR 3B-2.
+ * Military Expert live calibration CLI (PR 3B-2).
+ *
+ * Developer-only controlled calibration — not production execution.
+ * Live mode supports one pinned Anthropic model (`haiku-v1`) and the
+ * three-case smoke subset only. It requires explicit authorization,
+ * all live feature flags, session/run budgets, `--session-id`, and
+ * `ANTHROPIC_API_KEY` in the environment.
+ *
+ * Do not run in CI or Vercel. Dry-run and synthetic modes remain
+ * zero provider-call paths for local validation.
  *
  * Relies on --import ./scripts/test-path-alias.mjs from npm script for @/ resolution.
  */

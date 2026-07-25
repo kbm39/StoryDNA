@@ -64,17 +64,6 @@ export function validateOperatorAuthorization(
   };
 }
 
-export function validateLiveModeNotImplemented(mode: string): OperatorAuthorizationResult {
-  if (mode === "live") {
-    return {
-      ok: false,
-      failureCode: "live_execution_not_implemented",
-      message: "Live execution not implemented until PR 3B-2",
-    };
-  }
-  return { ok: true };
-}
-
 export {
   readExpertCalibrationFrameworkEnabled,
   readExpertCalibrationLiveEnabled,

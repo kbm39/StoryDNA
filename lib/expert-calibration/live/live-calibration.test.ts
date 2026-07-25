@@ -22,7 +22,7 @@ import {
   readLiveCalibrationFeatureFlagStatus,
 } from "./feature-flags.ts";
 import { parseLiveCalibrationCliArgs } from "./cli-parser.ts";
-import { validateOperatorAuthorization, validateLiveModeNotImplemented } from "./operator-auth.ts";
+import { validateOperatorAuthorization } from "./operator-auth.ts";
 import {
   resolveProviderSpec,
   ANTHROPIC_HAIKU_MODEL_ID,
@@ -82,6 +82,8 @@ function smokeArgs(overrides: Partial<LiveCalibrationCliArgs> = {}): LiveCalibra
     maxRuntimeMs: 600_000,
     outputDir: ".calibration-results/test-run",
     overwrite: true,
+    sessionMaxCostUsd: 1.0,
+    retainRawResponses: false,
     ...overrides,
   });
 }
@@ -224,13 +226,16 @@ describe("Expert Calibration Live PR 3B-1", () => {
     it("27 synthetic authorized without flags", () => {
       assert.equal(validateOperatorAuthorization({ mode: "synthetic" }).ok, true);
     });
-    it("28 live rejected as not implemented", () => {
-      const r = validateLiveModeNotImplemented("live");
-      assert.equal(r.ok, false);
-      assert.equal(r.failureCode, "live_execution_not_implemented");
+    it("28 live auth requires session-id via smoke gate", () => {
+      const r = validateOperatorAuthorization({
+        mode: "live",
+        ackToken: LIVE_CALIBRATION_ACK_TOKEN,
+        bypassFeatureFlags: true,
+      });
+      assert.equal(r.ok, true);
     });
-    it("29 dry-run not rejected as not implemented", () => {
-      assert.equal(validateLiveModeNotImplemented("dry-run").ok, true);
+    it("29 dry-run authorized without session-id", () => {
+      assert.equal(validateOperatorAuthorization({ mode: "dry-run" }).ok, true);
     });
     it("30 live auth requires all flags", () => {
       const r = validateOperatorAuthorization({
@@ -631,17 +636,28 @@ describe("Expert Calibration Live PR 3B-1", () => {
       assert.equal(result.mode, "dry-run");
       assert.equal(result.modelCalls, 0);
     });
-    it("84 runLiveCalibration live rejected", async () => {
+    it("84 runLiveCalibration live fails without api key", async () => {
       const result = await runLiveCalibration(
         smokeArgs({
           mode: "live",
           ackToken: LIVE_CALIBRATION_ACK_TOKEN,
+          sessionId: "test-session-no-key",
         }),
-        { bypassFeatureFlags: true, writeArtifacts: false, randomId: () => "live-run" },
+        {
+          bypassFeatureFlags: true,
+          writeArtifacts: false,
+          randomId: () => "live-run",
+          env: {},
+        },
       );
       assert.equal(result.ok, false);
-      assert.equal(result.failureCode, "live_execution_not_implemented");
+      assert.equal(result.mode, "live");
+      assert.equal(result.failureCode, "missing_api_key");
       assert.equal(result.exitCode, 2);
+      if (result.mode === "live") {
+        assert.equal(result.modelCalls, 0);
+        assert.equal(result.providerCalls, 0);
+      }
     });
     it("85 runLiveCalibrationFromArgv works", async () => {
       const result = await runLiveCalibrationFromArgv(cliArgv(), {

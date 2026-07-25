@@ -24,7 +24,7 @@ export type LiveCalibrationFailureCode =
   | "scoring_failure"
   | "invalid_configuration"
   | "provider_error"
-  | "live_execution_not_implemented"
+  | "missing_api_key"
   | "synthetic_scenario_unknown"
   | "result_store_rejected"
   | "budget_exhausted"
@@ -70,6 +70,9 @@ export interface LiveCalibrationCliArgs {
   readonly ackToken?: string;
   readonly syntheticScenario?: SyntheticScenarioId;
   readonly correlationId?: string;
+  readonly sessionId?: string;
+  readonly sessionMaxCostUsd: number;
+  readonly retainRawResponses: boolean;
 }
 
 export interface LiveCalibrationProviderSpec {
@@ -152,10 +155,9 @@ export interface LiveCalibrationSideEffectGuards {
   readonly productionExecutionOccurred: false;
 }
 
-export interface LiveCalibrationResult {
+export interface LiveCalibrationBaseResult {
   readonly ok: boolean;
   readonly schema_version: typeof LIVE_CALIBRATION_SCHEMA_VERSION;
-  readonly mode: LiveCalibrationMode;
   readonly runId: string;
   readonly correlationId: string;
   readonly exitCode: number;
@@ -166,11 +168,105 @@ export interface LiveCalibrationResult {
   readonly report: CalibrationReport | null;
   readonly manifest: LiveCalibrationRunManifest | null;
   readonly filesWritten: number;
-  readonly modelCalls: 0;
-  readonly providerCalls: 0;
   readonly productionWrites: 0;
   readonly productionExecutionOccurred: false;
 }
+
+export interface LiveCalibrationDryRunResult extends LiveCalibrationBaseResult {
+  readonly mode: "dry-run";
+  readonly modelCalls: 0;
+  readonly providerCalls: 0;
+}
+
+export interface LiveCalibrationSyntheticResult extends LiveCalibrationBaseResult {
+  readonly mode: "synthetic";
+  readonly modelCalls: 0;
+  readonly providerCalls: 0;
+}
+
+export interface LiveCalibrationLiveResult extends LiveCalibrationBaseResult {
+  readonly mode: "live";
+  readonly modelCalls: number;
+  readonly providerCalls: number;
+  readonly sessionId: string;
+}
+
+export type LiveCalibrationResult =
+  | LiveCalibrationDryRunResult
+  | LiveCalibrationSyntheticResult
+  | LiveCalibrationLiveResult;
+
+export type LiveCalibrationSessionReservationStatus =
+  | "active"
+  | "settled"
+  | "failed"
+  | "abandoned";
+
+export interface LiveCalibrationSessionReservationRecord {
+  readonly reservation_id: string;
+  readonly session_id: string;
+  readonly run_id: string;
+  readonly case_id: string;
+  readonly correlation_id: string;
+  readonly reserved_micro_usd: number;
+  readonly status: LiveCalibrationSessionReservationStatus;
+  readonly created_at: string;
+  readonly settled_at: string | null;
+}
+
+export interface LiveCalibrationSessionBudget {
+  readonly schema_version: "expert_calibration_session@v2";
+  readonly session_id: string;
+  readonly max_cost_micro_usd: number;
+  readonly spent_estimated_micro_usd: number;
+  readonly spent_actual_micro_usd: number;
+  readonly reserved_micro_usd: number;
+  readonly version: number;
+  readonly run_count: number;
+  readonly reservations: Readonly<Record<string, LiveCalibrationSessionReservationRecord>>;
+}
+
+export type LiveCalibrationAuditEventType =
+  | "live_run_started"
+  | "live_run_completed"
+  | "live_run_failed"
+  | "provider_call_started"
+  | "provider_call_completed"
+  | "session_budget_reserved"
+  | "session_budget_committed"
+  | "session_reservation_created"
+  | "session_reservation_rejected"
+  | "session_reservation_settled"
+  | "session_reservation_failed"
+  | "authorization_denied";
+
+export interface LiveCalibrationAuditEvent {
+  readonly timestamp: string;
+  readonly session_id: string;
+  readonly run_id: string;
+  readonly event_type: LiveCalibrationAuditEventType;
+  readonly detail: Record<string, string | number | boolean | null>;
+}
+
+export interface LiveCalibrationProviderInvokeInput {
+  readonly request: import("@/experts/military-expert/generation-contract.ts").MilitaryExpertGenerationRequest;
+  readonly correlationId: string;
+  readonly caseId: string;
+  readonly modelId: string;
+  readonly timeoutMs: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface LiveCalibrationProviderInvokeResult {
+  readonly ok: boolean;
+  readonly rawResponse?: import("@/experts/military-expert/generation-types.ts").MilitaryExpertRawGenerationResponse;
+  readonly providerError?: { readonly code: string; readonly message: string };
+  readonly durationMs: number;
+}
+
+export type LiveCalibrationProviderInvoker = (
+  input: LiveCalibrationProviderInvokeInput,
+) => Promise<LiveCalibrationProviderInvokeResult>;
 
 export interface LiveCalibrationOrchestratorDependencies {
   readonly now?: () => number;
@@ -178,6 +274,8 @@ export interface LiveCalibrationOrchestratorDependencies {
   readonly syntheticScenario?: SyntheticScenarioId;
   readonly writeArtifacts?: boolean;
   readonly randomId?: () => string;
+  readonly providerInvoker?: LiveCalibrationProviderInvoker;
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
 export interface OperatorAuthorizationInput {

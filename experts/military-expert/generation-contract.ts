@@ -62,6 +62,7 @@ export interface BuildMilitaryExpertGenerationRequestInput {
   manuscriptHash: string;
   genreContext?: string | null;
   countryPeriod?: string | null;
+  maxOutputTokens?: number;
 }
 
 export interface MilitaryExpertGenerationContractDependencies {
@@ -160,7 +161,7 @@ export function buildMilitaryExpertGenerationRequest(
     reviewPrompt,
     responseFormat: "json_object",
     temperature: 0,
-    maxOutputTokens: MILITARY_EXPERT.maxTokens,
+    maxOutputTokens: input.maxOutputTokens ?? MILITARY_EXPERT.maxTokens,
     safetyMetadata: Object.freeze({
       editorialOnly: true,
       noOperationalInstruction: true,

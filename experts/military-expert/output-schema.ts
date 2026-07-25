@@ -471,19 +471,48 @@ export function coerceMilitaryExpertGenerationPayload(
   };
 }
 
-/** JSON schema description embedded in review prompts. */
+/** Top-level fields the model must not invent (common Haiku 4.5 smoke failures). */
+export const MILITARY_EXPERT_PROHIBITED_TOP_LEVEL_FIELDS = [
+  "author_challenge_note",
+  "closing_note",
+  "author_notes",
+  "review_notes",
+  "metadata",
+] as const;
+
+/** JSON schema description embedded in review prompts — single authoritative contract block. */
 export function militaryExpertOutputSchemaPromptBlock(): string {
   return [
-    "OUTPUT FORMAT — respond with ONE JSON object only. No markdown wrapper. No prose outside the JSON.",
-    "Required top-level keys:",
+    "OUTPUT CONTRACT — respond with ONE JSON object only.",
+    "- No markdown fences. No prose before or after the JSON.",
+    "- Do not add any top-level field outside the required list below.",
+    `- Prohibited extra top-level fields (never create these): ${MILITARY_EXPERT_PROHIBITED_TOP_LEVEL_FIELDS.join(", ")}.`,
+    "- Author-facing commentary belongs only in summary, next_step, preservation_note, or uncertainty_summary — never in new top-level fields.",
+    "",
+    "Required top-level keys (all must be present):",
     MILITARY_EXPERT_OUTPUT_TOP_LEVEL_KEYS.map((key) => `- ${key}`).join("\n"),
+    "",
+    "Exact enum values — synonyms are invalid; use the nearest allowed value; never invent a new enum:",
+    `- confidence: ${MILITARY_EXPERT_CONFIDENCE_LEVELS.join(" | ")}`,
+    `- severity: ${MILITARY_EXPERT_SEVERITY_LEVELS.join(" | ")}`,
+    `- realism_status: ${MILITARY_EXPERT_REALISM_STATUSES.join(" | ")}`,
+    `- recommendation_type: ${MILITARY_EXPERT_RECOMMENDATION_TYPES.join(" | ")}`,
+    `- category: ${MILITARY_EXPERT_CATEGORIES.join(" | ")}`,
+    "",
     "Finding object required fields:",
     "- finding_id, category, title, observation, manuscript_evidence[], confidence, severity, realism_status, operational_impact, story_impact, recommendation, recommendation_type, preservation_note, author_challenge_allowed (true)",
     "Negative findings must include manuscript_evidence, contrary_evidence OR an explicit no-contrary-evidence statement in uncertainty_note, confidence, preservation_note.",
     `Evidence excerpts must be <= ${MILITARY_EXPERT_MAX_EVIDENCE_EXCERPT_WORDS} words.`,
-    `Allowed categories: ${MILITARY_EXPERT_CATEGORIES.join(", ")}.`,
     "Do not assign letter grades or school-style percentages.",
     "Do not claim personal military service or classified knowledge.",
     "Do not fabricate sources or citations.",
+    "",
+    "True-negative shape (zero findings):",
+    "- findings: []",
+    "- summary: acknowledge both strengths and concerns (e.g. no material inaccuracies found; note what was reviewed and any residual uncertainty).",
+    "- strengths: non-empty array of specific accurate depictions.",
+    "- next_step: actionable author guidance even when no changes are required.",
+    "- author_challenge_supported: true",
+    "- category_assessments and overall_realism_assessment still required.",
   ].join("\n");
 }

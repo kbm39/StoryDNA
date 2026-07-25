@@ -158,7 +158,7 @@ describe("Haiku 4.5 model lifecycle migration", () => {
         correlationPrefix: "haiku45",
       });
       assert.equal(plan.calls.length, 3);
-      assert.equal(plan.totalEstimatedCostUsd, 0.0468);
+      assert.equal(plan.totalEstimatedCostUsd, 0.0477);
       for (const call of plan.calls) {
         assert.ok(call.estimatedCostUsd <= LIVE_CALIBRATION_DEFAULTS.maxCostPerCallUsd);
       }

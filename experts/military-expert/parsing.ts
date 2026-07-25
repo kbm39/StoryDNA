@@ -3,6 +3,7 @@
  */
 
 import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
+import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts";
 import {
   coerceMilitaryExpertGenerationPayload,
   validateMilitaryExpertGenerationPayload,
@@ -137,7 +138,10 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    const validation = validateMilitaryExpertGenerationPayload(parsed);
+    const { normalized, audits } = normalizeMilitaryExpertGenerationEnums(parsed);
+    void audits;
+
+    const validation = validateMilitaryExpertGenerationPayload(normalized);
     if (!validation.ok) {
       return {
         ok: false,
@@ -146,7 +150,7 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    const payload = coerceMilitaryExpertGenerationPayload(parsed);
+    const payload = coerceMilitaryExpertGenerationPayload(normalized);
     if (!payload) {
       return {
         ok: false,

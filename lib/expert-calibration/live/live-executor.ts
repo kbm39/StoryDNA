@@ -70,10 +70,10 @@ function filterSuiteToSubset(args: LiveCalibrationCliArgs) {
 }
 
 function reservationAmountUsd(
-  plannedCostUsd: number,
+  plannedAuthorizedWorstCaseUsd: number,
   maxCostPerCallUsd: number,
 ): number {
-  return Math.min(plannedCostUsd, maxCostPerCallUsd);
+  return Math.min(plannedAuthorizedWorstCaseUsd, maxCostPerCallUsd);
 }
 
 function reconcileActiveReservation(input: {
@@ -137,9 +137,9 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     }
 
     if (!budget.canAffordCall(
-      planned.estimatedCostUsd,
+      planned.authorizedWorstCaseCostUsd,
       planned.estimatedInputTokens,
-      planned.estimatedOutputTokens,
+      planned.providerMaxOutputTokens,
     )) {
       ok = false;
       failureReason = "budget_exhausted";
@@ -148,7 +148,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     }
 
     const reservedCostUsd = reservationAmountUsd(
-      planned.estimatedCostUsd,
+      planned.authorizedWorstCaseCostUsd,
       input.args.maxCostPerCallUsd,
     );
 
@@ -212,6 +212,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       manuscriptHash: calibrationCase.manuscript.content_hash,
       genreContext: calibrationCase.manuscript.genre_context ?? null,
       countryPeriod: calibrationCase.manuscript.country_period ?? null,
+      maxOutputTokens: planned.providerMaxOutputTokens,
     });
 
     appendAuditEvent(

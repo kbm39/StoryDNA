@@ -97,6 +97,9 @@ export interface LiveCalibrationPlannedCall {
   readonly estimatedInputTokens: number;
   readonly estimatedOutputTokens: number;
   readonly estimatedCostUsd: number;
+  readonly authorizedOutputTokens: number;
+  readonly authorizedWorstCaseCostUsd: number;
+  readonly providerMaxOutputTokens: number;
   readonly requestHash: string;
   readonly systemPromptHash: string;
   readonly reviewPromptHash: string;
@@ -114,6 +117,9 @@ export interface LiveCalibrationCallPlan {
   readonly totalEstimatedInputTokens: number;
   readonly totalEstimatedOutputTokens: number;
   readonly totalEstimatedCostUsd: number;
+  readonly totalAuthorizedWorstCaseCostUsd: number;
+  readonly outputTokenPolicyVersion: string;
+  readonly providerMaxOutputTokens: number;
 }
 
 export interface LiveCalibrationBudgetSnapshot {

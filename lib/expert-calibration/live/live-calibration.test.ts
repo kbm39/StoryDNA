@@ -373,7 +373,7 @@ describe("Expert Calibration Live PR 3B-1", () => {
       });
       const sum = sumSerializedUsd(plan.calls.map((c) => c.estimatedCostUsd));
       assert.equal(plan.totalEstimatedCostUsd, sum);
-      assert.equal(plan.totalEstimatedCostUsd, 0.0468);
+      assert.equal(plan.totalEstimatedCostUsd, 0.0477);
     });
     it("55 rejects unknown suite", () => {
       assert.throws(

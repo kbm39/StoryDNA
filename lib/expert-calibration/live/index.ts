@@ -44,10 +44,14 @@ export { validateLiveSmokeAuthorization } from "./live-authorization.ts";
 export { readAnthropicApiKey, hasAnthropicApiKey, ANTHROPIC_API_KEY_ENV } from "./api-key.ts";
 export {
   loadSessionBudget,
+  reserveSessionCallBudget,
+  settleSessionReservation,
+  markSessionReservationFailed,
   reserveSessionBudget,
   commitSessionSpend,
   canSessionAfford,
   getSessionRemainingMicroUsd,
+  getSessionAvailableMicroUsd,
 } from "./session-budget.ts";
 export { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
 export { resolveProviderSpec, ANTHROPIC_HAIKU_MODEL_ID, ANTHROPIC_HAIKU_MODEL_ALIAS } from "./provider-allowlist.ts";

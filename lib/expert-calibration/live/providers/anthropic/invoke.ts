@@ -6,6 +6,8 @@ import type {
   LiveCalibrationProviderInvokeResult,
   LiveCalibrationProviderInvoker,
 } from "../../contracts.ts";
+import { sanitizeLiveCalibrationMessage } from "../../errors.ts";
+import { validateAnthropicTextContent } from "./response-shape.ts";
 
 export function createAnthropicProviderInvoker(apiKey: string): LiveCalibrationProviderInvoker {
   const client = new Anthropic({ apiKey, maxRetries: 0 });
@@ -31,8 +33,18 @@ export function createAnthropicProviderInvoker(apiKey: string): LiveCalibrationP
         },
       );
 
-      const textBlock = response.content.find((block) => block.type === "text");
-      const responseText = textBlock?.type === "text" ? textBlock.text : "";
+      const shape = validateAnthropicTextContent(response.content);
+      if (!shape.ok) {
+        return {
+          ok: false,
+          providerError: {
+            code: shape.code,
+            message: sanitizeLiveCalibrationMessage(shape.message),
+          },
+          durationMs: Date.now() - startedAt,
+        };
+      }
+
       const finishStatus =
         response.stop_reason === "max_tokens"
           ? ("truncated" as const)
@@ -42,7 +54,7 @@ export function createAnthropicProviderInvoker(apiKey: string): LiveCalibrationP
 
       const rawResponse: MilitaryExpertRawGenerationResponse = Object.freeze({
         correlationId: input.correlationId,
-        responseText,
+        responseText: shape.text,
         finishStatus,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
@@ -57,7 +69,9 @@ export function createAnthropicProviderInvoker(apiKey: string): LiveCalibrationP
         durationMs: Date.now() - startedAt,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Provider invocation failed";
+      const message = sanitizeLiveCalibrationMessage(
+        error instanceof Error ? error.message : "Provider invocation failed",
+      );
       const code =
         error instanceof Anthropic.APIError
           ? String(error.status ?? "provider_error")

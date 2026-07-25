@@ -327,7 +327,8 @@ describe("Expert Calibration Live PR 3B-2", () => {
     it("34 loadSessionBudget creates fresh budget", () => {
       cleanupSession(sessionId);
       const budget = loadSessionBudget(sessionId, 1.0);
-      assert.equal(budget.spent_cost_micro_usd, 0);
+      assert.equal(budget.spent_estimated_micro_usd, 0);
+      assert.equal(budget.reserved_micro_usd, 0);
       assert.equal(budget.version, 0);
       assert.equal(budget.max_cost_micro_usd, usdToMicroUsd(1.0));
     });
@@ -339,34 +340,43 @@ describe("Expert Calibration Live PR 3B-2", () => {
       const budget = loadSessionBudget(sessionId, 0.01);
       assert.equal(canSessionAfford(budget, 0.05), false);
     });
-    it("37 reserveSessionBudget returns reservation", () => {
+    it("37 reserveSessionBudget persists atomic reservation", () => {
       cleanupSession(sessionId);
       const reservation = reserveSessionBudget(sessionId, 1.0, 0.05);
       assert.equal(reservation.sessionId, sessionId);
-      assert.equal(reservation.expectedVersion, 0);
+      const budget = loadSessionBudget(sessionId, 1.0);
+      assert.equal(budget.reserved_micro_usd, usdToMicroUsd(0.05));
+      assert.equal(budget.version, 1);
     });
-    it("38 commitSessionSpend increments version", () => {
+    it("38 commitSessionSpend increments version and records spend", () => {
       cleanupSession(sessionId);
       const reservation = reserveSessionBudget(sessionId, 1.0, 0.05);
       const next = commitSessionSpend(sessionId, 1.0, reservation, 0.03);
-      assert.equal(next.version, 1);
-      assert.equal(next.spent_cost_micro_usd, usdToMicroUsd(0.03));
+      assert.equal(next.version, 2);
+      assert.equal(next.spent_actual_micro_usd, usdToMicroUsd(0.03));
+      assert.equal(next.reserved_micro_usd, 0);
     });
     it("39 getSessionRemainingMicroUsd calculates remainder", () => {
       const budget = loadSessionBudget(sessionId, 1.0);
       const remaining = getSessionRemainingMicroUsd(budget);
       assert.ok(remaining >= 0);
-      assert.equal(microUsdToUsd(remaining), microUsdToUsd(budget.max_cost_micro_usd - budget.spent_cost_micro_usd));
+      assert.equal(
+        microUsdToUsd(remaining),
+        microUsdToUsd(budget.max_cost_micro_usd - budget.spent_estimated_micro_usd - budget.reserved_micro_usd),
+      );
     });
     it("40 reserve rejects exhausted session", () => {
       cleanupSession(sessionId);
       writeSessionBudget({
-        schema_version: "expert_calibration_session@v1",
+        schema_version: "expert_calibration_session@v2",
         session_id: sessionId,
         max_cost_micro_usd: usdToMicroUsd(0.01),
-        spent_cost_micro_usd: usdToMicroUsd(0.01),
+        spent_estimated_micro_usd: usdToMicroUsd(0.01),
+        spent_actual_micro_usd: usdToMicroUsd(0.01),
+        reserved_micro_usd: 0,
         version: 1,
         run_count: 1,
+        reservations: Object.freeze({}),
       });
       assert.throws(() => reserveSessionBudget(sessionId, 0.01, 0.001), LiveCalibrationError);
       cleanupSession(sessionId);
@@ -524,7 +534,7 @@ describe("Expert Calibration Live PR 3B-2", () => {
         now: () => 2_000,
       });
       const budget = loadSessionBudget(sessionId, 1.0);
-      assert.ok(budget.spent_cost_micro_usd > 0);
+      assert.ok(budget.spent_actual_micro_usd > 0);
       cleanupSession(sessionId);
     });
   });

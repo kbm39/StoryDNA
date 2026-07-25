@@ -75,7 +75,9 @@ Append-only events at `.calibration-results/sessions/{sessionId}.audit.jsonl`:
 
 - `live_run_started` / `live_run_completed` / `live_run_failed`
 - `provider_call_started` / `provider_call_completed`
-- `session_budget_reserved` / `session_budget_committed`
+- `session_budget_reserved` / `session_budget_committed` (legacy run-level)
+- `session_reservation_created` / `session_reservation_rejected`
+- `session_reservation_settled` / `session_reservation_failed`
 - `authorization_denied`
 
 ## Artifact layout

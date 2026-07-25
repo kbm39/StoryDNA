@@ -24,9 +24,10 @@ import { writeRunManifest, writeAtomicArtifact } from "./result-store.ts";
 import { getLiveCalibrationSubset } from "./subsets.ts";
 import { estimateTokenCost } from "../cost-analysis.ts";
 import {
-  commitSessionSpend,
-  reserveSessionBudget,
-  type SessionBudgetReservation,
+  markSessionReservationFailed,
+  reserveSessionCallBudget,
+  settleSessionReservation,
+  type SessionCallBudgetReservation,
 } from "./session-budget.ts";
 import { createAbortController, isAbortError } from "./abort-controller.ts";
 
@@ -41,6 +42,7 @@ export interface LiveExecutorInput {
   readonly bypassFeatureFlags?: boolean;
   readonly retainRawResponses?: boolean;
   readonly now?: () => number;
+  readonly cwd?: string;
 }
 
 export interface LiveExecutorResult {
@@ -66,8 +68,33 @@ function filterSuiteToSubset(args: LiveCalibrationCliArgs) {
   });
 }
 
+function reservationAmountUsd(
+  plannedCostUsd: number,
+  maxCostPerCallUsd: number,
+): number {
+  return Math.min(plannedCostUsd, maxCostPerCallUsd);
+}
+
+function reconcileActiveReservation(input: {
+  readonly reservation: SessionCallBudgetReservation;
+  readonly sessionMaxCostUsd: number;
+  readonly chargeEstimatedUsd: number;
+  readonly chargeActualUsd: number;
+  readonly cwd?: string;
+}): void {
+  markSessionReservationFailed({
+    sessionId: input.reservation.sessionId,
+    maxCostUsd: input.sessionMaxCostUsd,
+    reservationId: input.reservation.reservationId,
+    chargeEstimatedUsd: input.chargeEstimatedUsd,
+    chargeActualUsd: input.chargeActualUsd,
+    cwd: input.cwd,
+  });
+}
+
 export async function executeLive(input: LiveExecutorInput): Promise<LiveExecutorResult> {
   const now = input.now ?? (() => Date.now());
+  const cwd = input.cwd ?? process.cwd();
   const sessionId = input.args.sessionId!;
   const budget = createBudgetController({
     maxCalls: input.args.maxCalls,
@@ -77,41 +104,6 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     maxOutputTokens: input.args.maxOutputTokens,
   });
 
-  let sessionReservation: SessionBudgetReservation | null = null;
-  try {
-    sessionReservation = reserveSessionBudget(
-      sessionId,
-      input.args.sessionMaxCostUsd,
-      input.callPlan.totalEstimatedCostUsd,
-    );
-    appendAuditEvent(
-      createAuditEvent({
-        session_id: sessionId,
-        run_id: input.runId,
-        event_type: "session_budget_reserved",
-        detail: {
-          estimated_cost_usd: input.callPlan.totalEstimatedCostUsd,
-          version: sessionReservation.expectedVersion,
-        },
-      }),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Session budget reservation failed";
-    return {
-      ok: false,
-      exitCode: LIVE_CALIBRATION_EXIT.costLimitExceeded,
-      manifest: buildManifest(input, now, false),
-      filesWritten: 0,
-      failureReason: message,
-      failureCode: "cost_limit_exceeded",
-      modelCalls: 0,
-      providerCalls: 0,
-      productionWrites: 0,
-      productionExecutionOccurred: false,
-      sessionId,
-    };
-  }
-
   appendAuditEvent(
     createAuditEvent({
       session_id: sessionId,
@@ -119,6 +111,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       event_type: "live_run_started",
       detail: { planned_calls: input.callPlan.calls.length },
     }),
+    cwd,
   );
 
   const caseById = new Map(
@@ -131,7 +124,6 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
   let ok = true;
   let modelCalls = 0;
   let providerCalls = 0;
-  let totalActualCostUsd = 0;
   const abortController = createAbortController(input.args.timeoutMs);
 
   for (const planned of input.callPlan.calls) {
@@ -153,6 +145,61 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       break;
     }
 
+    const reservedCostUsd = reservationAmountUsd(
+      planned.estimatedCostUsd,
+      input.args.maxCostPerCallUsd,
+    );
+
+    let callReservation: SessionCallBudgetReservation | null = null;
+    try {
+      callReservation = reserveSessionCallBudget({
+        sessionId,
+        maxCostUsd: input.args.sessionMaxCostUsd,
+        runId: input.runId,
+        caseId: planned.caseId,
+        correlationId: planned.correlationId,
+        reservedCostUsd,
+        cwd,
+      });
+      appendAuditEvent(
+        createAuditEvent({
+          session_id: sessionId,
+          run_id: input.runId,
+          event_type: "session_reservation_created",
+          detail: {
+            reservation_id: callReservation.reservationId,
+            case_id: planned.caseId,
+            reserved_micro_usd: callReservation.reservedMicroUsd,
+          },
+        }),
+        cwd,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Session reservation failed";
+      appendAuditEvent(
+        createAuditEvent({
+          session_id: sessionId,
+          run_id: input.runId,
+          event_type: "session_reservation_rejected",
+          detail: { case_id: planned.caseId, reason: message.slice(0, 200) },
+        }),
+        cwd,
+      );
+      return {
+        ok: false,
+        exitCode: LIVE_CALIBRATION_EXIT.costLimitExceeded,
+        manifest: buildManifest(input, now, false),
+        filesWritten: 0,
+        failureReason: message,
+        failureCode: "cost_limit_exceeded",
+        modelCalls,
+        providerCalls,
+        productionWrites: 0,
+        productionExecutionOccurred: false,
+        sessionId,
+      };
+    }
+
     const calibrationCase = caseById.get(planned.caseId)!;
     const request = buildMilitaryExpertGenerationRequest({
       correlationId: planned.correlationId,
@@ -172,9 +219,11 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
         event_type: "provider_call_started",
         detail: { case_id: planned.caseId, correlation_id: planned.correlationId },
       }),
+      cwd,
     );
 
     let invokeResult;
+    let providerInvoked = false;
     try {
       invokeResult = await input.providerInvoker({
         request,
@@ -184,7 +233,30 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
         timeoutMs: input.args.timeoutMs,
         signal: abortController.signal,
       });
+      providerInvoked = true;
     } catch (error) {
+      if (callReservation) {
+        reconcileActiveReservation({
+          reservation: callReservation,
+          sessionMaxCostUsd: input.args.sessionMaxCostUsd,
+          chargeEstimatedUsd: providerInvoked ? reservedCostUsd : 0,
+          chargeActualUsd: 0,
+          cwd,
+        });
+        appendAuditEvent(
+          createAuditEvent({
+            session_id: sessionId,
+            run_id: input.runId,
+            event_type: "session_reservation_failed",
+            detail: {
+              reservation_id: callReservation.reservationId,
+              case_id: planned.caseId,
+            },
+          }),
+          cwd,
+        );
+      }
+
       if (isAbortError(error)) {
         ok = false;
         failureReason = "timeout_abort";
@@ -200,6 +272,30 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     providerCalls += 1;
 
     if (!invokeResult.ok || !invokeResult.rawResponse) {
+      if (callReservation) {
+        markSessionReservationFailed({
+          sessionId,
+          maxCostUsd: input.args.sessionMaxCostUsd,
+          reservationId: callReservation.reservationId,
+          chargeEstimatedUsd: reservedCostUsd,
+          chargeActualUsd: 0,
+          cwd,
+        });
+        appendAuditEvent(
+          createAuditEvent({
+            session_id: sessionId,
+            run_id: input.runId,
+            event_type: "session_reservation_failed",
+            detail: {
+              reservation_id: callReservation.reservationId,
+              case_id: planned.caseId,
+              provider_error: invokeResult.providerError?.code ?? "provider_error",
+            },
+          }),
+          cwd,
+        );
+      }
+
       ok = false;
       failureReason = invokeResult.providerError?.message ?? "Provider invocation failed";
       failureCode = "provider_error";
@@ -219,6 +315,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
           event_type: "provider_call_completed",
           detail: { case_id: planned.caseId, ok: false },
         }),
+        cwd,
       );
       break;
     }
@@ -260,7 +357,31 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       invokeResult.rawResponse.inputTokens ?? planned.estimatedInputTokens,
       invokeResult.rawResponse.outputTokens ?? planned.estimatedOutputTokens,
     );
-    totalActualCostUsd += actualCost;
+
+    if (callReservation) {
+      settleSessionReservation({
+        sessionId,
+        maxCostUsd: input.args.sessionMaxCostUsd,
+        reservationId: callReservation.reservationId,
+        actualCostUsd: actualCost,
+        estimatedCostUsd: planned.estimatedCostUsd,
+        cwd,
+      });
+      appendAuditEvent(
+        createAuditEvent({
+          session_id: sessionId,
+          run_id: input.runId,
+          event_type: "session_reservation_settled",
+          detail: {
+            reservation_id: callReservation.reservationId,
+            case_id: planned.caseId,
+            estimated_cost_usd: planned.estimatedCostUsd,
+            actual_cost_usd: actualCost,
+          },
+        }),
+        cwd,
+      );
+    }
 
     appendAuditEvent(
       createAuditEvent({
@@ -273,6 +394,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
           cost_usd: actualCost,
         },
       }),
+      cwd,
     );
 
     if (!contractResult.ok || !contractResult.review) {
@@ -312,18 +434,6 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       parsed_output_hash:
         contractResult.parsedReviewHash ?? hashMilitaryExpertParsedReview(contractResult.review),
     });
-  }
-
-  if (sessionReservation && totalActualCostUsd > 0) {
-    commitSessionSpend(sessionId, input.args.sessionMaxCostUsd, sessionReservation, totalActualCostUsd);
-    appendAuditEvent(
-      createAuditEvent({
-        session_id: sessionId,
-        run_id: input.runId,
-        event_type: "session_budget_committed",
-        detail: { actual_cost_usd: totalActualCostUsd },
-      }),
-    );
   }
 
   const filteredSuite = filterSuiteToSubset(input.args);
@@ -397,6 +507,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
       event_type: resultOk ? "live_run_completed" : "live_run_failed",
       detail: { ok: resultOk, model_calls: modelCalls, provider_calls: providerCalls },
     }),
+    cwd,
   );
 
   return {

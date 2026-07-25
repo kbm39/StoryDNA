@@ -196,13 +196,34 @@ export type LiveCalibrationResult =
   | LiveCalibrationSyntheticResult
   | LiveCalibrationLiveResult;
 
+export type LiveCalibrationSessionReservationStatus =
+  | "active"
+  | "settled"
+  | "failed"
+  | "abandoned";
+
+export interface LiveCalibrationSessionReservationRecord {
+  readonly reservation_id: string;
+  readonly session_id: string;
+  readonly run_id: string;
+  readonly case_id: string;
+  readonly correlation_id: string;
+  readonly reserved_micro_usd: number;
+  readonly status: LiveCalibrationSessionReservationStatus;
+  readonly created_at: string;
+  readonly settled_at: string | null;
+}
+
 export interface LiveCalibrationSessionBudget {
-  readonly schema_version: "expert_calibration_session@v1";
+  readonly schema_version: "expert_calibration_session@v2";
   readonly session_id: string;
   readonly max_cost_micro_usd: number;
-  readonly spent_cost_micro_usd: number;
+  readonly spent_estimated_micro_usd: number;
+  readonly spent_actual_micro_usd: number;
+  readonly reserved_micro_usd: number;
   readonly version: number;
   readonly run_count: number;
+  readonly reservations: Readonly<Record<string, LiveCalibrationSessionReservationRecord>>;
 }
 
 export type LiveCalibrationAuditEventType =
@@ -213,6 +234,10 @@ export type LiveCalibrationAuditEventType =
   | "provider_call_completed"
   | "session_budget_reserved"
   | "session_budget_committed"
+  | "session_reservation_created"
+  | "session_reservation_rejected"
+  | "session_reservation_settled"
+  | "session_reservation_failed"
   | "authorization_denied";
 
 export interface LiveCalibrationAuditEvent {

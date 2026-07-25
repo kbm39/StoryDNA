@@ -85,10 +85,14 @@ describe("module-import-map", () => {
       ...new Set(collectAdvertisedModuleRefs(literaryAgentRuntimeDefinition()).map((r) => r.moduleId)),
     ].sort();
     const mapIds = approvedExpertModuleIds();
-    assert.deepEqual(mapIds, laModuleIds);
     for (const moduleId of laModuleIds) {
+      assert.ok(
+        mapIds.includes(moduleId as (typeof mapIds)[number]),
+        `missing import map entry for ${moduleId}`,
+      );
       assert.ok(Object.prototype.hasOwnProperty.call(EXPERT_MODULE_IMPORTERS, moduleId));
     }
+    assert.ok(mapIds.length >= laModuleIds.length);
   });
 });
 

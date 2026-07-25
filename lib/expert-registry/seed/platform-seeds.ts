@@ -1,6 +1,7 @@
 import type { ExpertCategory, ExpertDefinitionV1 } from "../types.ts";
 import { editorInChiefDefinitionV1 } from "./editor-in-chief.v1.ts";
 import { developmentalEditorDefinitionV1 } from "./developmental-editor.v1.ts";
+import { militaryExpertRegistryDefinitionV1 } from "./military-expert-registry.v1.ts";
 
 export interface PlatformExpertSeedSpec {
   expertKey: string;
@@ -25,5 +26,12 @@ export const PLATFORM_EXPERT_SEED_DEFINITIONS: PlatformExpertSeedSpec[] = [
     category: "developmental_editor",
     department: "Editorial",
     definition: developmentalEditorDefinitionV1,
+  },
+  {
+    expertKey: "military_expert",
+    displayName: "Military Expert",
+    category: "military_expert",
+    department: "Research",
+    definition: militaryExpertRegistryDefinitionV1,
   },
 ];

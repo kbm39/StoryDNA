@@ -54,19 +54,21 @@ function reviewToPayload(review: MilitaryExpertReview): MilitaryExpertGeneration
     const negative = MILITARY_EXPERT_NEGATIVE_REALISM_STATUSES.includes(finding.realism_status);
     if (!negative) return finding;
 
-    const hasContrary = (finding.contrary_evidence?.length ?? 0) > 0;
+    const contrary_evidence = finding.contrary_evidence ?? [];
+    const hasContrary = contrary_evidence.length > 0;
     const hasExplicitNone =
       /no contrary evidence|none was found|contrary evidence was not found|did not find contrary/i.test(
-        `${finding.uncertainty_note ?? ""} ${finding.observation}`,
+        finding.uncertainty_note ?? "",
       );
-
-    if (hasContrary || hasExplicitNone) return finding;
 
     return {
       ...finding,
+      contrary_evidence,
       uncertainty_note:
-        finding.uncertainty_note ??
-        "No contrary evidence was found in the available excerpt.",
+        hasContrary || hasExplicitNone
+          ? finding.uncertainty_note
+          : finding.uncertainty_note ??
+            "No contrary evidence was found in the available excerpt.",
     };
   });
 

@@ -75,9 +75,10 @@ npm run calibrate:military -- \
   --session-id my-session-20260725 \
   --session-max-cost 1.00 \
   --ack-token I-ACKNOWLEDGE-LIVE-CALIBRATION-SPEND \
-  --output-dir .calibration-results/live-smoke \
-  --overwrite true
+  --output-dir .calibration-results/live-smoke
 ```
+
+Use `--overwrite true` only when intentionally replacing prior artifacts in a disposable output directory. Paid smoke runs should keep `--overwrite false` (default) so prior session evidence is preserved.
 
 ## Rejected CLI flags
 
@@ -94,7 +95,7 @@ These flags are explicitly rejected to prevent credential leakage:
 - `--session-max-cost` defaults to `$1.00`
 - Per-run `--max-total-cost` defaults to `$0.08` (spending ceiling, not expected cost)
 - Per-call `--max-cost-per-call` defaults to `$0.03`
-- Three-case smoke estimate at Haiku 4.5 rates (planner-derived from prompt tokenization; label as estimate): approximately **$0.0489** expected, **$0.0729** authorized worst-case for three calls at default 4096 output-token cap
+- Three-case smoke estimate at Haiku 4.5 rates (planner-derived from prompt tokenization; label as estimate): approximately **$0.0507** expected, **$0.0747** authorized worst-case for three calls at default 4096 output-token cap
 - Session state stored atomically at `.calibration-results/sessions/{sessionId}.json`
 - Version field enables conflict detection across concurrent runs
 
@@ -216,13 +217,40 @@ The first paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v1`
 
 | Metric | Source | Smoke example |
 |--------|--------|---------------|
-| Expected cost | Calibrated token estimate from prompts (~3824 input + 2500 output per case) | ~$0.0489 run total |
-| Authorized worst-case | Pricing-derived bound using provider `max_tokens` cap | ~$0.0729 run total (3 × ~$0.0243) |
-| Provider output cap | `live_calibration_output_tokens@v1` (4096 default) | Fits $0.03/call and $0.08/run at Haiku 4.5 rates |
+| Expected cost | Calibrated token estimate from prompts (~4404 input + 2500 output per case) | ~$0.0507 run total |
+| Authorized worst-case | Pricing-derived bound using provider `max_tokens` cap | ~$0.0747 run total (3 × ~$0.0249) |
+| Provider output cap | `live_calibration_output_tokens@v2` (4096 default per call; 12288 run ceiling) | Fits $0.03/call and $0.08/run at Haiku 4.5 rates |
 
 Reservation uses authorized worst-case; settlement uses actual usage. Over-budget token configuration fails at plan time before any provider invocation.
 
 **Next paid smoke:** Use a **new** session ID and run ID. Do not retry `military-smoke-haiku45-20260725-v1` or `cal-ms0samur-3nmhun`.
+
+### Haiku 4.5 smoke v3 contract remediation (2026-07-25)
+
+The third paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v3`, run `cal-ms0vz3r7-e5ywpu`) completed 3/3 provider calls and settled reservations, but calibration parsing failed 0/3 because `overall_realism_assessment.conclusion` was missing on every case and `me-coc-001` also lacked valid contrary-evidence handling. Those artifacts are immutable — do not modify, delete, or reuse that session ID or run ID.
+
+**Required conclusion contract (`overall_realism_assessment`):**
+
+| Rule | Detail |
+|------|--------|
+| Field | `conclusion` — required non-empty author-facing string |
+| Invalid substitutes | `assessment`, `verdict`, `overall_conclusion`, `notes`, `summary` |
+| Invalid values | omitted field, empty string, `null` |
+| Positive case | Synthesize mixed credibility judgment proportionate to findings |
+| True-negative case | Acknowledge scope reviewed; do not fabricate concerns |
+| Safety case | Generalize breaching/assault detail without procedural instruction |
+
+**Mandatory contrary-evidence handling (every negative finding):**
+
+| Situation | Required shape |
+|-----------|----------------|
+| Contrary evidence exists | Non-empty `contrary_evidence[]` with valid evidence objects |
+| No contrary evidence | `contrary_evidence: []` plus explicit `uncertainty_note` (e.g. "No contrary evidence was found in the supplied scope.") |
+| Invalid | Omitted field; generic uncertainty elsewhere; manuscript evidence used as substitute |
+
+Structural omissions remain hard failures — the parser does not infer `conclusion` from `summary` or auto-wrap omitted contrary evidence.
+
+**Next paid smoke (v4):** Use entirely **new** session and run IDs after this remediation merges. Keep `--overwrite false`. Military Expert remains uncertified and unavailable on the main site.
 
 ## Invariants
 

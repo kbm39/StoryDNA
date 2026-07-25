@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { MILITARY_EXPERT_OUTPUT_SCHEMA_VERSION } from "@/experts/military-expert/output-schema.ts";
+import { ANTHROPIC_HAIKU_45_MODEL_ID } from "../../model-lifecycle.ts";
+import { ANTHROPIC_HAIKU_45_PRICING_PROFILE } from "../../provider-allowlist.ts";
 import {
   ANTHROPIC_SDK_DEFAULT_API_VERSION,
   buildAnthropicProviderMetadata,
@@ -8,6 +10,8 @@ import {
   normalizeAnthropicApiVersion,
   resolveAnthropicApiVersion,
 } from "./metadata.ts";
+
+const HAIKU45 = ANTHROPIC_HAIKU_45_MODEL_ID;
 
 describe("Anthropic provider metadata", () => {
   describe("normalizeAnthropicApiVersion", () => {
@@ -71,9 +75,13 @@ describe("Anthropic provider metadata", () => {
   describe("buildAnthropicProviderMetadata", () => {
     it("11 final metadata api_version is never null or empty", () => {
       const metadata = buildAnthropicProviderMetadata({
-        modelId: "claude-3-5-haiku-20241022",
+        modelId: HAIKU45,
         sdkVersion: "0.104.2",
         apiVersion: null as unknown as string,
+        pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
+        modelLifecycleStatus: "active",
+        modelLifecycleVerifiedDate: "2026-07-25",
+        modelLifecycleSource: "test-fixture",
       });
       assert.equal(metadata.api_version, "unknown");
       assert.ok(metadata.api_version.length > 0);
@@ -81,9 +89,13 @@ describe("Anthropic provider metadata", () => {
 
     it("12 sdk_version remains separately recorded", () => {
       const metadata = buildAnthropicProviderMetadata({
-        modelId: "claude-3-5-haiku-20241022",
+        modelId: HAIKU45,
         sdkVersion: "0.104.2",
         apiVersion: ANTHROPIC_SDK_DEFAULT_API_VERSION,
+        pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
+        modelLifecycleStatus: "active",
+        modelLifecycleVerifiedDate: "2026-07-25",
+        modelLifecycleSource: "test-fixture",
       });
       assert.equal(metadata.sdk_version, "0.104.2");
       assert.notEqual(metadata.sdk_version, metadata.api_version);
@@ -91,9 +103,13 @@ describe("Anthropic provider metadata", () => {
 
     it("13 response_schema_version remains separately recorded", () => {
       const metadata = buildAnthropicProviderMetadata({
-        modelId: "claude-3-5-haiku-20241022",
+        modelId: HAIKU45,
         sdkVersion: "0.104.2",
         apiVersion: ANTHROPIC_SDK_DEFAULT_API_VERSION,
+        pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
+        modelLifecycleStatus: "active",
+        modelLifecycleVerifiedDate: "2026-07-25",
+        modelLifecycleSource: "test-fixture",
       });
       assert.equal(metadata.response_schema_version, MILITARY_EXPERT_OUTPUT_SCHEMA_VERSION);
       assert.notEqual(metadata.response_schema_version, metadata.api_version);
@@ -102,12 +118,16 @@ describe("Anthropic provider metadata", () => {
 
     it("14 provider metadata uses snake_case fields", () => {
       const metadata = buildAnthropicProviderMetadata({
-        modelId: "claude-3-5-haiku-20241022",
+        modelId: HAIKU45,
         sdkVersion: "0.104.2",
         apiVersion: ANTHROPIC_SDK_DEFAULT_API_VERSION,
+        pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
+        modelLifecycleStatus: "active",
+        modelLifecycleVerifiedDate: "2026-07-25",
+        modelLifecycleSource: "test-fixture",
       });
       assert.equal(metadata.provider, "anthropic");
-      assert.equal(metadata.model_id, "claude-3-5-haiku-20241022");
+      assert.equal(metadata.model_id, HAIKU45);
       assert.ok("api_version" in metadata);
       assert.ok("sdk_version" in metadata);
       assert.ok("response_schema_version" in metadata);

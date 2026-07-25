@@ -24,6 +24,21 @@ function microUsdToUsd(microUsd: number): number {
   return microUsd / LIVE_CALIBRATION_MICRO_USD_SCALE;
 }
 
+/** Deterministic USD normalization for JSON artifacts via micro-USD round-trip. */
+export function serializeUsd(usd: number): number {
+  if (!Number.isFinite(usd)) return 0;
+  return microUsdToUsd(usdToMicroUsd(usd));
+}
+
+export function sumSerializedUsd(amounts: readonly number[]): number {
+  const totalMicro = amounts.reduce((sum, usd) => sum + usdToMicroUsd(usd), 0);
+  return microUsdToUsd(totalMicro);
+}
+
+export function exceedsUsdLimit(amountUsd: number, limitUsd: number): boolean {
+  return usdToMicroUsd(amountUsd) > usdToMicroUsd(limitUsd);
+}
+
 export function createBudgetController(limits: BudgetControllerLimits): {
   state: () => BudgetControllerState;
   snapshot: () => LiveCalibrationBudgetSnapshot;
@@ -48,9 +63,9 @@ export function createBudgetController(limits: BudgetControllerLimits): {
       callsUsed,
       callsRemaining: Math.max(0, limits.maxCalls - callsUsed),
       totalCostMicroUsd,
-      totalCostUsd: microUsdToUsd(totalCostMicroUsd),
+      totalCostUsd: serializeUsd(microUsdToUsd(totalCostMicroUsd)),
       costRemainingMicroUsd,
-      costRemainingUsd: microUsdToUsd(costRemainingMicroUsd),
+      costRemainingUsd: serializeUsd(microUsdToUsd(costRemainingMicroUsd)),
       inputTokensUsed,
       outputTokensUsed,
       budgetExhausted:

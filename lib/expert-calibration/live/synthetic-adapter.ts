@@ -84,7 +84,7 @@ function baseSyntheticRaw(
     finishStatus: "complete" as const,
     inputTokens: 3114,
     outputTokens: 2500,
-    modelIdentifier: "claude-3-5-haiku-20241022",
+    modelIdentifier: "claude-haiku-4-5-20251001",
     capturedAt: "2026-07-25T12:00:00.000Z",
     provenance: Object.freeze({ source: "synthetic" as const }),
     ...overrides,

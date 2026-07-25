@@ -29,7 +29,7 @@ function buildInvokeInput() {
     request,
     correlationId: "invoke-test-corr",
     caseId: "me-coc-001",
-    modelId: "claude-3-5-haiku-20241022",
+    modelId: "claude-haiku-4-5-20251001",
     timeoutMs: 1_000,
   };
 }
@@ -51,7 +51,7 @@ describe("Anthropic provider invoke metadata", () => {
         content: [{ type: "text", text: '{"findings":[]}' }],
         stop_reason: "end_turn",
         usage: { input_tokens: 10, output_tokens: 20 },
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5-20251001",
       })),
       MOCK_SDK_VERSION,
     );
@@ -70,7 +70,7 @@ describe("Anthropic provider invoke metadata", () => {
         content: [{ type: "text", text: '{"findings":[]}' }],
         stop_reason: "end_turn",
         usage: { input_tokens: 10, output_tokens: 20 },
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5-20251001",
       })),
       MOCK_SDK_VERSION,
     );
@@ -100,7 +100,7 @@ describe("Anthropic provider invoke metadata", () => {
         content: [{ type: "text", text: '{"findings":[]}' }],
         stop_reason: "end_turn",
         usage: { input_tokens: 10, output_tokens: 20 },
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5-20251001",
       })),
       MOCK_SDK_VERSION,
     );
@@ -120,7 +120,7 @@ describe("Anthropic provider invoke metadata", () => {
           content: [{ type: "text", text: '{"findings":[]}' }],
           stop_reason: "end_turn",
           usage: { input_tokens: 10, output_tokens: 20 },
-          model: "claude-3-5-haiku-20241022",
+          model: "claude-haiku-4-5-20251001",
         };
       }),
       MOCK_SDK_VERSION,

@@ -54,7 +54,15 @@ export {
   getSessionAvailableMicroUsd,
 } from "./session-budget.ts";
 export { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
-export { resolveProviderSpec, ANTHROPIC_HAIKU_MODEL_ID, ANTHROPIC_HAIKU_MODEL_ALIAS } from "./provider-allowlist.ts";
+export { resolveProviderSpec, ANTHROPIC_HAIKU_MODEL_ID, ANTHROPIC_HAIKU_MODEL_ALIAS, ANTHROPIC_HAIKU_45_PRICING_PROFILE } from "./provider-allowlist.ts";
+export {
+  getModelLifecycleRecord,
+  validateModelLifecycleForLivePlan,
+  validateLiveCliModelAlias,
+  isLiveEligibleLifecycleStatus,
+  ANTHROPIC_HAIKU_45_ALIAS,
+  ANTHROPIC_HAIKU_45_MODEL_ID,
+} from "./model-lifecycle.ts";
 export {
   LIVE_CALIBRATION_SUBSETS,
   LIVE_CALIBRATION_SUBSET_IDS,
@@ -62,7 +70,13 @@ export {
   hashLiveCalibrationSubsetCaseIds,
 } from "./subsets.ts";
 export { buildLiveCalibrationCallPlan } from "./call-planner.ts";
-export { createBudgetController, usdToMicroUsd, microUsdToUsd } from "./budget-controller.ts";
+export {
+  createBudgetController,
+  usdToMicroUsd,
+  microUsdToUsd,
+  serializeUsd,
+  sumSerializedUsd,
+} from "./budget-controller.ts";
 export { createAbortController, isAbortError } from "./abort-controller.ts";
 export {
   writeAtomicArtifact,

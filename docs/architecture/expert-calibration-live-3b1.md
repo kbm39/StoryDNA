@@ -8,7 +8,7 @@ PR 3B-1 ships dry-run and synthetic modes only — no real provider calls.
 - Reusable live calibration contracts under `lib/expert-calibration/live/`
 - CLI entry: `npm run calibrate:military`
 - Operator authorization and feature-flag gates
-- Provider/model allowlist (Anthropic Haiku v1 only)
+- Provider/model allowlist (Anthropic Haiku 4.5 only for new plans)
 - Budget, timeout, and abort controllers
 - Local artifact store under `.calibration-results/`
 - Deterministic dry-run and synthetic execution paths
@@ -31,11 +31,11 @@ npm run calibrate:military -- \
   --suite military_expert_v1_draft_golden \
   --subset military_expert_smoke_v1 \
   --provider anthropic \
-  --model haiku-v1 \
+  --model haiku-4-5-v1 \
   --runs 1 \
   --max-calls 3 \
-  --max-total-cost 0.05 \
-  --max-cost-per-call 0.02 \
+  --max-total-cost 0.08 \
+  --max-cost-per-call 0.03 \
   --max-input-tokens 50000 \
   --max-output-tokens 50000 \
   --timeout-ms 120000 \

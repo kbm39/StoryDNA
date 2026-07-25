@@ -485,6 +485,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     writeRunManifest(input.args.outputDir, input.runId, {
       ...manifest,
       cli_args: formatCliArgsForManifest(input.args),
+      model_lifecycle: input.callPlan.modelLifecycle,
       calibration_ok: calibrationResult.ok,
       session_id: sessionId,
       model_calls: modelCalls,
@@ -562,5 +563,6 @@ function buildManifest(
     synthetic_scenario: null,
     flags_acknowledged: flagsAcknowledged,
     ...(providerMetadata ? { provider_metadata: providerMetadata } : {}),
+    ...(input.callPlan.modelLifecycle ? { model_lifecycle: input.callPlan.modelLifecycle } : {}),
   });
 }

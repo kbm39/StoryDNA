@@ -58,6 +58,11 @@ export function buildAnthropicProviderMetadata(input: {
   readonly sdkVersion: string;
   readonly apiVersion: string;
   readonly responseSchemaVersion?: string;
+  readonly pricingProfileId: string;
+  readonly modelLifecycleStatus: import("../../model-lifecycle.ts").LiveCalibrationModelLifecycleStatus;
+  readonly modelLifecycleVerifiedDate: string;
+  readonly modelLifecycleSource: string;
+  readonly recommendedReplacement?: string | null;
 }): LiveCalibrationProviderMetadata {
   const sdkVersion = typeof input.sdkVersion === "string" ? input.sdkVersion.trim() : "";
   return Object.freeze({
@@ -67,5 +72,10 @@ export function buildAnthropicProviderMetadata(input: {
     api_version: normalizeAnthropicApiVersion(input.apiVersion),
     response_schema_version:
       input.responseSchemaVersion ?? MILITARY_EXPERT_OUTPUT_SCHEMA_VERSION,
+    pricing_profile_id: input.pricingProfileId,
+    model_lifecycle_status: input.modelLifecycleStatus,
+    model_lifecycle_verified_date: input.modelLifecycleVerifiedDate,
+    model_lifecycle_source: input.modelLifecycleSource,
+    recommended_replacement: input.recommendedReplacement ?? null,
   });
 }

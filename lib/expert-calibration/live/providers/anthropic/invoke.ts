@@ -14,6 +14,7 @@ import {
   extractAnthropicApiVersionFromResponse,
   resolveAnthropicApiVersion,
 } from "./metadata.ts";
+import { getModelLifecycleRecord } from "../../model-lifecycle.ts";
 import { validateAnthropicTextContent, type AnthropicContentBlock } from "./response-shape.ts";
 
 export interface AnthropicMessagesCreateClient {
@@ -30,6 +31,7 @@ function buildInvokeProviderMetadata(
   sdkVersion: string,
   response?: unknown,
 ): LiveCalibrationProviderMetadata {
+  const lifecycle = getModelLifecycleRecord(modelId);
   const exposedApiVersion = response === undefined
     ? null
     : extractAnthropicApiVersionFromResponse(response);
@@ -37,6 +39,11 @@ function buildInvokeProviderMetadata(
     modelId,
     sdkVersion,
     apiVersion: resolveAnthropicApiVersion(exposedApiVersion),
+    pricingProfileId: lifecycle?.pricingProfileId ?? "unknown",
+    modelLifecycleStatus: lifecycle?.status ?? "retired",
+    modelLifecycleVerifiedDate: lifecycle?.verifiedDate ?? "unknown",
+    modelLifecycleSource: lifecycle?.sourceLabel ?? "unknown",
+    recommendedReplacement: lifecycle?.recommendedReplacement ?? null,
   });
 }
 

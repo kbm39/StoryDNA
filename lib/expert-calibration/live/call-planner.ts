@@ -5,7 +5,7 @@ import {
   hashMilitaryExpertSystemPrompt,
 } from "@/experts/military-expert/generation-contract.ts";
 import { MILITARY_EXPERT_CALIBRATION_SUITE } from "@/experts/military-expert/calibration/corpus.ts";
-import { estimateTokenCost } from "../cost-analysis.ts";
+import { estimateTokenCost, isLiveEligiblePricingProfile } from "../cost-analysis.ts";
 import type {
   LiveCalibrationCallPlan,
   LiveCalibrationCliArgs,
@@ -18,6 +18,11 @@ import {
   LIVE_CALIBRATION_ESTIMATED_OUTPUT_TOKENS_PER_CASE,
 } from "./constants.ts";
 import { getLiveCalibrationSubset, validateSubsetCaseIds } from "./subsets.ts";
+import {
+  toModelLifecycleSnapshot,
+  validateModelLifecycleForLivePlan,
+} from "./model-lifecycle.ts";
+import { exceedsUsdLimit, serializeUsd, sumSerializedUsd } from "./budget-controller.ts";
 
 export interface BuildCallPlanInput {
   readonly args: LiveCalibrationCliArgs;
@@ -44,6 +49,13 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     );
   }
 
+  if (input.args.mode === "live" && !isLiveEligiblePricingProfile(input.providerSpec.pricingProfileId)) {
+    throw new LiveCalibrationError(
+      "allowlist_violation",
+      `Pricing profile not eligible for new live plans: ${input.providerSpec.pricingProfileId}`,
+    );
+  }
+
   const subset = getLiveCalibrationSubset(input.args.subset);
   const validation = validateSubsetCaseIds(subset.caseIds);
   if (!validation.ok) {
@@ -52,6 +64,9 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
       `Unknown case IDs in subset: ${validation.unknown.join(", ")}`,
     );
   }
+
+  const lifecycleRecord = validateModelLifecycleForLivePlan(input.providerSpec.modelId);
+  const modelLifecycle = toModelLifecycleSnapshot(lifecycleRecord);
 
   const caseById = new Map(
     MILITARY_EXPERT_CALIBRATION_SUITE.cases.map((c) => [c.case_id, c]),
@@ -88,10 +103,12 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
         request.systemPrompt,
         request.reviewPrompt,
       );
-      const estimatedCostUsd = estimateTokenCost(
-        inputTokens,
-        outputTokens,
-        input.providerSpec.pricingProfileId,
+      const estimatedCostUsd = serializeUsd(
+        estimateTokenCost(
+          inputTokens,
+          outputTokens,
+          input.providerSpec.pricingProfileId,
+        ),
       );
 
       calls.push(
@@ -112,7 +129,7 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
 
   const totalEstimatedInputTokens = calls.reduce((s, c) => s + c.estimatedInputTokens, 0);
   const totalEstimatedOutputTokens = calls.reduce((s, c) => s + c.estimatedOutputTokens, 0);
-  const totalEstimatedCostUsd = calls.reduce((s, c) => s + c.estimatedCostUsd, 0);
+  const totalEstimatedCostUsd = sumSerializedUsd(calls.map((c) => c.estimatedCostUsd));
 
   if (calls.length > input.args.maxCalls) {
     throw new LiveCalibrationError(
@@ -121,15 +138,15 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     );
   }
 
-  if (totalEstimatedCostUsd > input.args.maxTotalCostUsd) {
+  if (exceedsUsdLimit(totalEstimatedCostUsd, input.args.maxTotalCostUsd)) {
     throw new LiveCalibrationError(
       "cost_limit_exceeded",
-      `Estimated cost ($${totalEstimatedCostUsd.toFixed(4)}) exceeds --max-total-cost ($${input.args.maxTotalCostUsd})`,
+      `Estimated cost ($${serializeUsd(totalEstimatedCostUsd).toFixed(4)}) exceeds --max-total-cost ($${input.args.maxTotalCostUsd})`,
     );
   }
 
   for (const call of calls) {
-    if (call.estimatedCostUsd > input.args.maxCostPerCallUsd) {
+    if (exceedsUsdLimit(call.estimatedCostUsd, input.args.maxCostPerCallUsd)) {
       throw new LiveCalibrationError(
         "cost_limit_exceeded",
         `Per-call estimate for ${call.caseId} exceeds --max-cost-per-call`,
@@ -143,6 +160,7 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
     suiteId: input.args.suite,
     expertKey: input.args.expert,
     providerSpec: input.providerSpec,
+    modelLifecycle,
     runs: input.args.runs,
     calls: Object.freeze(calls),
     totalEstimatedInputTokens,

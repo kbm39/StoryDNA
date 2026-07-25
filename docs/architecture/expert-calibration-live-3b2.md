@@ -93,6 +93,24 @@ Append-only events at `.calibration-results/sessions/{sessionId}.audit.jsonl`:
     raw-{case_id}-run{index}.json   # when --retain-raw-responses true
 ```
 
+### Provider API version metadata
+
+Live run manifests and audit events record explicit Anthropic provider metadata under `provider_metadata`:
+
+| Field | Meaning |
+|-------|---------|
+| `api_version` | Anthropic Messages API version used for the call |
+| `sdk_version` | Installed `@anthropic-ai/sdk` package version |
+| `response_schema_version` | Military Expert output schema version parsed from the response |
+
+`api_version` is never `null`, empty, or omitted on live runs:
+
+- When deterministically available (SDK default request header or an exposed response value), the exact version string is recorded — currently `2023-06-01` for the bundled SDK default.
+- When no deterministic value is available at normalization time, artifacts record the literal `unknown`.
+- `unknown` means unavailable, not an inferred provider version.
+
+Dry-run and synthetic manifests do not include `provider_metadata` (zero provider calls).
+
 ## Dry-run / synthetic (unchanged)
 
 Dry-run and synthetic modes remain zero provider calls:

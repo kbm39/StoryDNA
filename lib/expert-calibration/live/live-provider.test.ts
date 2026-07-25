@@ -32,6 +32,10 @@ import { resolveProviderSpec } from "./provider-allowlist.ts";
 import { executeLive } from "./live-executor.ts";
 import { runLiveCalibration } from "./orchestrator.ts";
 import { buildSyntheticSuccessRawResponse } from "./synthetic-adapter.ts";
+import {
+  ANTHROPIC_SDK_DEFAULT_API_VERSION,
+  buildAnthropicProviderMetadata,
+} from "./providers/anthropic/metadata.ts";
 import { usdToMicroUsd, microUsdToUsd } from "./budget-controller.ts";
 import {
   EXPERT_CALIBRATION_LIVE_ENABLED_FLAG_NAME,
@@ -105,19 +109,29 @@ function cliArgv(overrides: Record<string, string> = {}): string[] {
 }
 
 function createMockInvoker(
-  options: { failOnCase?: string; failAll?: boolean } = {},
+  options: { failOnCase?: string; failAll?: boolean; apiVersion?: string } = {},
 ): LiveCalibrationProviderInvoker {
   return async (input: LiveCalibrationProviderInvokeInput) => {
     if (options.failAll || input.caseId === options.failOnCase) {
       return {
         ok: false,
         providerError: { code: "mock_error", message: "Mock provider failure" },
+        providerMetadata: buildAnthropicProviderMetadata({
+          modelId: input.modelId,
+          sdkVersion: "mock-sdk",
+          apiVersion: options.apiVersion ?? ANTHROPIC_SDK_DEFAULT_API_VERSION,
+        }),
         durationMs: 1,
       };
     }
     return {
       ok: true,
       rawResponse: buildSyntheticSuccessRawResponse(input.correlationId, input.caseId),
+      providerMetadata: buildAnthropicProviderMetadata({
+        modelId: input.modelId,
+        sdkVersion: "mock-sdk",
+        apiVersion: options.apiVersion ?? ANTHROPIC_SDK_DEFAULT_API_VERSION,
+      }),
       durationMs: 5,
     };
   };
@@ -537,6 +551,64 @@ describe("Expert Calibration Live PR 3B-2", () => {
       assert.ok(budget.spent_actual_micro_usd > 0);
       cleanupSession(sessionId);
     });
+    it("48b live manifest records explicit provider api_version", async () => {
+      const sessionId = `exec-api-version-${Date.now()}`;
+      cleanupSession(sessionId);
+      const args = liveSmokeArgs({ sessionId, maxTotalCostUsd: 1 });
+      const plan = buildLiveCalibrationCallPlan({
+        args,
+        providerSpec: resolveProviderSpec(args.provider, args.model),
+        correlationPrefix: "live-mock",
+      });
+      const result = await executeLive({
+        args,
+        callPlan: plan,
+        runId: "live-mock-api-version",
+        correlationId: "live-mock-corr",
+        startedAt: 1_000,
+        providerInvoker: createMockInvoker({ apiVersion: "2024-11-15" }),
+        writeArtifacts: false,
+        bypassFeatureFlags: true,
+        now: () => 2_000,
+      });
+      assert.ok(result.manifest.provider_metadata);
+      assert.equal(result.manifest.provider_metadata.api_version, "2024-11-15");
+      assert.equal(result.manifest.provider_metadata.sdk_version, "mock-sdk");
+      assert.ok(result.manifest.provider_metadata.api_version.length > 0);
+      cleanupSession(sessionId);
+    });
+    it("48c provider api_version is never null in audit events", async () => {
+      const sessionId = `exec-audit-api-version-${Date.now()}`;
+      cleanupSession(sessionId);
+      const args = liveSmokeArgs({ sessionId, maxTotalCostUsd: 1 });
+      const plan = buildLiveCalibrationCallPlan({
+        args,
+        providerSpec: resolveProviderSpec(args.provider, args.model),
+        correlationPrefix: "live-mock",
+      });
+      await executeLive({
+        args,
+        callPlan: plan,
+        runId: "live-mock-audit-api-version",
+        correlationId: "live-mock-corr",
+        startedAt: 1_000,
+        providerInvoker: createMockInvoker(),
+        writeArtifacts: false,
+        bypassFeatureFlags: true,
+        now: () => 2_000,
+      });
+      const auditPath = join(SESSIONS_DIR, `${sessionId}.audit.jsonl`);
+      const lines = readFileSync(auditPath, "utf8").trim().split("\n");
+      const completed = lines
+        .map((line) => JSON.parse(line))
+        .filter((event) => event.event_type === "provider_call_completed");
+      assert.ok(completed.length > 0);
+      for (const event of completed) {
+        assert.equal(typeof event.detail.api_version, "string");
+        assert.ok(event.detail.api_version.length > 0);
+      }
+      cleanupSession(sessionId);
+    });
   });
 
   describe("orchestrator live path", () => {
@@ -775,6 +847,25 @@ describe("Expert Calibration Live PR 3B-2", () => {
       const content = readFileSync(path, "utf8");
       assert.match(content, /PR 3B-2/);
       assert.match(content, /session-id/);
+      assert.match(content, /api_version/);
+      assert.match(content, /unknown/);
+    });
+    it("74 dry-run manifest has no provider metadata", async () => {
+      const result = await runLiveCalibration(smokeArgs(), {
+        writeArtifacts: false,
+        randomId: () => "reg-dry-meta",
+      });
+      assert.equal(result.mode, "dry-run");
+      assert.equal(result.manifest?.provider_metadata, undefined);
+    });
+    it("75 synthetic manifest has no provider metadata", async () => {
+      const result = await runLiveCalibration(smokeArgs({ mode: "synthetic" }), {
+        writeArtifacts: false,
+        bypassFeatureFlags: true,
+        randomId: () => "reg-syn-meta",
+      });
+      assert.equal(result.mode, "synthetic");
+      assert.equal(result.manifest?.provider_metadata, undefined);
     });
   });
 });

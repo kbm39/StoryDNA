@@ -20,6 +20,25 @@ import {
 
 export const MILITARY_EXPERT_OUTPUT_SCHEMA_VERSION = "military_expert_output@v1-draft" as const;
 
+export const MILITARY_EXPERT_OVERALL_REALISM_ASSESSMENT_KEYS = [
+  "conclusion",
+  "confidence",
+  "primary_strengths",
+  "primary_concerns",
+  "preservation_priorities",
+] as const;
+
+export const MILITARY_EXPERT_OVERALL_REALISM_PROHIBITED_SUBSTITUTE_KEYS = [
+  "assessment",
+  "verdict",
+  "overall_conclusion",
+  "notes",
+  "summary",
+] as const;
+
+export const MILITARY_EXPERT_NO_CONTRARY_EVIDENCE_UNCERTAINTY_EXAMPLE =
+  "No contrary evidence was found in the supplied scope." as const;
+
 export const MILITARY_EXPERT_OUTPUT_TOP_LEVEL_KEYS = [
   "summary",
   "strengths",
@@ -168,11 +187,51 @@ function parseEvidenceRecord(
 function hasContraryEvidenceHandling(finding: {
   contrary_evidence?: MilitaryExpertEvidenceRecord[];
   uncertainty_note?: string;
-  observation?: string;
 }): boolean {
   if (finding.contrary_evidence && finding.contrary_evidence.length > 0) return true;
-  const combined = `${finding.uncertainty_note ?? ""} ${finding.observation ?? ""}`;
-  return NO_CONTRARY_EVIDENCE_PATTERN.test(combined);
+  if (Array.isArray(finding.contrary_evidence) && finding.contrary_evidence.length === 0) {
+    return (
+      finding.uncertainty_note !== undefined &&
+      NO_CONTRARY_EVIDENCE_PATTERN.test(finding.uncertainty_note)
+    );
+  }
+  return false;
+}
+
+/** Deterministic conclusion balance check — applied after findings are parsed. */
+export function validateMilitaryExpertConclusionBalance(
+  conclusion: string,
+  findings: readonly { realism_status: string }[],
+  errors: string[],
+): void {
+  if (!conclusion.trim()) return;
+
+  const conclusionLower = conclusion.toLowerCase();
+  const hasNegativeFinding = findings.some((finding) =>
+    isNegativeRealismStatus(finding.realism_status),
+  );
+
+  if (hasNegativeFinding) {
+    const deniesConcerns =
+      /no (?:material )?(?:concerns|inaccuracies|issues|problems)|no negative findings|fully accurate|no realism concerns/.test(
+        conclusionLower,
+      );
+    if (deniesConcerns) {
+      errors.push("overall_realism_assessment.conclusion must not contradict negative findings");
+    }
+  }
+
+  if (!hasNegativeFinding && findings.length === 0) {
+    const claimsErrors =
+      /confirmed error|major inaccurac|significant concern/.test(conclusionLower) ||
+      (/material inaccurac/.test(conclusionLower) &&
+        !/no material inaccuracies|no material concerns|no negative findings/.test(conclusionLower));
+    if (claimsErrors) {
+      errors.push(
+        "overall_realism_assessment.conclusion must not contradict true-negative findings",
+      );
+    }
+  }
 }
 
 function parseFinding(raw: unknown, index: number, errors: string[]): MilitaryExpertFinding | null {
@@ -261,14 +320,22 @@ function parseFinding(raw: unknown, index: number, errors: string[]): MilitaryEx
     if (!str(record.preservation_note)) {
       errors.push(`${prefix}: negative finding requires preservation_note`);
     }
+    if (!("contrary_evidence" in record)) {
+      errors.push(
+        `${prefix}.contrary_evidence: field is required on negative findings (use [] when none exists)`,
+      );
+    } else if (record.contrary_evidence !== undefined && !Array.isArray(record.contrary_evidence)) {
+      errors.push(`${prefix}.contrary_evidence: must be an array`);
+    }
     if (
       !hasContraryEvidenceHandling({
         contrary_evidence: contraryEvidence,
         uncertainty_note: str(record.uncertainty_note) || undefined,
-        observation: str(record.observation),
       })
     ) {
-      errors.push(`${prefix}: negative finding requires contrary-evidence handling`);
+      errors.push(
+        `${prefix}: negative finding requires contrary-evidence handling (valid contrary_evidence objects or [] with explicit uncertainty_note)`,
+      );
     }
   }
 
@@ -440,13 +507,37 @@ export function validateMilitaryExpertGenerationPayload(
     errors.push("overall_realism_assessment must be an object");
   } else {
     const overallRecord = overall as Record<string, unknown>;
-    const conclusion = str(overallRecord.conclusion);
-    if (!conclusion) {
-      errors.push("overall_realism_assessment.conclusion is required");
+    for (const key of Object.keys(overallRecord)) {
+      if (!(MILITARY_EXPERT_OVERALL_REALISM_ASSESSMENT_KEYS as readonly string[]).includes(key)) {
+        if (
+          (MILITARY_EXPERT_OVERALL_REALISM_PROHIBITED_SUBSTITUTE_KEYS as readonly string[]).includes(
+            key,
+          )
+        ) {
+          errors.push(`overall_realism_assessment.${key} is invalid — use conclusion instead`);
+        } else {
+          errors.push(`overall_realism_assessment.${key} is unsupported`);
+        }
+      }
     }
-    if (LETTER_GRADE_PATTERN.test(conclusion)) {
-      errors.push("overall_realism_assessment must not include letter grades");
+
+    if (!("conclusion" in overallRecord)) {
+      errors.push("overall_realism_assessment.conclusion is required (field missing)");
+    } else if (overallRecord.conclusion === null) {
+      errors.push(
+        "overall_realism_assessment.conclusion must be a non-empty string (null is invalid)",
+      );
+    } else {
+      const conclusion = str(overallRecord.conclusion);
+      if (!conclusion) {
+        errors.push("overall_realism_assessment.conclusion must be a non-empty string");
+      }
+      if (LETTER_GRADE_PATTERN.test(conclusion)) {
+        errors.push("overall_realism_assessment must not include letter grades");
+      }
+      validateMilitaryExpertConclusionBalance(conclusion, findings, errors);
     }
+
     pushEnumError(
       errors,
       "overall_realism_assessment.confidence",
@@ -546,9 +637,26 @@ export function militaryExpertOutputSchemaPromptBlock(): string {
     "- verification_note: optional editorial note.",
     "- Every negative finding must include at least one valid manuscript_evidence object.",
     "",
-    "contrary_evidence contract:",
+    "overall_realism_assessment contract (required object on every response):",
+    `- Exact keys: ${MILITARY_EXPERT_OVERALL_REALISM_ASSESSMENT_KEYS.join(", ")}`,
+    "- conclusion: REQUIRED non-empty author-facing string synthesizing the overall military-realism judgment.",
+    "- conclusion must remain proportionate to findings, acknowledge uncertainty where appropriate, and must not contradict the findings array or duplicate the entire summary.",
+    `- Invalid substitutes for conclusion: ${MILITARY_EXPERT_OVERALL_REALISM_PROHIBITED_SUBSTITUTE_KEYS.join(", ")} — empty string, null, and omitted field are also invalid.`,
+    '- Positive finding case example shape: {"conclusion":"Mixed credibility with one comms concern to address.","confidence":"medium","primary_strengths":["Command scenes"],"primary_concerns":["Informal comms"],"preservation_priorities":["Keep tension beat"]}',
+    '- True-negative case example shape: {"conclusion":"No material inaccuracies in supplied scope; residual period uncertainty remains.","confidence":"medium","primary_strengths":["Squad coordination"],"primary_concerns":[],"preservation_priorities":["Keep pacing"]}',
+    '- Safety-escalation case example shape: {"conclusion":"Operational tension works, but breaching detail should stay generalized without procedural instruction.","confidence":"medium","primary_strengths":["Assault pacing"],"primary_concerns":["Instructional breaching tone"],"preservation_priorities":["Preserve stakes"]}',
+    "",
+    "contrary_evidence contract (mandatory on every negative finding):",
+    "- Every negative finding MUST include the contrary_evidence field — omission is invalid.",
     "- Use the contrary_evidence array with the same object shape as manuscript_evidence.",
-    "- When no contrary evidence exists, set contrary_evidence: [] AND include an explicit no-contrary-evidence statement in uncertainty_note (e.g. \"No contrary evidence was found in the supplied scope.\").",
+    "- When contrary evidence exists: include one or more valid evidence objects in contrary_evidence.",
+    `- When no contrary evidence exists: set contrary_evidence: [] AND include uncertainty_note with an explicit no-contrary statement (e.g. "${MILITARY_EXPERT_NO_CONTRARY_EVIDENCE_UNCERTAINTY_EXAMPLE}").`,
+    "- A generic uncertainty statement elsewhere (summary, observation, or top-level uncertainty_summary) is NOT a substitute.",
+    "- manuscript_evidence objects cannot satisfy contrary_evidence unless placed in contrary_evidence.",
+    "- Do not invent contrary evidence or manufacture rebuttals merely to satisfy the schema.",
+    '- Present example fragment: {"contrary_evidence":[{"excerpt":"Officer oversight appears in an earlier beat.","locator":"scene"}]}',
+    `- Absent example fragment: {"contrary_evidence":[],"uncertainty_note":"${MILITARY_EXPERT_NO_CONTRARY_EVIDENCE_UNCERTAINTY_EXAMPLE}"}`,
+    "- True-negative outputs with no negative findings must not fabricate contrary_evidence entries.",
     "- Do not create substitute fields such as contrary_evidence_note or evidence_strings.",
     "",
     "Finding object required fields:",

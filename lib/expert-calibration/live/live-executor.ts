@@ -13,6 +13,7 @@ import type {
   LiveCalibrationCallPlan,
   LiveCalibrationCliArgs,
   LiveCalibrationProviderInvoker,
+  LiveCalibrationProviderMetadata,
   LiveCalibrationRunManifest,
 } from "./contracts.ts";
 import { appendAuditEvent, createAuditEvent } from "./audit-log.ts";
@@ -124,6 +125,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
   let ok = true;
   let modelCalls = 0;
   let providerCalls = 0;
+  let providerMetadata: LiveCalibrationProviderMetadata | null = null;
   const abortController = createAbortController(input.args.timeoutMs);
 
   for (const planned of input.callPlan.calls) {
@@ -271,6 +273,10 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
 
     providerCalls += 1;
 
+    if (invokeResult.providerMetadata) {
+      providerMetadata = invokeResult.providerMetadata;
+    }
+
     if (!invokeResult.ok || !invokeResult.rawResponse) {
       if (callReservation) {
         markSessionReservationFailed({
@@ -313,7 +319,11 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
           session_id: sessionId,
           run_id: input.runId,
           event_type: "provider_call_completed",
-          detail: { case_id: planned.caseId, ok: false },
+          detail: {
+            case_id: planned.caseId,
+            ok: false,
+            api_version: invokeResult.providerMetadata?.api_version ?? null,
+          },
         }),
         cwd,
       );
@@ -392,6 +402,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
           case_id: planned.caseId,
           ok: contractResult.ok,
           cost_usd: actualCost,
+          api_version: invokeResult.providerMetadata?.api_version ?? null,
         },
       }),
       cwd,
@@ -467,7 +478,7 @@ export async function executeLive(input: LiveExecutorInput): Promise<LiveExecuto
     },
   );
 
-  const manifest = buildManifest(input, now, true);
+  const manifest = buildManifest(input, now, true, providerMetadata);
   let filesWritten = calibrationResult.filesWritten;
 
   if (input.writeArtifacts !== false) {
@@ -529,6 +540,7 @@ function buildManifest(
   input: LiveExecutorInput,
   now: () => number,
   flagsAcknowledged: boolean,
+  providerMetadata: LiveCalibrationProviderMetadata | null = null,
 ): LiveCalibrationRunManifest {
   return Object.freeze({
     schema_version: LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION,
@@ -549,5 +561,6 @@ function buildManifest(
     completed_at: new Date(now()).toISOString(),
     synthetic_scenario: null,
     flags_acknowledged: flagsAcknowledged,
+    ...(providerMetadata ? { provider_metadata: providerMetadata } : {}),
   });
 }

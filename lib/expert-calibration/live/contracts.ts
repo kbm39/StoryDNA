@@ -127,6 +127,14 @@ export interface LiveCalibrationBudgetSnapshot {
   readonly budgetExhausted: boolean;
 }
 
+export interface LiveCalibrationProviderMetadata {
+  readonly provider: LiveCalibrationProvider;
+  readonly model_id: string;
+  readonly sdk_version: string;
+  readonly api_version: string;
+  readonly response_schema_version: string;
+}
+
 export interface LiveCalibrationRunManifest {
   readonly schema_version: typeof LIVE_CALIBRATION_MANIFEST_SCHEMA_VERSION;
   readonly run_id: string;
@@ -146,6 +154,7 @@ export interface LiveCalibrationRunManifest {
   readonly completed_at: string | null;
   readonly synthetic_scenario: SyntheticScenarioId | null;
   readonly flags_acknowledged: boolean;
+  readonly provider_metadata?: LiveCalibrationProviderMetadata;
 }
 
 export interface LiveCalibrationSideEffectGuards {
@@ -261,6 +270,7 @@ export interface LiveCalibrationProviderInvokeResult {
   readonly ok: boolean;
   readonly rawResponse?: import("@/experts/military-expert/generation-types.ts").MilitaryExpertRawGenerationResponse;
   readonly providerError?: { readonly code: string; readonly message: string };
+  readonly providerMetadata?: LiveCalibrationProviderMetadata;
   readonly durationMs: number;
 }
 

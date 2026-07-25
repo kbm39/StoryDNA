@@ -7,6 +7,9 @@
 
 /** Approved module namespace importers keyed by exact runtime moduleId. */
 export const EXPERT_MODULE_IMPORTERS = {
+  "@/experts/military-expert/definition": () => import("@/experts/military-expert/definition.ts"),
+  "@/experts/military-expert/normalization": () => import("@/experts/military-expert/normalization.ts"),
+  "@/experts/military-expert/validation": () => import("@/experts/military-expert/validation.ts"),
   "@/lib/ai/anthropic": () => import("@/lib/ai/anthropic.ts"),
   "@/lib/ai/review-engine": () => import("@/lib/ai/review-engine.ts"),
   "@/lib/canonical-review-input": () => import("@/lib/canonical-review-input.ts"),

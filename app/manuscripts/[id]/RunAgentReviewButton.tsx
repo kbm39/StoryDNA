@@ -21,6 +21,7 @@ export default function RunAgentReviewButton({
   generationStatus: initialStatus,
   workflowEnabled,
   hasActiveWorkflow,
+  literaryAgentSelected = true,
   onWorkflowStarted,
 }: {
   manuscriptId: string;
@@ -28,6 +29,7 @@ export default function RunAgentReviewButton({
   generationStatus: RevisionGenerationStatus;
   workflowEnabled: boolean;
   hasActiveWorkflow: boolean;
+  literaryAgentSelected?: boolean;
   onWorkflowStarted?: (workflowId: string) => void;
 }) {
   const [pending, start] = useTransition();
@@ -40,7 +42,9 @@ export default function RunAgentReviewButton({
     (hasReview || status.existingIssueCount > 0 || status.existingCandidateCount > 0);
 
   function run() {
-    if (blockedByAuthorResponses || !workflowEnabled || hasActiveWorkflow) return;
+    if (blockedByAuthorResponses || !workflowEnabled || hasActiveWorkflow || !literaryAgentSelected) {
+      return;
+    }
 
     setErrors([]);
     start(async () => {
@@ -80,22 +84,26 @@ export default function RunAgentReviewButton({
       <button
         type="button"
         onClick={run}
-        disabled={pending || blockedByAuthorResponses || hasActiveWorkflow}
+        disabled={pending || blockedByAuthorResponses || hasActiveWorkflow || !literaryAgentSelected}
         className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending
           ? "Starting…"
           : hasActiveWorkflow
             ? "Publishing Workflow in progress"
-            : hasReview
-              ? "Re-run Literary Agent Review"
-              : "Run Literary Agent Review"}
+            : !literaryAgentSelected
+              ? "Select an available expert"
+              : hasReview
+                ? "Re-run Selected Expert"
+                : "Run Selected Expert"}
       </button>
       <span className="text-xs text-black/55 dark:text-white/55">
         {blockedByAuthorResponses
           ? `Regeneration blocked — ${status.authorResponseCount} author response${
               status.authorResponseCount === 1 ? " has" : "s have"
             } been recorded in Suggested Edits.`
+          : !literaryAgentSelected
+            ? "Select at least one available expert to start a review."
           : hasActiveWorkflow
             ? "A Publishing Workflow is already running for this manuscript version."
             : willReplacePrior

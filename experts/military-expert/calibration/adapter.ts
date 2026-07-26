@@ -25,6 +25,15 @@ function hasContraryEvidenceHandling(finding: MilitaryExpertFinding): boolean {
 
 function projectFinding(finding: MilitaryExpertFinding): CalibrationProjectedFinding {
   const negative = MILITARY_EXPERT_NEGATIVE_REALISM_STATUSES.includes(finding.realism_status);
+  const semanticSearchText = [
+    finding.title,
+    finding.observation,
+    finding.recommendation,
+    finding.operational_impact,
+    finding.story_impact,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const text = [
     finding.observation,
     finding.recommendation,
@@ -36,7 +45,11 @@ function projectFinding(finding: MilitaryExpertFinding): CalibrationProjectedFin
     category: finding.category,
     title: finding.title,
     observation: finding.observation,
+    recommendation: finding.recommendation,
+    operational_impact: finding.operational_impact,
+    story_impact: finding.story_impact,
     combined_text: text,
+    semantic_search_text: semanticSearchText,
     realism_status: finding.realism_status,
     severity: finding.severity,
     confidence: finding.confidence,
@@ -72,6 +85,9 @@ export const militaryExpertCalibrationAdapter: ExpertCalibrationAdapter<Military
         summary: review.summary,
         conclusion: review.overall_realism_assessment.conclusion,
         next_step: review.next_step,
+        primary_concerns: review.overall_realism_assessment.primary_concerns,
+        priority_actions: review.priority_actions,
+        verification_requests: review.verification_requests,
         category_assessments: review.category_assessments.map((assessment) => ({
           category: assessment.category,
           status: assessment.status,

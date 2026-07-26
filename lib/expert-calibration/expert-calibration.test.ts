@@ -45,6 +45,14 @@ function projected(overrides: Partial<CalibrationProjectedFinding> = {}): Calibr
     finding_key: "rank-authority-error",
     category: "command_and_organization",
     title: "Corporal directs operation",
+    observation: "A corporal tasking platoons without officer oversight exceeds rank authority.",
+    recommendation: "Route platoon tasking through an appropriate officer.",
+    operational_impact: "Chain-of-command credibility weakens.",
+    story_impact: "Authority relationships become harder to trust.",
+    combined_text:
+      "A corporal tasking platoons without officer oversight exceeds rank authority. Route platoon tasking through an appropriate officer.",
+    semantic_search_text:
+      "Corporal directs operation A corporal tasking platoons without officer oversight exceeds rank authority. Route platoon tasking through an appropriate officer. Chain-of-command credibility weakens. Authority relationships become harder to trust.",
     realism_status: "confirmed_error",
     severity: "major",
     confidence: "high",

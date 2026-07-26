@@ -56,7 +56,7 @@ function expected(overrides: Partial<ExpectedFinding> = {}): ExpectedFinding {
   };
 }
 
-describe("calibration expectation matching v1", () => {
+describe("calibration expectation matching v1 legacy coverage", () => {
   it("does not require hidden corpus IDs in model output", () => {
     const calibrationCase = MILITARY_EXPERT_CALIBRATION_SUITE.cases.find(
       (entry) => entry.case_id === "me-coc-001",

@@ -181,7 +181,10 @@ export function validateMilitaryExpertReview(
   if (!review.summary?.trim()) {
     errors.push("summary is required");
   } else {
-    validateMilitaryExpertSummaryBalance(review.summary, review.findings ?? [], errors);
+    validateMilitaryExpertSummaryBalance(review.summary, review.findings ?? [], errors, {
+      strengths: review.strengths,
+      conclusion: review.overall_realism_assessment.conclusion,
+    });
   }
 
   if (!Array.isArray(review.strengths) || review.strengths.length === 0) {

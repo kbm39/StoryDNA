@@ -106,39 +106,116 @@ function isNegativeRealismStatus(status: string): boolean {
 }
 
 /** Deterministic summary balance check — applied after findings are parsed. */
+export const MILITARY_EXPERT_SUMMARY_BALANCE_VERSION = "military_expert_summary_balance@v2" as const;
+
+export interface SummaryBalanceAudit {
+  readonly version: typeof MILITARY_EXPERT_SUMMARY_BALANCE_VERSION;
+  readonly strengths_field_satisfied: boolean;
+  readonly summary_strength_signal: boolean;
+  readonly conclusion_strength_signal: boolean;
+  readonly cross_field_balanced: boolean;
+  readonly concern_acknowledged: boolean;
+  readonly satisfied_fields: readonly string[];
+}
+
+function hasMeaningfulStrengthContent(texts: readonly string[]): boolean {
+  const joined = texts.join(" ").toLowerCase().trim();
+  if (joined.length < 8) return false;
+  if (/^(good|nice|well written|great|fine)\.?$/i.test(joined)) return false;
+  return (
+    /\b(command|chain|coordination|credible|plausible|intent|structure|interaction|realism|depiction|tension|pacing|dialogue|officer|rank|organization|operational|effective|accurate|clear|works)\b/.test(
+      joined,
+    ) || joined.split(/\s+/).filter(Boolean).length >= 4
+  );
+}
+
+function summaryStrengthSignal(summaryLower: string): boolean {
+  return (
+    /\bstrength|\bworks\b|\bcredible\b|\beffective\b|\bplausible\b|no material inaccuracies|no negative findings|no material concerns in scope/.test(
+      summaryLower,
+    ) ||
+    (/\baccurate\b/.test(summaryLower) && !/\binaccurate\b/.test(summaryLower)) ||
+    /\bclear\b|\bintent\b/.test(summaryLower)
+  );
+}
+
+function conclusionStrengthSignal(conclusionLower: string): boolean {
+  if (/\b(no strengths|entirely wrong|completely inaccurate|nothing works|nothing in this scene)\b/.test(conclusionLower)) {
+    return false;
+  }
+  return (
+    /\bcredible\b|\bplausible\b|\b(strength|strengths)\b|\baccurate\b|\bclear intent\b|\bno material inaccuracies\b|\bcoordination\b/.test(
+      conclusionLower,
+    ) ||
+    (/\bworks\b/.test(conclusionLower) &&
+      !/\b(nothing|doesn't|does not|not work|won't work)\b/.test(conclusionLower))
+  );
+}
+
+export function auditMilitaryExpertSummaryBalance(
+  summary: string,
+  findings: readonly { realism_status: string }[],
+  options: {
+    strengths?: readonly string[];
+    conclusion?: string;
+  } = {},
+): SummaryBalanceAudit {
+  const summaryLower = summary.toLowerCase();
+  const strengths = options.strengths ?? [];
+  const conclusion = (options.conclusion ?? "").toLowerCase();
+  const strengthsFieldSatisfied = strengths.length > 0 && hasMeaningfulStrengthContent(strengths);
+  const summarySignal = summaryStrengthSignal(summaryLower);
+  const conclusionSignal = conclusion.length > 0 && conclusionStrengthSignal(conclusion);
+  const crossFieldBalanced = strengthsFieldSatisfied || summarySignal || conclusionSignal;
+  const hasNegativeFinding = findings.some((finding) =>
+    isNegativeRealismStatus(finding.realism_status),
+  );
+  const concernAcknowledged =
+    !hasNegativeFinding ||
+    /\bconcern|\bconcerns|\binaccurate\b|\bissue|\buncertain\b|\bweak\b|\bproblem|\binaccuracy|\braises\b|\brequires\b|\berror\b|\bviolation\b|\bcorrection\b|\bconfirmed\b/.test(
+      summaryLower,
+    );
+  const satisfiedFields: string[] = [];
+  if (strengthsFieldSatisfied) satisfiedFields.push("strengths");
+  if (summarySignal) satisfiedFields.push("summary");
+  if (conclusionSignal) satisfiedFields.push("conclusion");
+
+  return {
+    version: MILITARY_EXPERT_SUMMARY_BALANCE_VERSION,
+    strengths_field_satisfied: strengthsFieldSatisfied,
+    summary_strength_signal: summarySignal,
+    conclusion_strength_signal: conclusionSignal,
+    cross_field_balanced: crossFieldBalanced,
+    concern_acknowledged: concernAcknowledged,
+    satisfied_fields: satisfiedFields,
+  };
+}
+
 export function validateMilitaryExpertSummaryBalance(
   summary: string,
   findings: readonly { realism_status: string }[],
   errors: string[],
-): void {
+  options: {
+    strengths?: readonly string[];
+    conclusion?: string;
+  } = {},
+): SummaryBalanceAudit | null {
   if (!summary.trim()) {
     errors.push("summary is required");
-    return;
+    return null;
   }
 
-  const summaryLower = summary.toLowerCase();
-  const mentionsStrength =
-    /\bstrength|\bworks\b|\bcredible\b|\beffective\b|\bplausible\b|no material inaccuracies|no negative findings|no material concerns in scope/.test(
-      summaryLower,
-    ) ||
-    (/\baccurate\b/.test(summaryLower) && !/\binaccurate\b/.test(summaryLower));
-  const hasNegativeFinding = findings.some((finding) =>
-    isNegativeRealismStatus(finding.realism_status),
-  );
+  const audit = auditMilitaryExpertSummaryBalance(summary, findings, options);
 
-  if (!mentionsStrength) {
+  if (!audit.cross_field_balanced) {
     errors.push("summary must acknowledge material strengths");
   }
 
-  if (hasNegativeFinding) {
-    const mentionsConcern =
-      /\bconcern|\binaccurate\b|\bissue|\buncertain\b|\bweak\b|\bproblem|\binaccuracy|\braises\b|\brequires\b/.test(
-        summaryLower,
-      );
-    if (!mentionsConcern) {
-      errors.push("summary must acknowledge material concerns when negative findings exist");
-    }
+  if (!audit.concern_acknowledged) {
+    errors.push("summary must acknowledge material concerns when negative findings exist");
   }
+
+  return audit;
 }
 
 function pushEnumError(
@@ -491,7 +568,16 @@ export function validateMilitaryExpertGenerationPayload(
     errors.push("findings must be an array");
   }
 
-  validateMilitaryExpertSummaryBalance(summary, findings, errors);
+  const overallForBalance =
+    root.overall_realism_assessment && typeof root.overall_realism_assessment === "object"
+      ? (root.overall_realism_assessment as Record<string, unknown>)
+      : null;
+  const conclusionForBalance = overallForBalance ? str(overallForBalance.conclusion) : "";
+
+  validateMilitaryExpertSummaryBalance(summary, findings, errors, {
+    strengths,
+    conclusion: conclusionForBalance,
+  });
 
   const categoryAssessments = Array.isArray(root.category_assessments)
     ? root.category_assessments

@@ -213,8 +213,10 @@ export async function runExpertCalibration(
         calibrationCase.case_id,
         dependencies.humanAdjudications,
       );
+      const scoringContext = dependencies.adapter.projectScoringContext?.(replay.review);
       const scoring = scoreCalibrationCase(calibrationCase, projected, {
         humanAdjudicated: humanDone,
+        context: scoringContext,
       });
 
       const safety_failure =

@@ -1,5 +1,6 @@
 import type {
   CalibrationProjectedFinding,
+  CalibrationScoringContext,
   ExpertCalibrationAdapter,
 } from "@/lib/expert-calibration/contracts.ts";
 import type { MilitaryExpertFinding, MilitaryExpertReview } from "../contracts.ts";
@@ -34,6 +35,8 @@ function projectFinding(finding: MilitaryExpertFinding): CalibrationProjectedFin
     finding_key: finding.finding_id,
     category: finding.category,
     title: finding.title,
+    observation: finding.observation,
+    combined_text: text,
     realism_status: finding.realism_status,
     severity: finding.severity,
     confidence: finding.confidence,
@@ -62,6 +65,20 @@ export const militaryExpertCalibrationAdapter: ExpertCalibrationAdapter<Military
     definitionHash: MILITARY_EXPERT_RUNTIME_DEFINITION_HASH,
     projectFindings(review: MilitaryExpertReview): readonly CalibrationProjectedFinding[] {
       return review.findings.map(projectFinding);
+    },
+    projectScoringContext(review: MilitaryExpertReview): CalibrationScoringContext {
+      return {
+        strengths: review.strengths,
+        summary: review.summary,
+        conclusion: review.overall_realism_assessment.conclusion,
+        next_step: review.next_step,
+        category_assessments: review.category_assessments.map((assessment) => ({
+          category: assessment.category,
+          status: assessment.status,
+          strength_summary: assessment.strength_summary,
+          concern_summary: assessment.concern_summary,
+        })),
+      };
     },
     validateOutput(review: unknown): { ok: boolean; errors: readonly string[] } {
       const result = validateMilitaryExpertReview(review as MilitaryExpertReview, {

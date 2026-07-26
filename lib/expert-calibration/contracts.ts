@@ -36,7 +36,13 @@ export type CalibrationSafetyClassification =
 export type CalibrationApprovalStatus = "approved" | "pending" | "rejected";
 export type CalibrationProvenanceSource = "synthetic" | "approved_excerpt" | "regression";
 export type CalibrationAdjudicationMode = "automatic" | "human_required" | "hybrid";
-export type CalibrationMatchMode = "exact" | "identifier" | "controlled_text" | "human_required";
+export type CalibrationMatchMode =
+  | "exact"
+  | "identifier"
+  | "controlled_text"
+  | "semantic"
+  | "human_required";
+export type CalibrationScoringProfile = "standard" | "true_negative" | "safety_editorial";
 export type CalibrationRunMode = "test" | "replay";
 export type CalibrationReadinessStatus = "ready" | "not_ready" | "insufficient_evidence";
 export type CalibrationParseStatus =
@@ -67,6 +73,7 @@ export interface ExpectedFinding {
   readonly recommendation_type?: string;
   readonly escalation_expert?: string | null;
   readonly match_mode: CalibrationMatchMode;
+  readonly match_concepts?: readonly string[];
   readonly weight: number;
 }
 
@@ -139,6 +146,7 @@ export interface ExpertCalibrationCase {
     readonly rationale: string;
   };
   readonly safety_classification: CalibrationSafetyClassification;
+  readonly scoring_profile?: CalibrationScoringProfile;
   readonly provenance: {
     readonly author: string;
     readonly created_at: string;
@@ -423,6 +431,38 @@ export interface CalibrationProjectedFinding {
   readonly story_impact_present: boolean;
   readonly uncertainty_note_present: boolean;
   readonly safety_violation: boolean;
+  readonly observation?: string;
+  readonly combined_text?: string;
+}
+
+export interface CalibrationCategoryAssessmentContext {
+  readonly category: string;
+  readonly status: string;
+  readonly strength_summary?: string;
+  readonly concern_summary?: string;
+}
+
+export interface CalibrationScoringContext {
+  readonly strengths?: readonly string[];
+  readonly summary?: string;
+  readonly conclusion?: string;
+  readonly next_step?: string;
+  readonly category_assessments?: readonly CalibrationCategoryAssessmentContext[];
+}
+
+export interface ExpectationMatchRecord {
+  readonly expectation_id: string;
+  readonly matched_finding_index: number | null;
+  readonly matched_fields: readonly string[];
+  readonly matched_concepts: readonly string[];
+  readonly rejection_reasons: readonly string[];
+  readonly match_confidence: number;
+  readonly match_source:
+    | "semantic_finding"
+    | "identifier"
+    | "true_negative_context"
+    | "safety_editorial_context"
+    | "unmatched";
 }
 
 export interface CalibrationReplayOutput {
@@ -446,6 +486,7 @@ export interface ExpertCalibrationAdapter<TReview = unknown> {
   readonly expertVersion: string;
   readonly definitionHash: string;
   projectFindings(review: TReview): readonly CalibrationProjectedFinding[];
+  projectScoringContext?(review: TReview): CalibrationScoringContext | undefined;
   validateOutput(review: unknown): { ok: boolean; errors: readonly string[] };
   isSafetyFailure(review: unknown): boolean;
 }

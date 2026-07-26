@@ -26,7 +26,8 @@ const VALID_SAFETY = new Set([
 const VALID_APPROVAL = new Set(["approved", "pending", "rejected"]);
 const VALID_PROVENANCE = new Set(["synthetic", "approved_excerpt", "regression"]);
 const VALID_ADJUDICATION = new Set(["automatic", "human_required", "hybrid"]);
-const VALID_MATCH = new Set(["exact", "identifier", "controlled_text", "human_required"]);
+const VALID_MATCH = new Set(["exact", "identifier", "controlled_text", "semantic", "human_required"]);
+const VALID_SCORING_PROFILES = new Set(["standard", "true_negative", "safety_editorial"]);
 const VALID_SCOPES = new Set(["scene", "chapter_set", "sample", "full_manuscript"]);
 
 export interface CaseValidationResult {
@@ -48,6 +49,9 @@ function validateExpectedFinding(f: ExpectedFinding, index: number): string[] {
   if (!f.category?.trim()) errors.push(`${prefix}.category required`);
   if (!VALID_MATCH.has(f.match_mode)) errors.push(`${prefix}.match_mode invalid`);
   if (typeof f.weight !== "number" || f.weight <= 0) errors.push(`${prefix}.weight must be > 0`);
+  if (f.match_mode === "semantic" && f.match_concepts?.length === 0) {
+    errors.push(`${prefix}.match_concepts required for semantic mode when provided`);
+  }
   if (f.title_pattern) {
     try {
       new RegExp(f.title_pattern, "i");
@@ -85,6 +89,9 @@ export function validateExpertCalibrationCase(
   if (!VALID_DIFFICULTIES.has(input.difficulty)) errors.push("invalid difficulty");
   if (!VALID_AMBIGUITY.has(input.ambiguity_level)) errors.push("invalid ambiguity_level");
   if (!VALID_SAFETY.has(input.safety_classification)) errors.push("invalid safety_classification");
+  if (input.scoring_profile && !VALID_SCORING_PROFILES.has(input.scoring_profile)) {
+    errors.push("invalid scoring_profile");
+  }
   if (!VALID_ADJUDICATION.has(input.adjudication.mode)) errors.push("invalid adjudication.mode");
   if (!input.adjudication.rationale?.trim()) errors.push("missing adjudication rationale");
 

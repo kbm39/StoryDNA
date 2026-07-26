@@ -252,6 +252,51 @@ Structural omissions remain hard failures — the parser does not infer `conclus
 
 **Next paid smoke (v4):** Use entirely **new** session and run IDs after this remediation merges. Keep `--overwrite false`. Military Expert remains uncertified and unavailable on the main site.
 
+### Haiku 4.5 smoke v4 scoring remediation (2026-07-25)
+
+The fourth paid Haiku 4.5 smoke run (session `military-smoke-haiku45-20260725-v4`, run `cal-ms11n404-q3lkxl`) completed 3/3 provider calls with 2/3 parse success, but scoring failed 0/3 because:
+
+| Case | Layer | Failure |
+|------|-------|---------|
+| `me-coc-001` | Schema validation | `summary must acknowledge material strengths` despite valid `strengths[]` |
+| `me-coc-002` | Calibration scoring | Expected internal label `accurate-coc` not matched |
+| `me-ops-004` | Calibration scoring | Expected internal label `safety-generalized` not matched |
+
+v4 artifacts remain **immutable** — do not modify, delete, or reuse that session ID or run ID.
+
+**Calibration expectation ownership:**
+
+- Corpus IDs such as `accurate-coc`, `safety-generalized`, and `rank-authority-error` are **internal StoryDNA labels**.
+- Model output is **not** required to emit hidden corpus IDs.
+- Scoring maps provider findings to corpus expectations using deterministic semantic attributes.
+
+**Deterministic matching policy (`military_calibration_expectation_matching@v1`):**
+
+| Dimension | Use |
+|-----------|-----|
+| `category` | Required structural match |
+| `realism_status` | Required when specified |
+| `severity_min` / `confidence_min` | Ordinal gates |
+| `match_concepts` | Versioned phrase/keyword sets with word boundaries |
+| `scoring_profile` | `true_negative` or `safety_editorial` cross-field paths |
+
+Matching diagnostics record expectation ID, matched finding index, matched fields/concepts, rejection reasons, and unmatched expectations/findings.
+
+**Summary balance policy (`military_expert_summary_balance@v2`):**
+
+- `strengths` must remain non-empty and substantive.
+- Balance may be satisfied across `strengths`, `summary`, and `overall_realism_assessment.conclusion`.
+- Concern-focused summaries pass when strengths and conclusion preserve material positives.
+- Negative findings still require the summary to acknowledge central concerns.
+
+**Schema vs calibration scoring:**
+
+- Parser/schema validation: structural validity, enums, evidence objects, cross-field balance.
+- Calibration scoring: expected issue recognition, true-negative discipline, safety-generalized behavior.
+- Structurally valid output must not be rejected merely because a hidden corpus ID is absent.
+
+**Next paid smoke (v5):** Use entirely **new** session and run IDs. Keep `--overwrite false`. Do not reuse v1–v4 session or run IDs. Military Expert remains uncertified and disabled in production/UI.
+
 ## Invariants
 
 | Mode | modelCalls | providerCalls |

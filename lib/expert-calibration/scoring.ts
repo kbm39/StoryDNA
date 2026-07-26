@@ -1,16 +1,24 @@
 import { CALIBRATION_RATE_PRECISION } from "./constants.ts";
 import type {
   CalibrationProjectedFinding,
+  CalibrationScoringContext,
   ExpectedContraryEvidence,
   ExpectedEscalation,
   ExpectedFinding,
   ExpectedNonFinding,
   ExpectedUncertainty,
+  ExpectationMatchRecord,
   ExpertCalibrationCase,
   ProhibitedFinding,
   ScoredMatch,
   UncertaintyResult,
 } from "./contracts.ts";
+import {
+  evaluateSafetyEditorial,
+  evaluateTrueNegativeCommand,
+  matchExpectedFindingsWithAudit,
+  scoreSemanticFindingMatch,
+} from "./expectation-matching.ts";
 
 const SEVERITY_ORDER = ["informational", "minor", "moderate", "major", "critical"] as const;
 const CONFIDENCE_ORDER = ["low", "medium", "high"] as const;
@@ -36,49 +44,7 @@ function scoreFindingMatch(
   expected: ExpectedFinding,
   projected: CalibrationProjectedFinding,
 ): number {
-  if (expected.category !== projected.category) return 0;
-  if (expected.realism_status && expected.realism_status !== projected.realism_status) return 0;
-  if (!ordinalAtLeast(projected.severity, expected.severity_min, SEVERITY_ORDER)) return 0;
-  if (!ordinalAtLeast(projected.confidence, expected.confidence_min, CONFIDENCE_ORDER)) return 0;
-  if (expected.recommendation_type && expected.recommendation_type !== projected.recommendation_type) {
-    return 0;
-  }
-  if (
-    expected.escalation_expert !== undefined &&
-    expected.escalation_expert !== projected.escalation_expert
-  ) {
-    return 0;
-  }
-
-  let score = 0.5;
-  if (expected.match_mode === "identifier" && expected.finding_key === projected.finding_key) {
-    score = 1;
-  } else if (expected.match_mode === "exact" && expected.finding_key === projected.finding_key) {
-    score = 1;
-  } else if (expected.title_pattern) {
-    try {
-      if (new RegExp(expected.title_pattern, "i").test(projected.title)) score = Math.max(score, 0.9);
-    } catch {
-      return 0;
-    }
-  } else if (expected.match_mode === "controlled_text") {
-    if (controlledTextMatch(projected.title, expected.finding_key.replace(/-/g, " "))) {
-      score = Math.max(score, 0.85);
-    }
-  }
-
-  if (expected.must_include_evidence && !projected.has_manuscript_evidence) return 0;
-
-  if (expected.evidence_excerpt_pattern) {
-    const joined = projected.evidence_excerpts.join(" ");
-    try {
-      if (!new RegExp(expected.evidence_excerpt_pattern, "i").test(joined)) return 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  return score;
+  return scoreSemanticFindingMatch(expected, projected).score;
 }
 
 export interface CaseScoringResult {
@@ -92,61 +58,74 @@ export interface CaseScoringResult {
   evidence_quality_score: number;
   editorial_quality_score: number | null;
   adjudication_required: boolean;
+  expectation_matches: readonly ExpectationMatchRecord[];
+  expectation_matching_policy_version: string;
+  true_negative_diagnostic?: ReturnType<
+    typeof import("./expectation-matching.ts").evaluateTrueNegativeCommand
+  >;
+  safety_editorial_diagnostic?: ReturnType<
+    typeof import("./expectation-matching.ts").evaluateSafetyEditorial
+  >;
 }
 
 function matchExpectedFindings(
-  expected: readonly ExpectedFinding[],
+  calibrationCase: ExpertCalibrationCase,
   projected: readonly CalibrationProjectedFinding[],
-): { tps: ScoredMatch[]; fps: ScoredMatch[]; fns: ScoredMatch[]; adjudication: boolean } {
+  context?: CalibrationScoringContext,
+): {
+  tps: ScoredMatch[];
+  fps: ScoredMatch[];
+  fns: ScoredMatch[];
+  adjudication: boolean;
+  expectation_matches: readonly ExpectationMatchRecord[];
+  expectation_matching_policy_version: string;
+} {
+  const audit = matchExpectedFindingsWithAudit(calibrationCase, projected, context);
   const tps: ScoredMatch[] = [];
   const fns: ScoredMatch[] = [];
-  const used = new Set<number>();
   let adjudication = false;
 
-  for (const exp of expected) {
-    if (exp.match_mode === "human_required") {
+  for (const expected of calibrationCase.expected_findings) {
+    if (expected.match_mode === "human_required") {
       adjudication = true;
       fns.push({
-        key: exp.finding_key,
+        key: expected.finding_key,
         kind: "false_negative",
-        category: exp.category,
+        category: expected.category,
         score: 0,
         message: "Human adjudication required",
       });
       continue;
     }
 
-    let bestIdx = -1;
-    let bestScore = 0;
-    projected.forEach((p, idx) => {
-      if (used.has(idx)) return;
-      const s = scoreFindingMatch(exp, p);
-      if (s > bestScore) {
-        bestScore = s;
-        bestIdx = idx;
-      }
-    });
-
-    if (bestIdx >= 0 && bestScore >= 0.5) {
-      used.add(bestIdx);
+    const match = audit.matches.find((entry) => entry.expectation_id === expected.finding_key);
+    if (match && match.match_source !== "unmatched") {
       tps.push({
-        key: exp.finding_key,
+        key: expected.finding_key,
         kind: "true_positive",
-        category: exp.category,
-        score: bestScore * exp.weight,
-        message: `Matched projected finding ${projected[bestIdx]!.finding_key}`,
+        category: expected.category,
+        score: match.match_confidence * expected.weight,
+        message:
+          match.matched_finding_index == null
+            ? `Matched via ${match.match_source}`
+            : `Matched projected finding index ${match.matched_finding_index}`,
       });
     } else {
       fns.push({
-        key: exp.finding_key,
+        key: expected.finding_key,
         kind: "false_negative",
-        category: exp.category,
+        category: expected.category,
         score: 0,
-        message: "Expected finding not matched",
+        message: match?.rejection_reasons.join("; ") || "Expected finding not matched",
       });
     }
   }
 
+  const used = new Set(
+    audit.matches
+      .map((entry) => entry.matched_finding_index)
+      .filter((index): index is number => index != null),
+  );
   const fps: ScoredMatch[] = [];
   projected.forEach((p, idx) => {
     if (used.has(idx)) return;
@@ -160,7 +139,14 @@ function matchExpectedFindings(
     });
   });
 
-  return { tps, fps, fns, adjudication };
+  return {
+    tps,
+    fps,
+    fns,
+    adjudication,
+    expectation_matches: audit.matches,
+    expectation_matching_policy_version: audit.policy_version,
+  };
 }
 
 function checkNonFindings(
@@ -331,12 +317,10 @@ export function roundRate(value: number): number {
 export function scoreCalibrationCase(
   calibrationCase: ExpertCalibrationCase,
   projected: readonly CalibrationProjectedFinding[],
-  options: { humanAdjudicated?: boolean } = {},
+  options: { humanAdjudicated?: boolean; context?: CalibrationScoringContext } = {},
 ): CaseScoringResult {
-  const { tps, fps, fns, adjudication } = matchExpectedFindings(
-    calibrationCase.expected_findings,
-    projected,
-  );
+  const { tps, fps, fns, adjudication, expectation_matches, expectation_matching_policy_version } =
+    matchExpectedFindings(calibrationCase, projected, options.context);
   const non_finding_violations = checkNonFindings(calibrationCase.expected_non_findings, projected);
   const prohibited_violations = checkProhibited(calibrationCase.prohibited_findings, projected);
   const uncertainty_results = checkUncertainties(calibrationCase.expected_uncertainties, projected);
@@ -387,6 +371,16 @@ export function scoreCalibrationCase(
     evidence_quality_score,
     editorial_quality_score,
     adjudication_required: needsHuman,
+    expectation_matches,
+    expectation_matching_policy_version,
+    true_negative_diagnostic:
+      calibrationCase.scoring_profile === "true_negative"
+        ? evaluateTrueNegativeCommand(options.context, projected)
+        : undefined,
+    safety_editorial_diagnostic:
+      calibrationCase.scoring_profile === "safety_editorial"
+        ? evaluateSafetyEditorial(options.context, projected)
+        : undefined,
   };
 }
 

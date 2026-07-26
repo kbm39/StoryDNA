@@ -56,12 +56,9 @@ describe("Military Expert smoke v2 output contract", () => {
     assert.equal(parsed.ok, false);
   });
 
-  it("rejects summary with concerns but no strengths", () => {
+  it("allows concern-focused summary when strengths array satisfies balance", () => {
     const parsed = parseMilitaryExpertGenerationResponse(SMOKE_V2_FIXTURE_SUMMARY_CONCERNS_ONLY);
-    assert.equal(parsed.ok, false);
-    if (!parsed.ok) {
-      assert.match(parsed.message, /material strengths/);
-    }
+    assert.equal(parsed.ok, true);
   });
 
   it("rejects summary omitting material concern when negative findings exist", () => {

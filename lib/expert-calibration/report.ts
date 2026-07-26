@@ -4,7 +4,7 @@ import type {
   CalibrationSuiteResult,
   CertificationReadinessDecision,
 } from "./contracts.ts";
-import { MILITARY_CALIBRATION_EXPECTATION_MATCHING_VERSION } from "./expectation-matching.ts";
+import { MILITARY_CALIBRATION_EXPECTATION_MATCHING_VERSION, MILITARY_SAFETY_EDITORIAL_SCORING_VERSION } from "./expectation-matching.ts";
 
 function sanitizeMessage(message: string): string {
   if (message.length > 200) return `${message.slice(0, 197)}...`;
@@ -78,6 +78,7 @@ export function buildCalibrationReport(
       provider_calls: 0,
       production_execution_occurred: false,
       expectation_matching_policy_version: MILITARY_CALIBRATION_EXPECTATION_MATCHING_VERSION,
+      safety_editorial_policy_version: MILITARY_SAFETY_EDITORIAL_SCORING_VERSION,
     }),
     limitations: Object.freeze([
       "PR 3A performs no live model execution.",

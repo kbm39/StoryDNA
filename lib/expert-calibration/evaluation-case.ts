@@ -49,8 +49,19 @@ function validateExpectedFinding(f: ExpectedFinding, index: number): string[] {
   if (!f.category?.trim()) errors.push(`${prefix}.category required`);
   if (!VALID_MATCH.has(f.match_mode)) errors.push(`${prefix}.match_mode invalid`);
   if (typeof f.weight !== "number" || f.weight <= 0) errors.push(`${prefix}.weight must be > 0`);
-  if (f.match_mode === "semantic" && f.match_concepts?.length === 0) {
-    errors.push(`${prefix}.match_concepts required for semantic mode when provided`);
+  if (
+    f.match_mode === "semantic" &&
+    !f.match_concepts?.length &&
+    !f.match_concept_groups?.length
+  ) {
+    errors.push(`${prefix}.match_concepts or match_concept_groups required for semantic mode`);
+  }
+  if (f.match_concept_groups?.length) {
+    for (const [groupIndex, group] of f.match_concept_groups.entries()) {
+      if (!group.length) {
+        errors.push(`${prefix}.match_concept_groups[${groupIndex}] must not be empty`);
+      }
+    }
   }
   if (f.title_pattern) {
     try {

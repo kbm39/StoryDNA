@@ -74,6 +74,8 @@ export interface ExpectedFinding {
   readonly escalation_expert?: string | null;
   readonly match_mode: CalibrationMatchMode;
   readonly match_concepts?: readonly string[];
+  /** Deterministic AND groups; any fully matched group satisfies concept requirement. */
+  readonly match_concept_groups?: readonly (readonly string[])[];
   readonly weight: number;
 }
 
@@ -432,7 +434,11 @@ export interface CalibrationProjectedFinding {
   readonly uncertainty_note_present: boolean;
   readonly safety_violation: boolean;
   readonly observation?: string;
+  readonly recommendation?: string;
+  readonly operational_impact?: string;
+  readonly story_impact?: string;
   readonly combined_text?: string;
+  readonly semantic_search_text?: string;
 }
 
 export interface CalibrationCategoryAssessmentContext {
@@ -447,6 +453,9 @@ export interface CalibrationScoringContext {
   readonly summary?: string;
   readonly conclusion?: string;
   readonly next_step?: string;
+  readonly primary_concerns?: readonly string[];
+  readonly priority_actions?: readonly string[];
+  readonly verification_requests?: readonly string[];
   readonly category_assessments?: readonly CalibrationCategoryAssessmentContext[];
 }
 
@@ -455,6 +464,11 @@ export interface ExpectationMatchRecord {
   readonly matched_finding_index: number | null;
   readonly matched_fields: readonly string[];
   readonly matched_concepts: readonly string[];
+  readonly matched_concept_group?: readonly string[] | null;
+  readonly searched_fields?: readonly string[];
+  readonly required_gates_passed?: readonly string[];
+  readonly required_gates_failed?: readonly string[];
+  readonly corroborating_matched?: readonly string[];
   readonly rejection_reasons: readonly string[];
   readonly match_confidence: number;
   readonly match_source:

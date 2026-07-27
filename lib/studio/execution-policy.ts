@@ -7,6 +7,7 @@
 
 import type { ExpertCatalogEntry } from "@/lib/expert-catalog.ts";
 import { classifyExpertExecution } from "./expert-classification.ts";
+import { isStudioMilitaryExpertLocalOverrideEnabled } from "./military-expert-local-policy.ts";
 import type { StudioExpertTier } from "./types.ts";
 
 export interface StudioExecutionContext {
@@ -67,11 +68,14 @@ export function buildStudioExecutionPolicy(input: {
   readonly privateUseAcknowledged: boolean;
 }): StudioExecutionPolicy {
   const tier = classifyStudioExpertTier(input.entry);
-  const launchable = studioExecutionAllowed({
-    entry: input.entry,
-    tier,
-    context: { routeNamespace: "/studio", privateUseAcknowledged: input.privateUseAcknowledged },
-  }) && classifyExpertExecution(input.expertKey) === "READY";
+  const launchable =
+    input.expertKey === "military_expert"
+      ? isStudioMilitaryExpertLocalOverrideEnabled() && input.privateUseAcknowledged
+      : studioExecutionAllowed({
+          entry: input.entry,
+          tier,
+          context: { routeNamespace: "/studio", privateUseAcknowledged: input.privateUseAcknowledged },
+        }) && classifyExpertExecution(input.expertKey) === "READY";
 
   return Object.freeze({
     expertKey: input.expertKey,

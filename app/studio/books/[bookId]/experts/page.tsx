@@ -35,7 +35,7 @@ function buildRecruitCandidate(key: string, manuscriptId: string): StudioEditori
     executionClass: classifyExpertExecution(key),
     policy: buildStudioExecutionPolicy({
       expertKey: key,
-      entry: catalog,
+      entry: catalog ?? null,
       privateUseAcknowledged: true,
     }),
     tier: desk.tier,

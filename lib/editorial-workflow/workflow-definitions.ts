@@ -22,6 +22,16 @@ export function workflowMetadataForType(workflowType: WorkflowType): WorkflowRow
         participating_experts: ["Literary Agent"],
         next_best_action: null,
       };
+    case "military_expert_review":
+      return {
+        department: "Research",
+        owner_type: "studio_owner",
+        owner_label: "Kevin Studio",
+        purpose:
+          "Run an uncertified Military Expert local test review for private Studio validation only.",
+        participating_experts: ["Military Expert"],
+        next_best_action: null,
+      };
     default:
       return {
         department: null,
@@ -38,6 +48,8 @@ export function nextBestActionForCompletedWorkflow(workflowType: WorkflowType): 
   switch (workflowType) {
     case "literary_agent_review":
       return "View your Literary Agent review in the Reviews section below.";
+    case "military_expert_review":
+      return "View your Military Expert local test summary in Studio.";
     default:
       return "Review your Publishing Workflow results.";
   }

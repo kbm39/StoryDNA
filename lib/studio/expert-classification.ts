@@ -4,6 +4,7 @@
 
 import { getExpertCatalogEntry, type ExpertCatalogKey } from "@/lib/expert-catalog.ts";
 import { classifyStudioExpertTier, studioExecutionAllowed } from "./execution-policy.ts";
+import { isStudioMilitaryExpertLocalOverrideEnabled } from "./military-expert-local-policy.ts";
 
 export type ExpertExecutionClass = "READY" | "EXPERIMENTAL" | "PLACEHOLDER" | "BLOCKED";
 
@@ -55,6 +56,9 @@ export function isExpertLaunchableInStudio(input: {
   readonly expertKey: string;
   readonly privateUseAcknowledged: boolean;
 }): boolean {
+  if (input.expertKey === "military_expert") {
+    return false;
+  }
   if (classifyExpertExecution(input.expertKey) !== "READY") return false;
   const entry = getExpertCatalogEntry(input.expertKey as ExpertCatalogKey);
   if (!entry) return false;
@@ -66,12 +70,32 @@ export function isExpertLaunchableInStudio(input: {
   });
 }
 
-/** Military Expert studio boundary — advisory harness only; no production launch path. */
+export function isMilitaryExpertLaunchableInStudio(input: {
+  readonly privateUseAcknowledged: boolean;
+  readonly launchAcknowledged: boolean;
+}): boolean {
+  if (!isStudioMilitaryExpertLocalOverrideEnabled()) return false;
+  if (!input.privateUseAcknowledged || !input.launchAcknowledged) return false;
+  return classifyExpertExecution("military_expert") === "EXPERIMENTAL";
+}
+
+/** Military Expert studio boundary — local Kevin Studio testing only when override enabled. */
 export function militaryExpertStudioVerdict(): MilitaryStudioVerdict {
+  if (isStudioMilitaryExpertLocalOverrideEnabled()) {
+    return "MILITARY_STUDIO_EXECUTABLE";
+  }
   return "MILITARY_STUDIO_BLOCKED";
 }
 
 export function militaryExpertBlockReasons(): readonly string[] {
+  if (isStudioMilitaryExpertLocalOverrideEnabled()) {
+    return Object.freeze([
+      "Uncertified draft runtime — local Kevin Studio testing only",
+      "Global executionAllowed remains false on Expert Review Engine",
+      "Commercial selectionEnabled remains false",
+      "Not available to commercial users or production deployments",
+    ]);
+  }
   return Object.freeze([
     "Draft runtime definition only — not registered in production bootstrap",
     "No canonical editorial workflow type for military_expert_review",

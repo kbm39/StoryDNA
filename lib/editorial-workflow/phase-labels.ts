@@ -21,5 +21,6 @@ export function authorPhaseLabel(phase: InternalPhase | null | undefined): strin
 
 export function workflowDisplayName(workflowType: string): string {
   if (workflowType === "literary_agent_review") return "Literary Agent Review";
+  if (workflowType === "military_expert_review") return "Military Expert Local Test";
   return "Publishing Workflow";
 }

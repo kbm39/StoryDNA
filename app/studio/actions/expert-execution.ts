@@ -14,7 +14,14 @@ import {
   removeEditorialTeamMember,
   updateEditorialTeamMemberNotes,
 } from "@/lib/studio/editorial-team.ts";
-import { isExpertLaunchableInStudio } from "@/lib/studio/expert-classification.ts";
+import { isEditorialWorkflowEnabled } from "@/lib/editorial-workflow/feature-flag.ts";
+import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/military-expert-local-policy.ts";
+import {
+  isExpertLaunchableInStudio,
+  isMilitaryExpertLaunchableInStudio,
+} from "@/lib/studio/expert-classification.ts";
+import { validateMilitaryExpertLaunchAckToken } from "@/lib/studio/military-expert-local-policy.ts";
+import { startMilitaryExpertStudioWorkflow } from "@/lib/editorial-workflow/start-military-expert-studio-workflow.ts";
 import type { StudioLaunchScope } from "@/lib/studio/types.ts";
 
 function revalidateStudioExpertRoutes(manuscriptId: string) {
@@ -72,8 +79,40 @@ export async function launchStudioExpertReview(input: {
   expertKey: string;
   scope: StudioLaunchScope;
   privateUseAcknowledged: boolean;
+  militaryLaunchAckToken?: string;
 }): Promise<{ ok: boolean; workflowId?: string; existing?: boolean; error?: string }> {
   return guarded(input.manuscriptId, async () => {
+    if (input.expertKey === "military_expert") {
+      if (
+        !isMilitaryExpertLaunchableInStudio({
+          privateUseAcknowledged: input.privateUseAcknowledged,
+          launchAcknowledged: validateMilitaryExpertLaunchAckToken(input.militaryLaunchAckToken),
+        })
+      ) {
+        return { ok: false, error: "Military Expert local testing requires explicit confirmation." };
+      }
+
+      if (!isStudioMilitaryExpertLocalOverrideEnabled()) {
+        return { ok: false, error: "Military Expert is blocked in this environment." };
+      }
+
+      if (input.scope !== "full_book") {
+        return {
+          ok: false,
+          error: "Military Expert local testing supports Full Book scope only.",
+        };
+      }
+
+      const ctx = await getManuscriptReviewContext(input.manuscriptId);
+      if (!ctx?.extractedText.trim()) {
+        return { ok: false, error: "This manuscript has no extracted text." };
+      }
+
+      const result = await startMilitaryExpertStudioWorkflow(input.manuscriptId);
+      if (result.ok) revalidateStudioExpertRoutes(input.manuscriptId);
+      return result;
+    }
+
     if (!isExpertLaunchableInStudio(input)) {
       return { ok: false, error: "This expert cannot be launched from Studio yet." };
     }

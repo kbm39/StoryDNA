@@ -17,6 +17,31 @@ import {
   removeStudioExpert,
   saveStudioExpertNotes,
 } from "@/app/studio/actions/expert-execution.ts";
+import { STUDIO_MILITARY_EXPERT_LAUNCH_ACK } from "@/lib/studio/military-expert-local-policy.ts";
+
+function isMilitaryExpertMember(member: StudioEditorialTeamMember): boolean {
+  return member.expertKey === "military_expert";
+}
+
+function isMilitaryLocalTestingEnabled(member: StudioEditorialTeamMember): boolean {
+  return isMilitaryExpertMember(member) && member.tierLabel === "Experimental — Private Local Testing";
+}
+
+function isMilitaryBlockedInStudio(member: StudioEditorialTeamMember): boolean {
+  return isMilitaryExpertMember(member) && !isMilitaryLocalTestingEnabled(member);
+}
+
+function recruitDisabled(
+  member: StudioEditorialTeamMember,
+  pending: boolean,
+  privateUseAcknowledged: boolean,
+): boolean {
+  if (pending) return true;
+  if (member.executionClass === "PLACEHOLDER") return true;
+  if (isMilitaryBlockedInStudio(member)) return true;
+  if (isMilitaryLocalTestingEnabled(member) && !privateUseAcknowledged) return true;
+  return false;
+}
 
 function runStatusLabel(status: StudioEditorialTeamMember["runStatus"]): string {
   switch (status) {
@@ -57,8 +82,14 @@ function LaunchWizard({
   const [pending, start] = useTransition();
   const [scope, setScope] = useState<StudioLaunchScope>("full_book");
   const [experimentalAck, setExperimentalAck] = useState(false);
+  const [militaryLaunchAckToken, setMilitaryLaunchAckToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const needsExperimentalAck = member.policy.studioStatus === "experimental";
+  const isMilitaryLaunch = isMilitaryExpertMember(member);
+  const privateUseConfirmed = acknowledged && (!needsExperimentalAck || experimentalAck);
+  const militaryLaunchConfirmed =
+    privateUseConfirmed && militaryLaunchAckToken === STUDIO_MILITARY_EXPERT_LAUNCH_ACK;
+  const canLaunch = isMilitaryLaunch ? militaryLaunchConfirmed : privateUseConfirmed;
 
   function launch() {
     setError(null);
@@ -67,7 +98,8 @@ function LaunchWizard({
         manuscriptId: bookId,
         expertKey: member.expertKey,
         scope,
-        privateUseAcknowledged: acknowledged && (!needsExperimentalAck || experimentalAck),
+        privateUseAcknowledged: privateUseConfirmed,
+        militaryLaunchAckToken: isMilitaryLaunch ? militaryLaunchAckToken : undefined,
       });
       if (!result.ok) {
         setError(result.error ?? "Unable to launch review.");
@@ -116,9 +148,28 @@ function LaunchWizard({
           </div>
           <div>
             <dt className="font-medium text-black/50">Expected output</dt>
-            <dd>Commercial review, editorial issues, and revision candidates</dd>
+            <dd>
+              {isMilitaryLaunch
+                ? "Military tactical realism review — command, rank, tactics, logistics, and operational accuracy (not a Literary Agent commercial review)."
+                : "Commercial review, editorial issues, and revision candidates"}
+            </dd>
           </div>
         </dl>
+
+        {isMilitaryLaunch ? (
+          <div
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-950"
+            role="alert"
+          >
+            <p className="font-semibold">Uncertified — local development only (paid API call)</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+              <li>Military Expert is not commercially certified and remains disabled in production.</li>
+              <li>This launch runs only in local Kevin Studio with an explicit developer override.</li>
+              <li>A real Anthropic provider call will be made — you may incur API cost.</li>
+              <li>Output is a draft military tactical review, not Literary Agent commercial output.</li>
+            </ul>
+          </div>
+        ) : null}
 
         <fieldset className="mt-4">
           <legend className="text-sm font-medium">Scope</legend>
@@ -160,12 +211,33 @@ function LaunchWizard({
           </label>
         ) : null}
 
+        {isMilitaryLaunch ? (
+          <label className="mt-4 block text-sm">
+            <span className="font-medium">
+              Type{" "}
+              <code className="rounded bg-black/[0.06] px-1 py-0.5 font-mono text-xs">
+                {STUDIO_MILITARY_EXPERT_LAUNCH_ACK}
+              </code>{" "}
+              to confirm launch
+            </span>
+            <input
+              type="text"
+              value={militaryLaunchAckToken}
+              onChange={(e) => setMilitaryLaunchAckToken(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-2 w-full rounded-lg border border-black/10 p-2 font-mono text-xs"
+              placeholder="Confirmation token required"
+            />
+          </label>
+        ) : null}
+
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
 
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={pending || (needsExperimentalAck && !experimentalAck)}
+            disabled={pending || !canLaunch}
             onClick={launch}
             className="rounded-lg bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
           >
@@ -380,13 +452,27 @@ function TeamMemberCard({
         </label>
       ) : null}
 
+      {isMilitaryBlockedInStudio(member) ? (
+        <p className="mt-3 rounded-lg border border-black/10 bg-black/[0.02] p-3 text-xs text-black/65">
+          Military Expert is blocked in this environment. Local testing requires{" "}
+          <code className="font-mono">STUDIO_MILITARY_EXPERT_ENABLED=1</code> in development only.
+        </p>
+      ) : null}
+
+      {isMilitaryLocalTestingEnabled(member) ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+          {member.tierLabel} — uncertified draft expert for Kevin Studio only. Not commercially
+          certified.
+        </p>
+      ) : null}
+
       {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {!isRecruited ? (
           <button
             type="button"
-            disabled={pending || member.executionClass === "PLACEHOLDER"}
+            disabled={recruitDisabled(member, pending, acknowledged)}
             onClick={() => run(() => recruitStudioExpert({ manuscriptId: bookId, expertKey: member.expertKey }))}
             className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:border-accent disabled:opacity-50"
           >

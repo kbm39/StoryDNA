@@ -5,6 +5,13 @@ import {
   type ExpertCatalogKey,
 } from "@/lib/expert-catalog.ts";
 import {
+  militaryExpertLocalDeskTierLabel,
+  militaryExpertLocalEstimatedCost,
+  militaryExpertLocalExpectedRuntime,
+  isMilitaryExpertRecruitableInLocalStudio,
+  isStudioMilitaryExpertLocalOverrideEnabled,
+} from "./military-expert-local-policy.ts";
+import {
   classifyStudioExpertTier,
   studioExecutionAllowed,
 } from "./execution-policy.ts";
@@ -105,8 +112,10 @@ function buildDeskEntry(spec: (typeof STUDIO_EXPERT_ORDER)[number]): StudioExper
   const catalog = catalogOrNull(spec.key);
   const placeholder = spec.placeholder === true || catalog === null;
   const tier = placeholder ? "placeholder" : classifyStudioExpertTier(catalog);
-  const experimentalNotice =
-    tier === "experimental" || tier === "advisory_only"
+  const militaryLocal = spec.key === "military_expert" && isStudioMilitaryExpertLocalOverrideEnabled();
+  const experimentalNotice = militaryLocal
+    ? "Experimental — Private Local Testing. Uncertified draft expert for Kevin Studio only. Not commercially certified."
+    : tier === "experimental" || tier === "advisory_only"
       ? "Experimental — private advisory use only. Not commercially certified."
       : undefined;
 
@@ -115,17 +124,27 @@ function buildDeskEntry(spec: (typeof STUDIO_EXPERT_ORDER)[number]): StudioExper
     displayName: catalog?.displayName ?? spec.displayName,
     purpose: catalog?.shortDescription ?? spec.purpose,
     tier,
-    tierLabel: TIER_LABELS[tier],
+    tierLabel: militaryLocal ? militaryExpertLocalDeskTierLabel() : TIER_LABELS[tier],
     catalogAvailability: catalog?.availability ?? null,
     certificationStatus: catalog?.certificationStatus ?? null,
     selectionEnabled: catalog?.selectionEnabled ?? false,
-    studioExecutionAllowed: studioExecutionAllowed({
-      entry: catalog,
-      tier,
-      context: { routeNamespace: "/studio", privateUseAcknowledged: true },
-    }),
-    expectedRuntime: tier === "certified" ? "5–15 minutes" : "Not available",
-    estimatedCost: tier === "certified" ? "Varies by manuscript length" : null,
+    studioExecutionAllowed: militaryLocal
+      ? true
+      : studioExecutionAllowed({
+          entry: catalog,
+          tier,
+          context: { routeNamespace: "/studio", privateUseAcknowledged: true },
+        }),
+    expectedRuntime: militaryLocal
+      ? militaryExpertLocalExpectedRuntime()
+      : tier === "certified"
+        ? "5–15 minutes"
+        : "Not available",
+    estimatedCost: militaryLocal
+      ? militaryExpertLocalEstimatedCost()
+      : tier === "certified"
+        ? "Varies by manuscript length"
+        : null,
     scopeOptions: tier === "certified" ? ["Full manuscript", "Selected chapters"] : ["Full manuscript"],
     prerequisites:
       tier === "certified"

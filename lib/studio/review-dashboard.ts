@@ -9,6 +9,7 @@ import { getAuthorEditResponses } from "@/lib/suggested-edits.ts";
 import { countAcceptedRevisions, mapDbDispositionToStudio } from "./decisions.ts";
 import { getEditorialTeamMembers } from "./editorial-team.ts";
 import { classifyExpertExecution } from "./expert-classification.ts";
+import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/military-expert-local-policy.ts";
 import { buildStudioCostSummary } from "./cost-tracking.ts";
 import { buildRoundtableShell } from "./roundtable.ts";
 import type {
@@ -56,14 +57,20 @@ function formatElapsed(ms: number | null): string {
   return `${min}m ${remSec}s`;
 }
 
-export async function getStudioReviewExecution(manuscriptId: string): Promise<StudioReviewExecutionView | null> {
-  if (!isEditorialWorkflowEnabled()) return null;
+export async function getStudioReviewExecution(
+  manuscriptId: string,
+  workflowType: "literary_agent_review" | "military_expert_review" = "literary_agent_review",
+): Promise<StudioReviewExecutionView | null> {
+  if (workflowType === "literary_agent_review" && !isEditorialWorkflowEnabled()) return null;
+  if (workflowType === "military_expert_review" && !isStudioMilitaryExpertLocalOverrideEnabled()) {
+    return null;
+  }
 
   let row;
   try {
     row = await getActiveWorkflowForManuscript({
       manuscriptId,
-      workflowType: "literary_agent_review",
+      workflowType,
     });
   } catch {
     return null;
@@ -92,8 +99,8 @@ export async function getStudioReviewExecution(manuscriptId: string): Promise<St
 
   return Object.freeze({
     workflowId: workflow.id,
-    expertKey: "literary_agent",
-    expertDisplayName: "Literary Agent",
+    expertKey: workflowType === "military_expert_review" ? "military_expert" : "literary_agent",
+    expertDisplayName: workflowType === "military_expert_review" ? "Military Expert" : "Literary Agent",
     status: workflow.status,
     statusLabel,
     currentPhase: workflow.currentPhase,
@@ -105,7 +112,7 @@ export async function getStudioReviewExecution(manuscriptId: string): Promise<St
     isTerminal: workflow.isTerminal,
     authoritativeResultId: workflow.authoritativeResultId,
     resultSummary: workflow.resultSummary,
-    cost: buildStudioCostSummary({ workflowType: workflow.workflowType }),
+    cost: buildStudioCostSummary({ workflowType: workflow.workflowType as "literary_agent_review" | "military_expert_review" }),
   });
 }
 
@@ -113,17 +120,28 @@ export async function enrichEditorialTeamWithRunStatus(
   manuscriptId: string,
   members: readonly StudioEditorialTeamMember[],
 ): Promise<readonly StudioEditorialTeamMember[]> {
-  const [workflowRow, reviews] = await Promise.all([
+  const [literaryWorkflowRow, militaryWorkflowRow, reviews] = await Promise.all([
     isEditorialWorkflowEnabled()
       ? getActiveWorkflowForManuscript({
           manuscriptId,
           workflowType: "literary_agent_review",
         }).catch(() => null)
       : Promise.resolve(null),
+    isStudioMilitaryExpertLocalOverrideEnabled()
+      ? getActiveWorkflowForManuscript({
+          manuscriptId,
+          workflowType: "military_expert_review",
+        }).catch(() => null)
+      : Promise.resolve(null),
     listReviews(manuscriptId),
   ]);
 
-  const workflow = workflowRow ? await getWorkflowForClient(workflowRow.id) : null;
+  const literaryWorkflow = literaryWorkflowRow
+    ? await getWorkflowForClient(literaryWorkflowRow.id)
+    : null;
+  const militaryWorkflow = militaryWorkflowRow
+    ? await getWorkflowForClient(militaryWorkflowRow.id)
+    : null;
 
   const laReviews = reviews.filter((r) =>
     r.perspective.toLowerCase().includes("literary") || r.perspective === "commercial",
@@ -136,12 +154,18 @@ export async function enrichEditorialTeamWithRunStatus(
     let latestReviewId: string | null = null;
 
     if (member.expertKey === "literary_agent") {
-      if (workflow) {
-        runStatus = mapWorkflowStatusToRunStatus(workflow.status);
+      if (literaryWorkflow) {
+        runStatus = mapWorkflowStatusToRunStatus(literaryWorkflow.status);
       } else if (latestLaReview) {
         runStatus = "completed";
         lastReviewAt = latestLaReview.created_at;
         latestReviewId = latestLaReview.id;
+      }
+    } else if (member.expertKey === "military_expert") {
+      if (militaryWorkflow) {
+        runStatus = mapWorkflowStatusToRunStatus(militaryWorkflow.status);
+      } else if (!isStudioMilitaryExpertLocalOverrideEnabled()) {
+        runStatus = "blocked";
       }
     } else if (classifyExpertExecution(member.expertKey) === "PLACEHOLDER") {
       runStatus = "blocked";
@@ -154,13 +178,15 @@ export async function enrichEditorialTeamWithRunStatus(
 }
 
 export async function getStudioExpertDeskContext(manuscriptId: string) {
-  const [members, workflowView, issues, candidates, { responses }] = await Promise.all([
-    getEditorialTeamMembers(manuscriptId),
-    getStudioReviewExecution(manuscriptId),
-    getEditorialIssues(manuscriptId),
-    getRevisionCandidates(manuscriptId),
-    getAuthorEditResponses(manuscriptId),
-  ]);
+  const [members, literaryWorkflowView, militaryWorkflowView, issues, candidates, { responses }] =
+    await Promise.all([
+      getEditorialTeamMembers(manuscriptId),
+      getStudioReviewExecution(manuscriptId, "literary_agent_review"),
+      getStudioReviewExecution(manuscriptId, "military_expert_review"),
+      getEditorialIssues(manuscriptId),
+      getRevisionCandidates(manuscriptId),
+      getAuthorEditResponses(manuscriptId),
+    ]);
 
   const enrichedTeam = await enrichEditorialTeamWithRunStatus(manuscriptId, members);
   const accepted = countAcceptedRevisions(responses);
@@ -177,7 +203,7 @@ export async function getStudioExpertDeskContext(manuscriptId: string) {
 
   return Object.freeze({
     team: enrichedTeam,
-    activeWorkflow: workflowView,
+    activeWorkflow: literaryWorkflowView ?? militaryWorkflowView,
     roundtable,
     issueCount: issues.length,
     candidateCount: candidates.length,

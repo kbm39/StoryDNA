@@ -29,6 +29,8 @@ describe("Kevin Track K3 private expert execution", () => {
     const src = readFileSync(join(ROOT, "app/studio/actions/expert-execution.ts"), "utf8");
     assert.match(src, /requireStudioAccess/);
     assert.match(src, /startLiteraryAgentPublishingWorkflow/);
+    assert.match(src, /startMilitaryExpertStudioWorkflow/);
+    assert.match(src, /militaryLaunchAckToken/);
   });
 
   it("2. commercial registry unchanged", () => {
@@ -136,6 +138,9 @@ describe("Kevin Track K3 private expert execution", () => {
     assert.match(src, /Start Editorial Round/);
     assert.match(src, /RoundtableShell/);
     assert.match(src, /roundtable\.title/);
+    assert.match(src, /STUDIO_MILITARY_EXPERT_LAUNCH_ACK/);
+    assert.match(src, /militaryLaunchAckToken/);
+    assert.match(src, /Military tactical realism review/);
   });
 
   it("11. no global executionAllowed mutation in studio modules", () => {

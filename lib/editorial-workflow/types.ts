@@ -1,6 +1,6 @@
 /** Editorial Workflow Engine — shared types (Publishing Workflow product surface). */
 
-export const WORKFLOW_TYPES = ["literary_agent_review"] as const;
+export const WORKFLOW_TYPES = ["literary_agent_review", "military_expert_review"] as const;
 export type WorkflowType = (typeof WORKFLOW_TYPES)[number];
 
 export const WORKFLOW_STATUSES = [
@@ -47,7 +47,7 @@ export const INTERNAL_PHASES = [
 ] as const;
 export type InternalPhase = (typeof INTERNAL_PHASES)[number];
 
-export const AUTHORITATIVE_RESULT_TYPES = ["commercial_review"] as const;
+export const AUTHORITATIVE_RESULT_TYPES = ["commercial_review", "military_expert_draft_review"] as const;
 export type AuthoritativeResultType = (typeof AUTHORITATIVE_RESULT_TYPES)[number];
 
 /** StoryDNA-owned workflow metadata stored in input_snapshot (no manuscript text). */
@@ -128,6 +128,7 @@ export class WorkflowCancelledError extends Error {
 }
 
 export const LITERARY_AGENT_DEFINITION_VERSION = "literary_agent_review@v1";
+export const MILITARY_EXPERT_STUDIO_DEFINITION_VERSION = "military_expert_review@v1-draft";
 
 export function isTerminalWorkflowStatus(status: WorkflowStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";

@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server.ts";
 import { listStudioExpertDeskEntries } from "./expert-desk.ts";
 import { buildStudioExecutionPolicy } from "./execution-policy.ts";
 import { classifyExpertExecution } from "./expert-classification.ts";
+import { isMilitaryExpertRecruitableInLocalStudio } from "./military-expert-local-policy.ts";
 import type {
   StudioEditorialHealth,
   StudioEditorialTeamMember,
@@ -85,7 +86,7 @@ function buildMember(
     executionClass: classifyExpertExecution(key),
     policy: buildStudioExecutionPolicy({
       expertKey: key,
-      entry: catalog,
+      entry: catalog ?? null,
       privateUseAcknowledged: true,
     }),
     tier: desk.tier,
@@ -110,6 +111,9 @@ export async function recruitEditorialTeamMember(input: {
   }
   if (classifyExpertExecution(input.expertKey) === "PLACEHOLDER") {
     return { ok: false, error: "This expert is not yet available." };
+  }
+  if (input.expertKey === "military_expert" && !isMilitaryExpertRecruitableInLocalStudio()) {
+    return { ok: false, error: "Military Expert is blocked in this environment." };
   }
 
   if (!(await tableExists())) {

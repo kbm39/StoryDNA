@@ -18,4 +18,17 @@ describe("workflow-definitions", () => {
     const nba = nextBestActionForCompletedWorkflow("literary_agent_review");
     assert.match(nba, /Literary Agent review/i);
   });
+
+  it("defines Military Expert local test metadata", () => {
+    const meta = workflowMetadataForType("military_expert_review");
+    assert.equal(meta.department, "Research");
+    assert.equal(meta.owner_label, "Kevin Studio");
+    assert.deepEqual(meta.participating_experts, ["Military Expert"]);
+    assert.match(meta.purpose ?? "", /local test/i);
+  });
+
+  it("sets Military Expert next best action on completion", () => {
+    const nba = nextBestActionForCompletedWorkflow("military_expert_review");
+    assert.match(nba, /Military Expert local test/i);
+  });
 });

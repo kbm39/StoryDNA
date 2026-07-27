@@ -7,7 +7,9 @@ export function buildStudioCostSummary(input: {
     estimatedCost:
       input.workflowType === "literary_agent_review"
         ? "Varies by manuscript length"
-        : "Unavailable",
+        : input.workflowType === "military_expert_review"
+          ? "Varies by manuscript length (local test)"
+          : "Unavailable",
     actualCost: null,
     runtime: null,
     tokens: null,

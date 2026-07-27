@@ -6,11 +6,24 @@
  */
 
 import type { ExpertCatalogEntry } from "@/lib/expert-catalog.ts";
+import { classifyExpertExecution } from "./expert-classification.ts";
 import type { StudioExpertTier } from "./types.ts";
 
 export interface StudioExecutionContext {
   readonly routeNamespace: "/studio";
   readonly privateUseAcknowledged?: boolean;
+}
+
+export type StudioCommercialStatus = "enabled" | "disabled" | "certified" | "experimental";
+
+export type StudioExpertAvailability = "available" | "experimental" | "blocked" | "placeholder";
+
+export interface StudioExecutionPolicy {
+  readonly expertKey: string;
+  readonly commercialStatus: StudioCommercialStatus;
+  readonly studioStatus: StudioExpertAvailability;
+  readonly launchable: boolean;
+  readonly requiresAcknowledgment: boolean;
 }
 
 export function classifyStudioExpertTier(entry: ExpertCatalogEntry | null): StudioExpertTier {
@@ -24,6 +37,49 @@ export function classifyStudioExpertTier(entry: ExpertCatalogEntry | null): Stud
     return "advisory_only";
   }
   return "advisory_only";
+}
+
+export function commercialStatusForEntry(entry: ExpertCatalogEntry | null): StudioCommercialStatus {
+  if (!entry) return "disabled";
+  if (entry.certificationStatus === "certified" && entry.selectionEnabled) return "certified";
+  if (entry.certificationStatus === "certified") return "certified";
+  if (entry.availability === "internal_only") return "experimental";
+  return "disabled";
+}
+
+export function studioStatusForExpert(key: string): StudioExpertAvailability {
+  const executionClass = classifyExpertExecution(key);
+  switch (executionClass) {
+    case "READY":
+      return "available";
+    case "EXPERIMENTAL":
+      return "experimental";
+    case "PLACEHOLDER":
+      return "placeholder";
+    case "BLOCKED":
+      return "blocked";
+  }
+}
+
+export function buildStudioExecutionPolicy(input: {
+  readonly expertKey: string;
+  readonly entry: ExpertCatalogEntry | null;
+  readonly privateUseAcknowledged: boolean;
+}): StudioExecutionPolicy {
+  const tier = classifyStudioExpertTier(input.entry);
+  const launchable = studioExecutionAllowed({
+    entry: input.entry,
+    tier,
+    context: { routeNamespace: "/studio", privateUseAcknowledged: input.privateUseAcknowledged },
+  }) && classifyExpertExecution(input.expertKey) === "READY";
+
+  return Object.freeze({
+    expertKey: input.expertKey,
+    commercialStatus: commercialStatusForEntry(input.entry),
+    studioStatus: studioStatusForExpert(input.expertKey),
+    launchable,
+    requiresAcknowledgment: requiresPrivateUseAcknowledgment(tier),
+  });
 }
 
 /**

@@ -1,0 +1,194 @@
+import "server-only";
+import { getWorkflowForClient } from "@/lib/editorial-workflow/start-literary-agent-workflow.ts";
+import { isEditorialWorkflowEnabled } from "@/lib/editorial-workflow/feature-flag.ts";
+import { getActiveWorkflowForManuscript } from "@/lib/editorial-workflow/workflow-store.ts";
+import { authorPhaseLabel } from "@/lib/editorial-workflow/phase-labels.ts";
+import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions.ts";
+import { listReviews } from "@/lib/reviews.ts";
+import { getAuthorEditResponses } from "@/lib/suggested-edits.ts";
+import { countAcceptedRevisions, mapDbDispositionToStudio } from "./decisions.ts";
+import { getEditorialTeamMembers } from "./editorial-team.ts";
+import { classifyExpertExecution } from "./expert-classification.ts";
+import { buildStudioCostSummary } from "./cost-tracking.ts";
+import { buildRoundtableShell } from "./roundtable.ts";
+import type {
+  StudioEditorialTeamMember,
+  StudioExpertRunStatus,
+  StudioReviewExecutionView,
+} from "./types.ts";
+
+function mapWorkflowStatusToRunStatus(
+  status: string | null | undefined,
+): StudioExpertRunStatus {
+  switch (status) {
+    case "queued":
+      return "queued";
+    case "preparing":
+    case "running":
+      return "running";
+    case "waiting":
+    case "paused":
+      return "running";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "waiting";
+  }
+}
+
+function elapsedMs(startIso: string | null | undefined, endIso?: string | null): number | null {
+  if (!startIso) return null;
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Date.now();
+  return Math.max(0, end - start);
+}
+
+function formatElapsed(ms: number | null): string {
+  if (ms === null) return "—";
+  const sec = Math.floor(ms / 1000);
+  const min = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  if (min === 0) return `${remSec}s`;
+  return `${min}m ${remSec}s`;
+}
+
+export async function getStudioReviewExecution(manuscriptId: string): Promise<StudioReviewExecutionView | null> {
+  if (!isEditorialWorkflowEnabled()) return null;
+
+  let row;
+  try {
+    row = await getActiveWorkflowForManuscript({
+      manuscriptId,
+      workflowType: "literary_agent_review",
+    });
+  } catch {
+    return null;
+  }
+  if (!row) return null;
+
+  const workflow = await getWorkflowForClient(row.id);
+  if (!workflow) return null;
+
+  const phaseLabel = authorPhaseLabel(workflow.currentPhase as Parameters<typeof authorPhaseLabel>[0]);
+  const publishing = workflow.currentPhase === "publishing";
+  const statusLabel =
+    workflow.status === "queued"
+      ? "Queued"
+      : workflow.status === "running" || workflow.status === "preparing"
+        ? "Running"
+        : publishing
+          ? "Publishing"
+          : workflow.status === "completed"
+            ? "Completed"
+            : workflow.status === "failed"
+              ? "Failed"
+              : workflow.status === "cancelled"
+                ? "Cancelled"
+                : workflow.status;
+
+  return Object.freeze({
+    workflowId: workflow.id,
+    expertKey: "literary_agent",
+    expertDisplayName: "Literary Agent",
+    status: workflow.status,
+    statusLabel,
+    currentPhase: workflow.currentPhase,
+    currentPhaseLabel: phaseLabel,
+    progressSummary: workflow.progressSummary,
+    safeErrorMessage: workflow.safeErrorMessage,
+    startedAt: workflow.startedAt ?? workflow.queuedAt,
+    elapsed: formatElapsed(elapsedMs(workflow.startedAt ?? workflow.queuedAt, workflow.completedAt)),
+    isTerminal: workflow.isTerminal,
+    authoritativeResultId: workflow.authoritativeResultId,
+    resultSummary: workflow.resultSummary,
+    cost: buildStudioCostSummary({ workflowType: workflow.workflowType }),
+  });
+}
+
+export async function enrichEditorialTeamWithRunStatus(
+  manuscriptId: string,
+  members: readonly StudioEditorialTeamMember[],
+): Promise<readonly StudioEditorialTeamMember[]> {
+  const [workflowRow, reviews] = await Promise.all([
+    isEditorialWorkflowEnabled()
+      ? getActiveWorkflowForManuscript({
+          manuscriptId,
+          workflowType: "literary_agent_review",
+        }).catch(() => null)
+      : Promise.resolve(null),
+    listReviews(manuscriptId),
+  ]);
+
+  const workflow = workflowRow ? await getWorkflowForClient(workflowRow.id) : null;
+
+  const laReviews = reviews.filter((r) =>
+    r.perspective.toLowerCase().includes("literary") || r.perspective === "commercial",
+  );
+  const latestLaReview = laReviews[0] ?? null;
+
+  return members.map((member) => {
+    let runStatus: StudioExpertRunStatus = "waiting";
+    let lastReviewAt: string | null = null;
+    let latestReviewId: string | null = null;
+
+    if (member.expertKey === "literary_agent") {
+      if (workflow) {
+        runStatus = mapWorkflowStatusToRunStatus(workflow.status);
+      } else if (latestLaReview) {
+        runStatus = "completed";
+        lastReviewAt = latestLaReview.created_at;
+        latestReviewId = latestLaReview.id;
+      }
+    } else if (classifyExpertExecution(member.expertKey) === "PLACEHOLDER") {
+      runStatus = "blocked";
+    } else if (classifyExpertExecution(member.expertKey) === "EXPERIMENTAL") {
+      runStatus = "blocked";
+    }
+
+    return Object.freeze({ ...member, runStatus, lastReviewAt, latestReviewId });
+  });
+}
+
+export async function getStudioExpertDeskContext(manuscriptId: string) {
+  const [members, workflowView, issues, candidates, { responses }] = await Promise.all([
+    getEditorialTeamMembers(manuscriptId),
+    getStudioReviewExecution(manuscriptId),
+    getEditorialIssues(manuscriptId),
+    getRevisionCandidates(manuscriptId),
+    getAuthorEditResponses(manuscriptId),
+  ]);
+
+  const enrichedTeam = await enrichEditorialTeamWithRunStatus(manuscriptId, members);
+  const accepted = countAcceptedRevisions(responses);
+  const deferred = responses.filter((r) => mapDbDispositionToStudio(r.disposition) === "deferred").length;
+  const rejected = responses.filter((r) => mapDbDispositionToStudio(r.disposition) === "rejected").length;
+  const resolved = issues.filter((i) => i.resolution_status === "resolved").length;
+  const open = issues.filter((i) => i.resolution_status !== "resolved").length;
+
+  const roundtable = buildRoundtableShell({
+    team: enrichedTeam,
+    issueCount: issues.length,
+    candidateCount: candidates.length,
+  });
+
+  return Object.freeze({
+    team: enrichedTeam,
+    activeWorkflow: workflowView,
+    roundtable,
+    issueCount: issues.length,
+    candidateCount: candidates.length,
+    editorialHealth: {
+      issues: issues.length,
+      resolved,
+      accepted,
+      deferred,
+      rejected,
+      open,
+      overallProgress: issues.length > 0 ? Math.round(((accepted + rejected + deferred) / issues.length) * 100) : 0,
+    },
+  });
+}

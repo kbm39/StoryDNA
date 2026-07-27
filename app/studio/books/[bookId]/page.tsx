@@ -67,7 +67,7 @@ export default async function StudioBookWorkspacePage({
             href={`/studio/books/${bookId}/experts`}
             className="rounded-lg border border-black/10 px-4 py-2 text-sm hover:border-accent dark:border-white/10"
           >
-            Choose Experts
+            Editorial Team
           </Link>
           <Link
             href={`/studio/books/${bookId}/revisions`}

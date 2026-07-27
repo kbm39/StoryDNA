@@ -141,3 +141,82 @@ export interface StudioRevisionBoardSummary {
   readonly deferred: number;
   readonly acceptedRevisionCount: number;
 }
+
+export type StudioExpertRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "waiting"
+  | "blocked"
+  | "failed"
+  | "cancelled";
+
+export interface StudioEditorialTeamMember {
+  readonly manuscriptId: string;
+  readonly expertKey: string;
+  readonly displayName: string;
+  readonly purpose: string;
+  readonly executionClass: string;
+  readonly policy: import("./execution-policy.ts").StudioExecutionPolicy;
+  readonly tier: StudioExpertTier;
+  readonly tierLabel: string;
+  readonly certificationStatus: string | null;
+  readonly expectedRuntime: string;
+  readonly estimatedCost: string | null;
+  readonly ownerNotes: string | null;
+  readonly recruitedAt: string;
+  readonly runStatus: StudioExpertRunStatus;
+  readonly lastReviewAt: string | null;
+  readonly latestReviewId: string | null;
+}
+
+export interface StudioEditorialHealth {
+  readonly issues: number;
+  readonly resolved: number;
+  readonly accepted: number;
+  readonly deferred: number;
+  readonly rejected: number;
+  readonly open: number;
+  readonly overallProgress: number;
+}
+
+export interface StudioCostSummary {
+  readonly estimatedCost: string;
+  readonly actualCost: string | null;
+  readonly runtime: string | null;
+  readonly tokens: string | null;
+  readonly provider: string;
+  readonly model: string;
+  readonly costAvailable: boolean;
+}
+
+export interface StudioReviewExecutionView {
+  readonly workflowId: string;
+  readonly expertKey: string;
+  readonly expertDisplayName: string;
+  readonly status: string;
+  readonly statusLabel: string;
+  readonly currentPhase: string | null;
+  readonly currentPhaseLabel: string;
+  readonly progressSummary: string | null;
+  readonly safeErrorMessage: string | null;
+  readonly startedAt: string | null;
+  readonly elapsed: string;
+  readonly isTerminal: boolean;
+  readonly authoritativeResultId: string | null;
+  readonly resultSummary: unknown;
+  readonly cost: StudioCostSummary;
+}
+
+export interface StudioRoundtableShell {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly agreement: string;
+  readonly disagreement: string;
+  readonly priority: string;
+  readonly recommendedOrder: readonly string[];
+  readonly consensus: string;
+  readonly showShell: boolean;
+}
+
+export type StudioLaunchScope = "full_book" | "selected_chapters" | "excerpt";

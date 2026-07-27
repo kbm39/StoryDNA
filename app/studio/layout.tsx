@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireStudioAccess } from "@/lib/studio/access.ts";
-import { StudioHeader, StudioNav } from "../components/StudioShell.tsx";
+import { StudioHeader, StudioNav } from "./components/StudioShell.tsx";
 
 export default async function StudioLayout({
   children,

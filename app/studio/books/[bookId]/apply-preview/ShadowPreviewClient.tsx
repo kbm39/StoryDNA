@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { generateStudioShadowPreview } from "@/app/studio/actions/shadow-preview.ts";
+import { promoteStudioShadowManuscript } from "@/app/studio/actions/shadow-promotion.ts";
 import type { StudioRevisionExport } from "@/lib/studio/export-types.ts";
 import type { ShadowConflictResolution, StudioShadowManuscript } from "@/lib/studio/shadow-types.ts";
 import { buildTextualDiffLines, formatTextualDiffForDisplay } from "@/lib/studio/textual-diff.ts";
@@ -21,6 +22,11 @@ export function ShadowPreviewClient({
   const [shadow, setShadow] = useState<StudioShadowManuscript | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [promotion, setPromotion] = useState<{ versionNumber: number; label: string; versionId: string } | null>(null);
+  const [promotePending, startPromote] = useTransition();
+  const [ackNonActive, setAckNonActive] = useState(false);
+  const [ackCanonical, setAckCanonical] = useState(false);
+  const [promotionLabel, setPromotionLabel] = useState("");
   const [changeIndex, setChangeIndex] = useState(0);
 
   const eligibleItems = useMemo(
@@ -62,6 +68,40 @@ export function ShadowPreviewClient({
       setChangeIndex(0);
     });
   }
+
+  function promoteShadow() {
+    if (!shadow) return;
+    setError(null);
+    startPromote(async () => {
+      const result = await promoteStudioShadowManuscript({
+        manuscriptId: bookId,
+        expectedActiveVersionId: manifest.expectedActiveVersionId,
+        expectedDecisionSnapshotHash: manifest.integrity.decisionSnapshotHash,
+        expectedShadowHash: shadow.application.finalHash,
+        selectedRevisionIds: [...selected],
+        conflictResolutions,
+        confirmation: {
+          acknowledgedNonActive: ackNonActive,
+          acknowledgedCanonicalUnchanged: ackCanonical,
+          promotionLabel: promotionLabel.trim() || null,
+        },
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setPromotion({
+        versionNumber: result.promotion.versionNumber,
+        label: result.promotion.label,
+        versionId: result.manuscriptVersionId,
+      });
+    });
+  }
+
+  const canPromote =
+    shadow?.integrity.readyForPromotionReview === true &&
+    shadow.application.unresolvedConflictCount === 0 &&
+    shadow.application.appliedRevisionCount > 0;
 
   const currentChange = shadow?.appliedItems[changeIndex] ?? null;
 
@@ -208,6 +248,67 @@ export function ShadowPreviewClient({
             <a href={`/studio/books/${bookId}/apply-preview/manifest.json?${downloadQuery}`} className="rounded-lg border px-4 py-2 text-sm">Download Application Manifest JSON</a>
             <a href={`/studio/books/${bookId}/apply-preview/report.md?${downloadQuery}`} className="rounded-lg border px-4 py-2 text-sm">Download Application Report</a>
           </div>
+
+          {canPromote && !promotion ? (
+            <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
+              <h3 className="font-serif text-lg font-semibold text-emerald-950">Promote to Draft Version</h3>
+              <p className="mt-1 text-emerald-900">
+                Create a new non-active manuscript version from this shadow preview. Your active manuscript and
+                current_version_id will not change.
+              </p>
+              <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div><dt className="text-emerald-800/70">Applied revisions</dt><dd>{shadow.application.appliedRevisionCount}</dd></div>
+                <div><dt className="text-emerald-800/70">Shadow words</dt><dd>{shadow.application.finalWordCount}</dd></div>
+                <div><dt className="text-emerald-800/70">Net change</dt><dd>{shadow.application.netWordChange}</dd></div>
+              </dl>
+              <label className="mt-4 block">
+                <span className="text-xs text-emerald-900">Optional version label</span>
+                <input
+                  type="text"
+                  value={promotionLabel}
+                  onChange={(e) => setPromotionLabel(e.target.value)}
+                  placeholder="Studio shadow promotion (2026-07-27)"
+                  className="mt-1 w-full rounded border border-emerald-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+              <div className="mt-4 space-y-2">
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" checked={ackNonActive} onChange={(e) => setAckNonActive(e.target.checked)} />
+                  <span>I understand this creates a non-active draft version that is not yet canonical.</span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" checked={ackCanonical} onChange={(e) => setAckCanonical(e.target.checked)} />
+                  <span>I understand my active manuscript and current_version_id will remain unchanged.</span>
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={promotePending || !ackNonActive || !ackCanonical}
+                onClick={promoteShadow}
+                className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+              >
+                Promote Shadow to Draft Version
+              </button>
+            </section>
+          ) : null}
+
+          {promotion ? (
+            <section className="rounded-xl border border-emerald-300 bg-white p-5 text-sm">
+              <h3 className="font-serif text-lg font-semibold">Draft Version Created</h3>
+              <p className="mt-1">
+                Version {promotion.versionNumber}: {promotion.label}
+              </p>
+              <p className="mt-2 text-black/55">
+                This version is not active. Activation requires a separate explicit step.
+              </p>
+              <Link
+                href={`/studio/books/${bookId}`}
+                className="mt-4 inline-block rounded-lg border px-4 py-2 text-sm"
+              >
+                View Version History
+              </Link>
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>

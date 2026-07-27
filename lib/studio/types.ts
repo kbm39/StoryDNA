@@ -113,6 +113,8 @@ export interface StudioActionItem {
   readonly researchNeeded: boolean;
   readonly assignedExpert: string | null;
   readonly status: StudioActionItemStatus;
+  readonly studioDisposition: StudioAuthorDisposition;
+  readonly decisionLabel: string;
   readonly authorDecision: string | null;
   readonly authorNotes: string | null;
   readonly acceptedText: string | null;
@@ -132,8 +134,10 @@ export interface StudioExportOption {
 
 export interface StudioRevisionBoardSummary {
   readonly total: number;
-  readonly open: number;
+  readonly notReviewed: number;
   readonly accepted: number;
+  readonly acceptedModified: number;
   readonly rejected: number;
-  readonly pending: number;
+  readonly deferred: number;
+  readonly acceptedRevisionCount: number;
 }

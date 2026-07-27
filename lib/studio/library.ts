@@ -6,6 +6,7 @@ import { getAuthorEditResponses } from "@/lib/suggested-edits.ts";
 import { getSupabaseAdmin } from "@/lib/supabase/server.ts";
 import { listSeries } from "@/lib/series.ts";
 import type { StudioLibraryBook } from "./types.ts";
+import { countAcceptedRevisions } from "./decisions.ts";
 
 async function getCurrentVersionSummary(manuscriptId: string, currentVersionId: string | null) {
   if (!currentVersionId) return { label: null, versionNumber: null, updatedAt: null as string | null };
@@ -48,7 +49,7 @@ export async function listStudioLibraryBooks(): Promise<readonly StudioLibraryBo
         ]);
         const series = m.series_id ? seriesById.get(m.series_id) : undefined;
         const unresolved = issues.filter((i) => i.resolution_status !== "resolved").length;
-        const accepted = responses.filter((r) => r.disposition === "accepted").length;
+        const accepted = countAcceptedRevisions(responses);
 
         return Object.freeze({
           id: m.id,

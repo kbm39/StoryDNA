@@ -137,10 +137,11 @@ describe("Kevin Track studio foundation", () => {
     assert.equal(items.length, 1);
     assert.equal(items[0]!.issueTitle, "Pacing concern");
     assert.equal(items[0]!.suggestedRewrite, "He sprinted.");
-    assert.equal(items[0]!.status, "rewrite_proposed");
+    assert.equal(items[0]!.studioDisposition, "pending");
     const summary = summarizeRevisionBoard(items);
     assert.equal(summary.total, 1);
-    assert.equal(summary.open, 0);
+    assert.equal(summary.notReviewed, 1);
+    assert.equal(summary.acceptedRevisionCount, 0);
   });
 
   it("8. studio routes exist and do not modify expert-catalog source", () => {

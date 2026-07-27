@@ -37,6 +37,19 @@ export default async function StudioExportsPage({
 
       <AcceptedRevisionPreviewClient bookId={bookId} manifest={manifest} />
 
+      <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+        <h3 className="font-serif text-lg font-semibold">Shadow Manuscript Preview</h3>
+        <p className="mt-1 text-sm text-black/65">
+          Apply safe accepted revisions to a non-canonical in-memory preview and compare with your active manuscript.
+        </p>
+        <Link
+          href={`/studio/books/${bookId}/apply-preview`}
+          className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm text-white hover:opacity-90"
+        >
+          Create Shadow Manuscript Preview
+        </Link>
+      </div>
+
       <div>
         <h3 className="font-serif text-xl font-semibold">Commercial export links</h3>
         <p className="mt-1 text-sm text-black/55">

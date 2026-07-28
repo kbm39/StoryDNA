@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type {
   StudioEditorialHealth,
   StudioEditorialTeamMember,
@@ -18,6 +18,10 @@ import {
   saveStudioExpertNotes,
 } from "@/app/studio/actions/expert-execution.ts";
 import { STUDIO_MILITARY_EXPERT_LAUNCH_ACK } from "@/lib/studio/military-expert-local-policy.ts";
+import {
+  computeLaunchWizardCanLaunch,
+  launchWizardNeedsPrivateUseAck,
+} from "@/lib/studio/launch-wizard-state.ts";
 
 function isMilitaryExpertMember(member: StudioEditorialTeamMember): boolean {
   return member.expertKey === "military_expert";
@@ -81,15 +85,27 @@ function LaunchWizard({
 }) {
   const [pending, start] = useTransition();
   const [scope, setScope] = useState<StudioLaunchScope>("full_book");
+  const needsExperimentalAck = member.policy.studioStatus === "experimental";
+  const isMilitaryLaunch = isMilitaryExpertMember(member);
+  const memberContext = { isMilitaryLaunch, needsExperimentalAck };
+  const needsPrivateUseAck = launchWizardNeedsPrivateUseAck(memberContext);
+  const [privateUseAck, setPrivateUseAck] = useState(acknowledged);
   const [experimentalAck, setExperimentalAck] = useState(false);
   const [militaryLaunchAckToken, setMilitaryLaunchAckToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const needsExperimentalAck = member.policy.studioStatus === "experimental";
-  const isMilitaryLaunch = isMilitaryExpertMember(member);
-  const privateUseConfirmed = acknowledged && (!needsExperimentalAck || experimentalAck);
-  const militaryLaunchConfirmed =
-    privateUseConfirmed && militaryLaunchAckToken === STUDIO_MILITARY_EXPERT_LAUNCH_ACK;
-  const canLaunch = isMilitaryLaunch ? militaryLaunchConfirmed : privateUseConfirmed;
+
+  useEffect(() => {
+    if (acknowledged) setPrivateUseAck(true);
+  }, [acknowledged]);
+
+  const canLaunch = computeLaunchWizardCanLaunch(memberContext, {
+    privateUseAck: needsPrivateUseAck ? privateUseAck : acknowledged,
+    experimentalAck,
+    militaryLaunchAckToken,
+  });
+  const privateUseConfirmed = needsPrivateUseAck
+    ? privateUseAck && (!needsExperimentalAck || experimentalAck)
+    : acknowledged;
 
   function launch() {
     setError(null);
@@ -198,6 +214,21 @@ function LaunchWizard({
             ))}
           </div>
         </fieldset>
+
+        {needsPrivateUseAck ? (
+          <label className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+            <input
+              type="checkbox"
+              checked={privateUseAck}
+              onChange={(e) => setPrivateUseAck(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              I understand experimental and advisory experts are for private Kevin Track use only.
+              They are not commercially certified and do not alter StoryDNA production controls.
+            </span>
+          </label>
+        ) : null}
 
         {needsExperimentalAck ? (
           <label className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">

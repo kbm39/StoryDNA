@@ -140,6 +140,8 @@ describe("Kevin Track K3 private expert execution", () => {
     assert.match(src, /roundtable\.title/);
     assert.match(src, /STUDIO_MILITARY_EXPERT_LAUNCH_ACK/);
     assert.match(src, /militaryLaunchAckToken/);
+    assert.match(src, /launchWizardNeedsPrivateUseAck/);
+    assert.match(src, /computeLaunchWizardCanLaunch/);
     assert.match(src, /Military tactical realism review/);
   });
 

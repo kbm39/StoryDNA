@@ -30,6 +30,7 @@ import {
   buildMilitaryExpertSystemPrompt,
   militaryExpertReviewPromptShell,
 } from "./prompts.ts";
+import { militaryExpertStudioOutputBudgetBlock } from "./studio-output-limits.ts";
 import { parseMilitaryExpertGenerationResponse } from "./parsing.ts";
 import { classifyMilitaryExpertRepairNeed } from "./repair-classification.ts";
 import { normalizeMilitaryExpertReview } from "./normalization.ts";
@@ -64,6 +65,7 @@ export interface BuildMilitaryExpertGenerationRequestInput {
   genreContext?: string | null;
   countryPeriod?: string | null;
   maxOutputTokens?: number;
+  includeStudioOutputBudget?: boolean;
 }
 
 export interface MilitaryExpertGenerationContractDependencies {
@@ -145,16 +147,22 @@ export function buildMilitaryExpertGenerationRequest(
   }
 
   const systemPrompt = buildMilitaryExpertSystemPrompt(MILITARY_EXPERT);
-  const reviewPrompt = buildMilitaryExpertReviewPrompt({
-    def: MILITARY_EXPERT,
-    manuscriptVersionId: input.manuscriptVersionId,
-    reviewScope: input.reviewScope,
-    manuscriptText: input.manuscriptText,
-    canonicalWordCount: input.canonicalWordCount,
-    manuscriptHash: input.manuscriptHash,
-    genreContext: input.genreContext ?? null,
-    countryPeriod: input.countryPeriod ?? null,
-  });
+  const reviewPromptParts = [
+    buildMilitaryExpertReviewPrompt({
+      def: MILITARY_EXPERT,
+      manuscriptVersionId: input.manuscriptVersionId,
+      reviewScope: input.reviewScope,
+      manuscriptText: input.manuscriptText,
+      canonicalWordCount: input.canonicalWordCount,
+      manuscriptHash: input.manuscriptHash,
+      genreContext: input.genreContext ?? null,
+      countryPeriod: input.countryPeriod ?? null,
+    }),
+  ];
+  if (input.includeStudioOutputBudget) {
+    reviewPromptParts.push("", militaryExpertStudioOutputBudgetBlock());
+  }
+  const reviewPrompt = reviewPromptParts.join("\n");
 
   return Object.freeze({
     expertKey: MILITARY_EXPERT_KEY,
@@ -337,6 +345,7 @@ export async function runMilitaryExpertGenerationContract(
 
   const parsed = parseMilitaryExpertGenerationResponse(input.rawResponse, {
     expectedCorrelationId: input.correlationId,
+    maxOutputTokens: request.maxOutputTokens,
   });
 
   if (!parsed.ok) {
@@ -352,6 +361,10 @@ export async function runMilitaryExpertGenerationContract(
       repairDecision,
       durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
       failureReason: parsed.message,
+      parseFailureCode: parsed.code,
+      parseDiagnostics: parsed.diagnostics
+        ? { ...parsed.diagnostics }
+        : undefined,
     };
   }
 

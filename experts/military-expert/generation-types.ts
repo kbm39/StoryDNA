@@ -92,6 +92,8 @@ export interface MilitaryExpertGenerationContractResult {
   productionExecutionOccurred: false;
   durationMs: number;
   failureReason?: string;
+  parseFailureCode?: string;
+  parseDiagnostics?: Record<string, unknown>;
   enumNormalizationAudits?: readonly MilitaryExpertEnumNormalizationAudit[];
   review?: MilitaryExpertReview;
 }

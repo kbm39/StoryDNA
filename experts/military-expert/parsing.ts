@@ -13,12 +13,18 @@ import {
   validateMilitaryExpertGenerationPayload,
   type MilitaryExpertGenerationPayload,
 } from "./output-schema.ts";
+import {
+  buildMilitaryExpertJsonParseDiagnostics,
+  isLikelyProviderOutputTruncation,
+  type MilitaryExpertJsonParseDiagnostics,
+} from "./json-parse-diagnostics.ts";
 import type { MilitaryExpertRawGenerationResponse } from "./generation-types.ts";
 
 export type MilitaryExpertParseFailureCode =
   | "malformed_json"
   | "multiple_payloads"
   | "trailing_content"
+  | "provider_output_truncated"
   | "schema_invalid"
   | "unsafe_content"
   | "evidence_missing"
@@ -39,12 +45,14 @@ export interface MilitaryExpertParseFailure {
   ok: false;
   code: MilitaryExpertParseFailureCode;
   message: string;
+  diagnostics?: MilitaryExpertJsonParseDiagnostics;
 }
 
 export type MilitaryExpertParseResult = MilitaryExpertParseSuccess | MilitaryExpertParseFailure;
 
 export interface ParseMilitaryExpertGenerationResponseOptions {
   expectedCorrelationId?: string;
+  maxOutputTokens?: number;
 }
 
 function classifySchemaErrors(errors: readonly string[]): MilitaryExpertParseFailureCode {
@@ -108,14 +116,58 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
+    if (trailingContent.length > 0 && !isAllowedModelJsonTrailing(trailingCategory)) {
+      return {
+        ok: false,
+        code: "trailing_content",
+        message: "Trailing content after JSON payload is not allowed",
+      };
+    }
+
+    if (raw.finishStatus === "truncated") {
+      return {
+        ok: false,
+        code: "provider_output_truncated",
+        message: "Provider output was truncated before a complete JSON object was returned",
+        diagnostics: buildMilitaryExpertJsonParseDiagnostics({
+          raw,
+          jsonText,
+          maxOutputTokens: options.maxOutputTokens,
+        }),
+      };
+    }
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(jsonText);
     } catch (error) {
+      const parseMessage = error instanceof Error ? error.message : "Malformed JSON";
+      const diagnostics = buildMilitaryExpertJsonParseDiagnostics({
+        raw,
+        jsonText,
+        parseErrorMessage: parseMessage,
+        maxOutputTokens: options.maxOutputTokens,
+      });
+      if (
+        isLikelyProviderOutputTruncation({
+          raw,
+          jsonText,
+          parseErrorMessage: parseMessage,
+          maxOutputTokens: options.maxOutputTokens,
+        })
+      ) {
+        return {
+          ok: false,
+          code: "provider_output_truncated",
+          message: "Provider output was truncated before a complete JSON object was returned",
+          diagnostics,
+        };
+      }
       return {
         ok: false,
         code: "malformed_json",
-        message: error instanceof Error ? error.message : "Malformed JSON",
+        message: parseMessage,
+        diagnostics,
       };
     }
 

@@ -19,6 +19,7 @@ import {
   markWorkflowFailed,
   markWorkflowRunning,
   markWorkflowStarted,
+  insertWorkflowEvent,
   setWorkflowPhase,
   touchWorkflowHeartbeat,
   verifyWorkflowVersionPin,
@@ -32,7 +33,7 @@ const STUDIO_MILITARY_BUDGET = Object.freeze({
   maxCostPerCallUsd: 0.25,
   maxInputTokens: 120_000,
   maxOutputTokens: 8_192,
-  providerMaxOutputTokens: 4_096,
+  providerMaxOutputTokens: 8_192,
   timeoutMs: 180_000,
 });
 
@@ -125,6 +126,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     canonicalWordCount: ctx.wordCount ?? 0,
     manuscriptHash: ctx.contentHash,
     maxOutputTokens: STUDIO_MILITARY_BUDGET.providerMaxOutputTokens,
+    includeStudioOutputBudget: true,
   });
 
   await setWorkflowPhase(workflowId, "memo_generation");
@@ -182,11 +184,26 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
   );
 
   if (!contractResult.ok || contractResult.generationStatus !== "success") {
+    const errorCode =
+      contractResult.parseFailureCode === "provider_output_truncated"
+        ? "PROVIDER_OUTPUT_TRUNCATED"
+        : "PIPELINE_FAILED";
+    if (contractResult.parseDiagnostics) {
+      await insertWorkflowEvent({
+        workflowId,
+        eventType: "parse_failed",
+        payload: {
+          error_code: errorCode,
+          parse_failure_code: contractResult.parseFailureCode ?? null,
+          diagnostics: contractResult.parseDiagnostics,
+        },
+      }).catch(() => {});
+    }
     await markWorkflowFailed({
       workflowId,
-      errorCode: "PIPELINE_FAILED",
+      errorCode,
       safeErrorMessage: safeErrorForCode(
-        "PIPELINE_FAILED",
+        errorCode,
         contractResult.failureReason ?? "Military Expert validation failed.",
       ),
     });

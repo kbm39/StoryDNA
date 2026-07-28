@@ -21,13 +21,18 @@ export const FIXTURE_MANUSCRIPT_TEXT = [
   "Corporal Hale checked the radio twice before the convoy moved out.",
 ].join("\n");
 
-function baseRawResponse(responseText: string, correlationId: string = FIXTURE_CORRELATION_ID): MilitaryExpertRawGenerationResponse {
+export function baseRawResponse(
+  responseText: string,
+  correlationId: string = FIXTURE_CORRELATION_ID,
+  overrides: Partial<MilitaryExpertRawGenerationResponse> = {},
+): MilitaryExpertRawGenerationResponse {
   return {
     correlationId,
     responseText,
     finishStatus: "complete",
     capturedAt: "2026-07-24T00:00:00.000Z",
     provenance: { source: "synthetic" },
+    ...overrides,
   };
 }
 

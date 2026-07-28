@@ -36,6 +36,7 @@ const REJECT_CODES = new Set<MilitaryExpertParseFailureCode>([
   "correlation_mismatch",
   "unexpected_parse_failure",
   "trailing_content",
+  "provider_output_truncated",
 ]);
 
 /** Classify whether a raw response can be cleaned deterministically or needs provider repair. */

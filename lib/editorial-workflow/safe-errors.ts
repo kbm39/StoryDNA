@@ -27,6 +27,8 @@ export function safeErrorForCode(code: string, fallback?: string): string {
       return "We could not verify the manuscript word count for this review. Please re-upload or contact support.";
     case "TRIGGER_UNAVAILABLE":
       return "Publishing Workflow is temporarily unavailable. Please try again later.";
+    case "PROVIDER_OUTPUT_TRUNCATED":
+      return "The Military Expert review ran out of output space before finishing. Try again after reducing scope or contact support.";
     case "PIPELINE_FAILED":
       return sanitizedFallback ??
         "The Literary Agent review could not be completed. You can retry when ready.";

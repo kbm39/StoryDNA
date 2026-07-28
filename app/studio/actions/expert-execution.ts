@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  cancelPublishingWorkflow,
-  getActivePublishingWorkflow,
   isPublishingWorkflowAvailable,
   startLiteraryAgentPublishingWorkflow,
 } from "@/app/actions/editorial-workflows.ts";
+import { cancelEditorialWorkflow } from "@/lib/editorial-workflow/cancel-workflow.ts";
+import { validateStudioWorkflowCancellation } from "@/lib/editorial-workflow/cancel-workflow-policy.ts";
+import { getWorkflowById } from "@/lib/editorial-workflow/workflow-store.ts";
 import { getManuscriptReviewContext } from "@/lib/reviews.ts";
 import { requireStudioAccess } from "@/lib/studio/access.ts";
 import {
@@ -185,11 +186,15 @@ export async function cancelStudioReview(input: {
   workflowId: string;
 }): Promise<{ ok: boolean; error?: string }> {
   return guarded(input.manuscriptId, async () => {
-    const active = await getActivePublishingWorkflow(input.manuscriptId);
-    if (!active || active.id !== input.workflowId) {
-      return { ok: false, error: "No active review to cancel." };
-    }
-    const result = await cancelPublishingWorkflow(input.workflowId);
+    const workflow = await getWorkflowById(input.workflowId);
+    const validation = validateStudioWorkflowCancellation({
+      workflow,
+      workflowId: input.workflowId,
+      manuscriptId: input.manuscriptId,
+    });
+    if (!validation.ok) return validation;
+
+    const result = await cancelEditorialWorkflow(input.workflowId);
     if (result.ok) revalidateStudioExpertRoutes(input.manuscriptId);
     return result;
   });

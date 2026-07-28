@@ -3,6 +3,25 @@ import "server-only";
 const LITERARY_AGENT_TASK_ID = "literary-agent-review";
 const MILITARY_EXPERT_TASK_ID = "military-expert-review";
 
+export async function cancelTriggerRunIfPresent(
+  triggerRunId: string | null | undefined,
+): Promise<{ attempted: boolean; ok: boolean }> {
+  if (!triggerRunId?.trim()) {
+    return { attempted: false, ok: true };
+  }
+  if (!process.env.TRIGGER_SECRET_KEY) {
+    return { attempted: false, ok: true };
+  }
+
+  try {
+    const { runs } = await import("@trigger.dev/sdk/v3");
+    await runs.cancel(triggerRunId);
+    return { attempted: true, ok: true };
+  } catch {
+    return { attempted: true, ok: false };
+  }
+}
+
 export async function triggerLiteraryAgentReviewTask(
   workflowId: string,
 ): Promise<{ ok: true; runId: string } | { ok: false; error: string }> {

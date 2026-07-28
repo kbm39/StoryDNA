@@ -7,7 +7,7 @@ import {
   startLiteraryAgentWorkflow,
   getWorkflowForClient,
 } from "@/lib/editorial-workflow/start-literary-agent-workflow";
-import { cancelLiteraryAgentWorkflow } from "@/lib/editorial-workflow/cancel-workflow";
+import { cancelEditorialWorkflow } from "@/lib/editorial-workflow/cancel-workflow";
 import { getActiveWorkflowForManuscript } from "@/lib/editorial-workflow/workflow-store";
 
 export type WorkflowClientView = NonNullable<Awaited<ReturnType<typeof getWorkflowForClient>>>;
@@ -70,7 +70,7 @@ export async function cancelPublishingWorkflow(workflowId: string): Promise<{
   ok: boolean;
   error?: string;
 }> {
-  const result = await cancelLiteraryAgentWorkflow(workflowId);
+  const result = await cancelEditorialWorkflow(workflowId);
   if (result.ok) {
     const row = await getWorkflowForClient(workflowId);
     if (row?.manuscriptId) revalidatePath(`/manuscripts/${row.manuscriptId}`);

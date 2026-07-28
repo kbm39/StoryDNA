@@ -8,14 +8,14 @@ import { WORKFLOW_TYPES } from "./types.ts";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const MIGRATION_PATH = join(
   ROOT,
-  "supabase/migrations/0024_studio_military_expert_workflow.sql",
+  "supabase/migrations/0026_studio_military_expert_workflow.sql",
 );
 const MIGRATION_0023_PATH = join(ROOT, "supabase/migrations/0023_editorial_workflows.sql");
 
 const migrationSql = readFileSync(MIGRATION_PATH, "utf8");
 const migration0023Sql = readFileSync(MIGRATION_0023_PATH, "utf8");
 
-describe("migration 0024 studio military expert workflow", () => {
+describe("migration 0026 studio military expert workflow", () => {
   it("1. drops the legacy constraint name from migration 0023", () => {
     assert.match(
       migrationSql,

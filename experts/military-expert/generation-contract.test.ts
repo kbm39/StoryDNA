@@ -46,6 +46,8 @@ import {
   FIXTURE_PROVIDER_REPAIR_REQUIRED,
   FIXTURE_RESPONSE_TOO_LARGE,
   FIXTURE_TRAILING_PROSE,
+  FIXTURE_TRAILING_CLOSING_FENCE,
+  FIXTURE_BARE_JSON_TRAILING_FENCE,
   FIXTURE_UNSUPPORTED_CATEGORY,
   FIXTURE_UNSUPPORTED_ENUM,
   FIXTURE_UNSAFE_OPERATIONAL_DETAIL,
@@ -156,6 +158,20 @@ describe("Military Expert PR 2 generation contract", () => {
 
   it("10. parser accepts approved fenced JSON", () => {
     const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_VALID_FENCED_JSON, {
+      expectedCorrelationId: FIXTURE_CORRELATION_ID,
+    });
+    assert.equal(parsed.ok, true);
+  });
+
+  it("10b. parser accepts fenced JSON with trailing closing fence only", () => {
+    const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_TRAILING_CLOSING_FENCE, {
+      expectedCorrelationId: FIXTURE_CORRELATION_ID,
+    });
+    assert.equal(parsed.ok, true);
+  });
+
+  it("10c. parser accepts bare JSON with trailing closing fence only", () => {
+    const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_BARE_JSON_TRAILING_FENCE, {
       expectedCorrelationId: FIXTURE_CORRELATION_ID,
     });
     assert.equal(parsed.ok, true);

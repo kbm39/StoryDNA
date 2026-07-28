@@ -3,6 +3,10 @@
  */
 
 import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
+import {
+  extractStrictModelJsonObject,
+  isAllowedModelJsonTrailing,
+} from "./model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums, type MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
 import {
   coerceMilitaryExpertGenerationPayload,
@@ -61,31 +65,6 @@ function measureUtf8Bytes(text: string): number {
   return new TextEncoder().encode(text).length;
 }
 
-function extractJsonCandidate(raw: string): {
-  jsonText: string;
-  trailingContent: string;
-  multiplePayloads: boolean;
-} {
-  let text = raw.replace(/\r\n/g, "\n").trim();
-  const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/);
-  if (fenceMatch) {
-    text = fenceMatch[1].trim();
-  }
-
-  const multiplePayloads = /\}\s*\{/.test(text);
-
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) {
-    return { jsonText: text, trailingContent: "", multiplePayloads };
-  }
-
-  const jsonText = text.slice(start, end + 1);
-  const trailingContent = text.slice(end + 1).trim();
-
-  return { jsonText, trailingContent, multiplePayloads };
-}
-
 /** Parse a provider-independent raw response envelope into a typed generation payload. */
 export function parseMilitaryExpertGenerationResponse(
   raw: MilitaryExpertRawGenerationResponse,
@@ -111,7 +90,8 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    const { jsonText, trailingContent, multiplePayloads } = extractJsonCandidate(raw.responseText);
+    const extraction = extractStrictModelJsonObject(raw.responseText);
+    const { jsonText, trailingContent, multiplePayloads, trailingCategory } = extraction;
     if (multiplePayloads) {
       return {
         ok: false,
@@ -120,7 +100,7 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    if (trailingContent.length > 0) {
+    if (trailingContent.length > 0 && !isAllowedModelJsonTrailing(trailingCategory)) {
       return {
         ok: false,
         code: "trailing_content",
@@ -171,10 +151,5 @@ export function parseMilitaryExpertGenerationResponse(
 
 /** Deterministic cleanup for approved outer formatting only. */
 export function applyDeterministicMilitaryExpertCleanup(rawText: string): string {
-  let text = rawText.replace(/\r\n/g, "\n").trim();
-  const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/);
-  if (fenceMatch) {
-    text = fenceMatch[1].trim();
-  }
-  return text.trim();
+  return extractStrictModelJsonObject(rawText).jsonText.trim();
 }

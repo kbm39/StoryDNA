@@ -120,6 +120,14 @@ export const FIXTURE_VALID_FENCED_JSON = baseRawResponse(
   "```json\n" + buildValidGenerationJson() + "\n```",
 );
 
+export const FIXTURE_TRAILING_CLOSING_FENCE = baseRawResponse(
+  "```json\n" + buildValidGenerationJson() + "\n```\n",
+);
+
+export const FIXTURE_BARE_JSON_TRAILING_FENCE = baseRawResponse(
+  buildValidGenerationJson() + "\n```",
+);
+
 export const FIXTURE_MALFORMED_JSON = baseRawResponse("{summary: not valid json");
 
 export const FIXTURE_MULTIPLE_PAYLOADS = baseRawResponse(

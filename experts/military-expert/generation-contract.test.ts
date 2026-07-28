@@ -21,6 +21,7 @@ import {
   buildMilitaryExpertReviewPrompt,
   buildMilitaryExpertSystemPrompt,
 } from "./prompts.ts";
+import { canonicalJsonString, MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
 import { parseMilitaryExpertGenerationResponse } from "./parsing.ts";
 import { classifyMilitaryExpertRepairNeed } from "./repair-classification.ts";
 import { normalizeMilitaryExpertReview } from "./normalization.ts";
@@ -92,6 +93,11 @@ function requestInput() {
     canonicalWordCount: 24,
     manuscriptHash: FIXTURE_MANUSCRIPT_HASH,
   };
+}
+
+function buildLargeManuscriptWords(wordCount: number): string {
+  const chunk = "operational ";
+  return chunk.repeat(wordCount).trim();
 }
 
 describe("Military Expert PR 2 generation contract", () => {
@@ -492,8 +498,85 @@ describe("Military Expert PR 2 generation contract", () => {
     );
     const request = buildMilitaryExpertGenerationRequest(requestInput());
     assert.ok(hashMilitaryExpertGenerationRequest(request));
-    assert.ok(hashMilitaryExpertReviewPrompt(request.reviewPrompt));
+    assert.ok(hashMilitaryExpertReviewPrompt(request.reviewPrompt, request.manuscriptHash));
     const review = buildValidMilitaryExpertReview();
     assert.ok(hashMilitaryExpertParsedReview(review));
+  });
+
+  it("61. large manuscript raw review prompt exceeds canonical byte limit", () => {
+    const wordCount = 120_000;
+    const largeText = buildLargeManuscriptWords(wordCount);
+    const reviewPrompt = buildMilitaryExpertReviewPrompt({
+      def: MILITARY_EXPERT,
+      ...requestInput(),
+      manuscriptText: largeText,
+      canonicalWordCount: wordCount,
+    });
+    assert.throws(
+      () =>
+        canonicalJsonString({
+          kind: "review_prompt",
+          text: reviewPrompt,
+        }),
+      /output_size_exceeded/,
+    );
+    assert.ok(reviewPrompt.length > MAX_CANONICAL_OUTPUT_BYTES);
+  });
+
+  it("62. large manuscript review prompt hash succeeds deterministically", () => {
+    const wordCount = 120_000;
+    const largeText = buildLargeManuscriptWords(wordCount);
+    const reviewPrompt = buildMilitaryExpertReviewPrompt({
+      def: MILITARY_EXPERT,
+      ...requestInput(),
+      manuscriptText: largeText,
+      canonicalWordCount: wordCount,
+    });
+    const hashA = hashMilitaryExpertReviewPrompt(reviewPrompt, FIXTURE_MANUSCRIPT_HASH);
+    const hashB = hashMilitaryExpertReviewPrompt(reviewPrompt, FIXTURE_MANUSCRIPT_HASH);
+    assert.equal(hashA, hashB);
+    assert.match(hashA, /^[a-f0-9]{64}$/);
+  });
+
+  it("63. manuscript content identity changes review prompt hash", () => {
+    const wordCount = 120_000;
+    const reviewPrompt = buildMilitaryExpertReviewPrompt({
+      def: MILITARY_EXPERT,
+      ...requestInput(),
+      manuscriptText: buildLargeManuscriptWords(wordCount),
+      canonicalWordCount: wordCount,
+    });
+    const hashA = hashMilitaryExpertReviewPrompt(reviewPrompt, FIXTURE_MANUSCRIPT_HASH);
+    const hashB = hashMilitaryExpertReviewPrompt(reviewPrompt, "different-manuscript-hash");
+    assert.notEqual(hashA, hashB);
+  });
+
+  it("64. large manuscript generation request hash succeeds", () => {
+    const wordCount = 120_000;
+    const request = buildMilitaryExpertGenerationRequest({
+      ...requestInput(),
+      manuscriptText: buildLargeManuscriptWords(wordCount),
+      canonicalWordCount: wordCount,
+    });
+    const hashA = hashMilitaryExpertGenerationRequest(request);
+    const hashB = hashMilitaryExpertGenerationRequest(request);
+    assert.equal(hashA, hashB);
+  });
+
+  it("65. large manuscript contract run succeeds without provider call", async () => {
+    const wordCount = 120_000;
+    const input = {
+      ...buildValidGenerationContractInput(),
+      manuscriptText: buildLargeManuscriptWords(wordCount),
+      canonicalWordCount: wordCount,
+    };
+    const result = await runMilitaryExpertGenerationContract(input, {
+      bypassFeatureFlag: true,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "success");
+    assert.equal(result.modelCalls, 0);
+    assert.ok(result.reviewPromptHash);
+    assert.ok(result.requestHash);
   });
 });

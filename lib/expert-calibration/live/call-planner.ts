@@ -108,7 +108,10 @@ export function buildLiveCalibrationCallPlan(input: BuildCallPlanInput): LiveCal
 
       const requestHash = hashMilitaryExpertGenerationRequest(request);
       const systemPromptHash = hashMilitaryExpertSystemPrompt(request.systemPrompt);
-      const reviewPromptHash = hashMilitaryExpertReviewPrompt(request.reviewPrompt);
+      const reviewPromptHash = hashMilitaryExpertReviewPrompt(
+        request.reviewPrompt,
+        request.manuscriptHash,
+      );
       const { inputTokens, outputTokens } = estimateTokensFromRequest(
         request.systemPrompt,
         request.reviewPrompt,

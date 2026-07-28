@@ -26,6 +26,18 @@ const CATEGORY_DISPLAY: Record<(typeof MILITARY_EXPERT_CATEGORIES)[number], stri
   overall_operational_realism: "Overall Operational Realism",
 };
 
+export const MILITARY_EXPERT_MANUSCRIPT_SECTION_HEADER =
+  "MANUSCRIPT TEXT — review only this supplied scope; do not invent missing passages:" as const;
+
+/** Review prompt prefix through the manuscript header — excludes injected manuscript text. */
+export function militaryExpertReviewPromptShell(reviewPrompt: string): string {
+  const markerIndex = reviewPrompt.indexOf(MILITARY_EXPERT_MANUSCRIPT_SECTION_HEADER);
+  if (markerIndex < 0) {
+    return reviewPrompt;
+  }
+  return reviewPrompt.slice(0, markerIndex + MILITARY_EXPERT_MANUSCRIPT_SECTION_HEADER.length);
+}
+
 export interface MilitaryExpertReviewPromptInput {
   def: ReviewerDefinition;
   intent?: AuthorIntent | null;
@@ -172,7 +184,7 @@ export function buildMilitaryExpertReviewPrompt(input: MilitaryExpertReviewPromp
     intentBlock,
     grounding,
     "",
-    "MANUSCRIPT TEXT — review only this supplied scope; do not invent missing passages:",
+    MILITARY_EXPERT_MANUSCRIPT_SECTION_HEADER,
     input.manuscriptText.trim(),
   ].join("\n");
 }

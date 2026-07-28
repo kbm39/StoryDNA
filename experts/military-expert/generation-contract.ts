@@ -28,6 +28,7 @@ import {
 import {
   buildMilitaryExpertReviewPrompt,
   buildMilitaryExpertSystemPrompt,
+  militaryExpertReviewPromptShell,
 } from "./prompts.ts";
 import { parseMilitaryExpertGenerationResponse } from "./parsing.ts";
 import { classifyMilitaryExpertRepairNeed } from "./repair-classification.ts";
@@ -79,8 +80,15 @@ export function hashMilitaryExpertSystemPrompt(systemPrompt: string): string {
   return hashCanonicalOutput({ kind: "system_prompt", text: normalizeDeterministicText(systemPrompt) });
 }
 
-export function hashMilitaryExpertReviewPrompt(reviewPrompt: string): string {
-  return hashCanonicalOutput({ kind: "review_prompt", text: normalizeDeterministicText(reviewPrompt) });
+export function hashMilitaryExpertReviewPrompt(
+  reviewPrompt: string,
+  manuscriptHash: string,
+): string {
+  return hashCanonicalOutput({
+    kind: "review_prompt",
+    text: normalizeDeterministicText(militaryExpertReviewPromptShell(reviewPrompt)),
+    manuscriptContentHash: manuscriptHash,
+  });
 }
 
 export function hashMilitaryExpertGenerationRequest(
@@ -96,7 +104,7 @@ export function hashMilitaryExpertGenerationRequest(
     canonicalWordCount: request.canonicalWordCount,
     manuscriptHash: request.manuscriptHash,
     systemPromptHash: hashMilitaryExpertSystemPrompt(request.systemPrompt),
-    reviewPromptHash: hashMilitaryExpertReviewPrompt(request.reviewPrompt),
+    reviewPromptHash: hashMilitaryExpertReviewPrompt(request.reviewPrompt, request.manuscriptHash),
     responseFormat: request.responseFormat,
     temperature: request.temperature,
     maxOutputTokens: request.maxOutputTokens,
@@ -285,7 +293,10 @@ export async function runMilitaryExpertGenerationContract(
   const request = buildMilitaryExpertGenerationRequest(input);
   const requestHash = hashMilitaryExpertGenerationRequest(request);
   const systemPromptHash = hashMilitaryExpertSystemPrompt(request.systemPrompt);
-  const reviewPromptHash = hashMilitaryExpertReviewPrompt(request.reviewPrompt);
+  const reviewPromptHash = hashMilitaryExpertReviewPrompt(
+    request.reviewPrompt,
+    request.manuscriptHash,
+  );
 
   if (JSON.stringify(input) !== JSON.stringify(inputSnapshot)) {
     return {

@@ -268,7 +268,8 @@ describe("Military Expert patch-only contrary-evidence repair", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
     assert.equal(result.contraryEvidenceRepair?.attempted, true);
   });
 

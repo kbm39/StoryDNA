@@ -47,6 +47,8 @@ export function safeErrorForCode(code: string, fallback?: string): string {
       return "The Military Expert response omitted the required uncertainty note for empty contrary evidence. Please retry the review.";
     case "CONTRARY_EVIDENCE_REPAIR_FAILED":
       return "The Military Expert response could not be repaired to include required contrary-evidence fields. Please retry the review.";
+    case "TOO_MANY_UNRESOLVED_FINDINGS":
+      return "The Military Expert report had too many unresolved confidence findings to release safely. Please retry the review or contact support.";
     case "PIPELINE_FAILED":
       return sanitizedFallback ??
         "The Literary Agent review could not be completed. You can retry when ready.";

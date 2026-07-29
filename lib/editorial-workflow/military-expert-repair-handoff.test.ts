@@ -57,7 +57,7 @@ describe("Military Expert repair response handoff", () => {
     assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "ok");
   });
 
-  it("2. repairAlreadyAttempted true without repairResponse blocks second attempt", async () => {
+  it("2. repairAlreadyAttempted true without repairResponse uses provisional release when eligible", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -67,9 +67,8 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
   });
 
   it("3. valid repaired report passes contract", async () => {
@@ -86,7 +85,7 @@ describe("Military Expert repair response handoff", () => {
     assert.equal(result.generationStatus, "success");
   });
 
-  it("4. invalid repaired report fails terminally", async () => {
+  it("4. invalid repaired report uses provisional release when eligible", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -95,9 +94,9 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.succeeded, false);
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
+    assert.equal(result.provisionalRelease?.used, true);
   });
 
   it("5. correlation id -repair suffix is normalized and accepted", async () => {
@@ -155,7 +154,7 @@ describe("Military Expert repair response handoff", () => {
     );
   });
 
-  it("7. repair truncation, malformed JSON, multiple payloads, and unsafe trailing are rejected", async () => {
+  it("7. repair truncation, malformed JSON, multiple payloads, and unsafe trailing reject repair but may provisionally release primary", async () => {
     const truncated = baseRawResponse(buildValidGenerationJson().slice(0, -20), FIXTURE_CORRELATION_ID, {
       finishStatus: "truncated",
       outputTokens: 4_000,
@@ -169,7 +168,8 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(truncatedResult.ok, false);
+    assert.equal(truncatedResult.ok, true);
+    assert.equal(truncatedResult.generationStatus, "provisional_success");
     assert.equal(
       truncatedResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result,
       "provider_output_truncated",
@@ -184,7 +184,8 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(malformedResult.ok, false);
+    assert.equal(malformedResult.ok, true);
+    assert.equal(malformedResult.generationStatus, "provisional_success");
     assert.equal(malformedResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "patch_malformed_json");
 
     const multiplePayloads = baseRawResponse(
@@ -201,7 +202,8 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(multipleResult.ok, false);
+    assert.equal(multipleResult.ok, true);
+    assert.equal(multipleResult.generationStatus, "provisional_success");
     assert.equal(multipleResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "patch_multiple_payloads");
 
     const unsafeTrailing = baseRawResponse(
@@ -216,7 +218,8 @@ describe("Military Expert repair response handoff", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(trailingResult.ok, false);
+    assert.equal(trailingResult.ok, true);
+    assert.equal(trailingResult.generationStatus, "provisional_success");
     assert.ok(
       trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "patch_trailing_content" ||
         trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "patch_multiple_payloads",

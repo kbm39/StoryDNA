@@ -61,7 +61,12 @@ export interface MilitaryExpertRawGenerationResponse {
   };
 }
 
-export type MilitaryExpertGenerationStatus = "success" | "parse_failed" | "validation_failed" | "contract_rejected";
+export type MilitaryExpertGenerationStatus =
+  | "success"
+  | "provisional_success"
+  | "parse_failed"
+  | "validation_failed"
+  | "contract_rejected";
 
 export interface MilitaryExpertGenerationContractInput {
   correlationId: string;
@@ -130,5 +135,11 @@ export interface MilitaryExpertGenerationContractResult {
   };
   trailingCommentaryUnsafe?: boolean;
   trailingMarkdownSummaryUnsafe?: boolean;
+  provisionalRelease?: {
+    used: boolean;
+    unresolvedCount: number;
+    unresolvedFindingIndexes: readonly number[];
+    eventPayload: Record<string, unknown>;
+  };
   review?: MilitaryExpertReview;
 }

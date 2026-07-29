@@ -162,7 +162,7 @@ describe("Military Expert contrary-evidence schema repair", () => {
     assert.doesNotMatch(prompt.userPrompt, /"category_assessments"/);
   });
 
-  it("9. second repair attempt is prohibited without a repair response", async () => {
+  it("9. second repair attempt without repair response uses provisional release when eligible", async () => {
     const blocked = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -171,12 +171,11 @@ describe("Military Expert contrary-evidence schema repair", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(blocked.ok, false);
-    assert.equal(blocked.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(blocked.contraryEvidenceRepair?.eventPayload?.repair_parse_result, undefined);
+    assert.equal(blocked.ok, true);
+    assert.equal(blocked.generationStatus, "provisional_success");
   });
 
-  it("9b. repairAlreadyAttempted with repairResponse still evaluates failed repair", async () => {
+  it("9b. repairAlreadyAttempted with failed repair uses provisional release when eligible", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -186,12 +185,11 @@ describe("Military Expert contrary-evidence schema repair", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_failure_code, "patch_missing_repair");
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
   });
 
-  it("10. failed repair remains terminal and fail-closed", async () => {
+  it("10. failed repair with single unresolved uses provisional release", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -200,9 +198,9 @@ describe("Military Expert contrary-evidence schema repair", () => {
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.succeeded, false);
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
+    assert.equal(result.provisionalRelease?.unresolvedCount, 1);
   });
 
   it("11. truncation path does not invoke repair", () => {

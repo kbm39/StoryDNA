@@ -448,6 +448,56 @@ export const FIXTURE_DETERMINISTIC_CLEANUP_ONLY = baseRawResponse(
 
 export const FIXTURE_PROVIDER_REPAIR_REQUIRED = FIXTURE_MALFORMED_JSON;
 
+export function buildUnresolvedNegativeFinding(args: {
+  findingId: string;
+  title: string;
+  missingFields?: ("contrary_evidence" | "uncertainty_note")[];
+}): Record<string, unknown> {
+  const base = {
+    ...buildValidGenerationPayload().findings[1],
+    finding_id: args.findingId,
+    title: args.title,
+    observation: `${args.title} observation with supporting context.`,
+    manuscript_evidence: [
+      {
+        excerpt: "Corporal Hale checked the radio twice before the convoy moved out.",
+        locator: "Chapter One",
+      },
+    ],
+  };
+  const finding = { ...base } as Record<string, unknown>;
+  const missing = args.missingFields ?? ["contrary_evidence", "uncertainty_note"];
+  if (missing.includes("contrary_evidence")) {
+    delete finding.contrary_evidence;
+  }
+  if (missing.includes("uncertainty_note")) {
+    delete finding.uncertainty_note;
+  }
+  return finding;
+}
+
+export function buildProvisionalUnresolvedPayload(unresolvedCount: number): MilitaryExpertGenerationPayload {
+  const validatedFinding = buildValidGenerationPayload().findings[0];
+  const unresolvedFindings = Array.from({ length: unresolvedCount }, (_, index) =>
+    buildUnresolvedNegativeFinding({
+      findingId: `unresolved-${index + 1}`,
+      title: `Unresolved concern ${index + 1}`,
+    }),
+  );
+  return {
+    ...buildValidGenerationPayload(),
+    findings: [validatedFinding, ...unresolvedFindings],
+  };
+}
+
+export function buildProvisionalUnresolvedRaw(unresolvedCount: number): MilitaryExpertRawGenerationResponse {
+  return baseRawResponse(JSON.stringify(buildProvisionalUnresolvedPayload(unresolvedCount)));
+}
+
+export const FIXTURE_ONE_UNRESOLVED = buildProvisionalUnresolvedRaw(1);
+export const FIXTURE_NINE_UNRESOLVED = buildProvisionalUnresolvedRaw(9);
+export const FIXTURE_TEN_UNRESOLVED = buildProvisionalUnresolvedRaw(10);
+
 export function buildValidGenerationContractInput(): MilitaryExpertGenerationContractInput {
   return {
     correlationId: FIXTURE_CORRELATION_ID,

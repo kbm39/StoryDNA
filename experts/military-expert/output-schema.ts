@@ -74,6 +74,11 @@ export interface MilitaryExpertSchemaValidationResult {
   errors: string[];
 }
 
+export interface MilitaryExpertSchemaValidationOptions {
+  /** Finding indexes permitted to omit contrary_evidence / uncertainty_note for provisional release. */
+  provisionalFindingIndexes?: readonly number[];
+}
+
 const LETTER_GRADE_PATTERN = /\b(?:grade\s*[A-F][+-]?|[A-F]\s*grade|letter\s*grade)\b/i;
 
 const SAFETY_STEP_PATTERN =
@@ -311,7 +316,12 @@ export function validateMilitaryExpertConclusionBalance(
   }
 }
 
-function parseFinding(raw: unknown, index: number, errors: string[]): MilitaryExpertFinding | null {
+function parseFinding(
+  raw: unknown,
+  index: number,
+  errors: string[],
+  options?: MilitaryExpertSchemaValidationOptions,
+): MilitaryExpertFinding | null {
   if (!raw || typeof raw !== "object") {
     errors.push(`findings[${index}]: must be an object`);
     return null;
@@ -397,22 +407,25 @@ function parseFinding(raw: unknown, index: number, errors: string[]): MilitaryEx
     if (!str(record.preservation_note)) {
       errors.push(`${prefix}: negative finding requires preservation_note`);
     }
-    if (!("contrary_evidence" in record)) {
-      errors.push(
-        `${prefix}.contrary_evidence: field is required on negative findings (use [] when none exists)`,
-      );
-    } else if (record.contrary_evidence !== undefined && !Array.isArray(record.contrary_evidence)) {
-      errors.push(`${prefix}.contrary_evidence: must be an array`);
-    }
-    if (
-      !hasContraryEvidenceHandling({
-        contrary_evidence: contraryEvidence,
-        uncertainty_note: str(record.uncertainty_note) || undefined,
-      })
-    ) {
-      errors.push(
-        `${prefix}: negative finding requires contrary-evidence handling (valid contrary_evidence objects or [] with explicit uncertainty_note)`,
-      );
+    const provisionalGapAllowed = options?.provisionalFindingIndexes?.includes(index) === true;
+    if (!provisionalGapAllowed) {
+      if (!("contrary_evidence" in record)) {
+        errors.push(
+          `${prefix}.contrary_evidence: field is required on negative findings (use [] when none exists)`,
+        );
+      } else if (record.contrary_evidence !== undefined && !Array.isArray(record.contrary_evidence)) {
+        errors.push(`${prefix}.contrary_evidence: must be an array`);
+      }
+      if (
+        !hasContraryEvidenceHandling({
+          contrary_evidence: contraryEvidence,
+          uncertainty_note: str(record.uncertainty_note) || undefined,
+        })
+      ) {
+        errors.push(
+          `${prefix}: negative finding requires contrary-evidence handling (valid contrary_evidence objects or [] with explicit uncertainty_note)`,
+        );
+      }
     }
   }
 
@@ -521,6 +534,7 @@ function parseCategoryAssessment(
 /** Validate parsed JSON root against the Military Expert output schema. */
 export function validateMilitaryExpertGenerationPayload(
   parsed: unknown,
+  options?: MilitaryExpertSchemaValidationOptions,
 ): MilitaryExpertSchemaValidationResult {
   const errors: string[] = [];
 
@@ -561,7 +575,7 @@ export function validateMilitaryExpertGenerationPayload(
 
   const findings = Array.isArray(root.findings)
     ? root.findings
-        .map((item, index) => parseFinding(item, index, errors))
+        .map((item, index) => parseFinding(item, index, errors, options))
         .filter((item): item is MilitaryExpertFinding => item != null)
     : [];
   if (!Array.isArray(root.findings)) {
@@ -642,8 +656,9 @@ export function validateMilitaryExpertGenerationPayload(
 /** Convert a validated schema root into a typed generation payload. */
 export function coerceMilitaryExpertGenerationPayload(
   parsed: unknown,
+  options?: MilitaryExpertSchemaValidationOptions,
 ): MilitaryExpertGenerationPayload | null {
-  const validation = validateMilitaryExpertGenerationPayload(parsed);
+  const validation = validateMilitaryExpertGenerationPayload(parsed, options);
   if (!validation.ok || !parsed || typeof parsed !== "object") return null;
   const root = parsed as Record<string, unknown>;
   const overall = root.overall_realism_assessment as Record<string, unknown>;
@@ -652,7 +667,7 @@ export function coerceMilitaryExpertGenerationPayload(
     summary: str(root.summary),
     strengths: strArray(root.strengths),
     findings: (Array.isArray(root.findings) ? root.findings : [])
-      .map((item, index) => parseFinding(item, index, []))
+      .map((item, index) => parseFinding(item, index, [], options))
       .filter((item): item is MilitaryExpertFinding => item != null),
     category_assessments: (Array.isArray(root.category_assessments)
       ? root.category_assessments

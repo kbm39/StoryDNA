@@ -76,12 +76,22 @@ export type MilitaryExpertCategoryAssessmentStatus =
 
 export const MILITARY_EXPERT_REVIEW_STATUSES = [
   "complete",
+  "completed_with_author_review_required",
   "partial",
   "insufficient_evidence",
   "aborted",
 ] as const;
 
 export type MilitaryExpertReviewStatus = (typeof MILITARY_EXPERT_REVIEW_STATUSES)[number];
+
+export const MILITARY_EXPERT_FINDING_STATUSES = [
+  "validated",
+  "author_review_required",
+] as const;
+
+export type MilitaryExpertFindingStatus = (typeof MILITARY_EXPERT_FINDING_STATUSES)[number];
+
+export type MilitaryExpertUnresolvedConfidenceField = "contrary_evidence" | "uncertainty_note";
 
 export const MILITARY_EXPERT_REVIEW_SCOPES = [
   "full_manuscript",
@@ -152,6 +162,8 @@ export interface MilitaryExpertFinding {
   score_impact?: number;
   uncertainty_note?: string;
   source_requirements?: string;
+  /** Set when contrary-evidence confidence check could not be completed. */
+  finding_status?: MilitaryExpertFindingStatus;
 }
 
 export interface MilitaryExpertCategoryAssessment {

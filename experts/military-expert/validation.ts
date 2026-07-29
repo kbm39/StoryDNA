@@ -152,6 +152,102 @@ function validateFinding(finding: MilitaryExpertFinding, index: number, errors: 
   }
 }
 
+function validateFindingContraryEvidence(
+  finding: MilitaryExpertFinding,
+  index: number,
+  errors: string[],
+): void {
+  const prefix = `findings[${index}]`;
+  if (!isNegativeFinding(finding)) return;
+
+  if (!("contrary_evidence" in finding) && finding.contrary_evidence === undefined) {
+    if (
+      !finding.uncertainty_note?.trim() ||
+      !/(?:no contrary evidence|none was found|contrary evidence (?:was )?not found|did not find contrary)/i.test(
+        finding.uncertainty_note,
+      )
+    ) {
+      errors.push(
+        `${prefix}: negative finding requires contrary-evidence handling (valid contrary_evidence objects or [] with explicit uncertainty_note)`,
+      );
+    }
+  } else if (
+    Array.isArray(finding.contrary_evidence) &&
+    finding.contrary_evidence.length === 0 &&
+    (!finding.uncertainty_note?.trim() ||
+      !/(?:no contrary evidence|none was found|contrary evidence (?:was )?not found|did not find contrary)/i.test(
+        finding.uncertainty_note,
+      ))
+  ) {
+    errors.push(
+      `${prefix}: negative finding requires contrary-evidence handling (valid contrary_evidence objects or [] with explicit uncertainty_note)`,
+    );
+  }
+}
+
+/** Validate a review that includes provisional author_review_required findings. */
+export function validateMilitaryExpertReviewForProvisional(
+  review: MilitaryExpertReview,
+  provisionalFindingIndexes: readonly number[],
+  options?: { expectedDefinitionHash?: string },
+): MilitaryExpertValidationResult {
+  const provisionalSet = new Set(provisionalFindingIndexes);
+  const errors: string[] = [];
+
+  if (review.expert_key !== MILITARY_EXPERT_KEY) {
+    errors.push(`expert_key must be ${MILITARY_EXPERT_KEY}`);
+  }
+
+  if (review.expert_version !== MILITARY_EXPERT_VERSION) {
+    errors.push(`expert_version must be ${MILITARY_EXPERT_VERSION}`);
+  }
+
+  if (options?.expectedDefinitionHash && review.definition_hash !== options.expectedDefinitionHash) {
+    errors.push("definition_hash does not match expected Military Expert runtime hash");
+  }
+
+  if (review.author_challenge_supported !== true) {
+    errors.push("author_challenge_supported must be true");
+  }
+
+  if (review.review_status !== "completed_with_author_review_required") {
+    errors.push("review_status must be completed_with_author_review_required for provisional release");
+  }
+
+  if (!review.next_step?.trim()) {
+    errors.push("next_step is required");
+  }
+
+  if (!review.summary?.trim()) {
+    errors.push("summary is required");
+  } else {
+    validateMilitaryExpertSummaryBalance(review.summary, review.findings ?? [], errors, {
+      strengths: review.strengths,
+      conclusion: review.overall_realism_assessment.conclusion,
+    });
+  }
+
+  if (!Array.isArray(review.strengths) || review.strengths.length === 0) {
+    errors.push("strengths must be a non-empty array");
+  }
+
+  for (const [index, finding] of review.findings.entries()) {
+    validateFinding(finding, index, errors);
+    if (!provisionalSet.has(index)) {
+      validateFindingContraryEvidence(finding, index, errors);
+      if (finding.finding_status && finding.finding_status !== "validated") {
+        errors.push(`findings[${index}]: finding_status must be validated or omitted`);
+      }
+    } else {
+      if (finding.finding_status !== "author_review_required") {
+        errors.push(`findings[${index}]: finding_status must be author_review_required`);
+      }
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 export function validateMilitaryExpertReview(
   review: MilitaryExpertReview,
   options?: { expectedDefinitionHash?: string },
@@ -200,6 +296,7 @@ export function validateMilitaryExpertReview(
 
   for (const [index, finding] of review.findings.entries()) {
     validateFinding(finding, index, errors);
+    validateFindingContraryEvidence(finding, index, errors);
   }
 
   return { ok: errors.length === 0, errors };

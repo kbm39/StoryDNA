@@ -119,7 +119,7 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
     assert.doesNotThrow(() => violations.map((item) => item.findingIndex));
   });
 
-  it("5. one repair attempt limit blocks without repair response", async () => {
+  it("5. one repair attempt limit uses provisional release when repair already attempted", async () => {
     const blocked = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -128,12 +128,11 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(blocked.ok, false);
-    assert.equal(blocked.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(blocked.contraryEvidenceRepair?.eventPayload?.repair_parse_result, undefined);
+    assert.equal(blocked.ok, true);
+    assert.equal(blocked.generationStatus, "provisional_success");
   });
 
-  it("5b. repairAlreadyAttempted with repairResponse evaluates failed repair", async () => {
+  it("5b. repairAlreadyAttempted with failed repair uses provisional release when eligible", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -143,9 +142,8 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
       },
       { bypassFeatureFlag: true },
     );
-    assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_failure_code, "patch_missing_repair");
+    assert.equal(result.ok, true);
+    assert.equal(result.generationStatus, "provisional_success");
   });
 
   it("6. truncation path does not invoke repair", () => {

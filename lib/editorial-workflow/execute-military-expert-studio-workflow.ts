@@ -42,6 +42,7 @@ import { safeErrorForCode } from "./safe-errors.ts";
 import { mapMilitaryExpertParseFailureToWorkflowErrorCode } from "@/experts/military-expert/parse-workflow-errors.ts";
 import type { ModelJsonTrailingCategory } from "@/experts/military-expert/model-json-extraction.ts";
 import { MILITARY_EXPERT_STUDIO_DEFINITION_VERSION } from "./types.ts";
+import { prepareSavedMilitaryExpertReport } from "@/lib/studio/military-expert-report-persistence.ts";
 
 export { STUDIO_MILITARY_BUDGET } from "./studio-military-expert-budget.ts";
 
@@ -351,10 +352,11 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     }
   }
 
-  if (!contractResult.ok || contractResult.generationStatus !== "success") {
+  if (!contractResult.ok || (contractResult.generationStatus !== "success" && contractResult.generationStatus !== "provisional_success")) {
     const parseFailureCode = contractResult.parseFailureCode as
       | import("@/experts/military-expert/parsing.ts").MilitaryExpertParseFailureCode
       | "CONTRARY_EVIDENCE_REPAIR_FAILED"
+      | "TOO_MANY_UNRESOLVED_FINDINGS"
       | undefined;
     const trailingCategory = contractResult.parseTrailingCategory as
       | ModelJsonTrailingCategory
@@ -364,7 +366,9 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     const errorCode =
       parseFailureCode === "CONTRARY_EVIDENCE_REPAIR_FAILED"
         ? "CONTRARY_EVIDENCE_REPAIR_FAILED"
-        : parseFailureCode
+        : parseFailureCode === "TOO_MANY_UNRESOLVED_FINDINGS"
+          ? "TOO_MANY_UNRESOLVED_FINDINGS"
+          : parseFailureCode
           ? mapMilitaryExpertParseFailureToWorkflowErrorCode({
               parseFailureCode,
               trailingCategory,
@@ -419,6 +423,22 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     }).catch(() => {});
   }
 
+  if (contractResult.provisionalRelease?.used && contractResult.provisionalRelease.eventPayload) {
+    await insertWorkflowEvent({
+      workflowId,
+      eventType: "military_expert_provisional_release",
+      payload: contractResult.provisionalRelease.eventPayload,
+    }).catch(() => {});
+  }
+
+  const savedReport =
+    contractResult.review && contractResult.parsedReviewHash
+      ? prepareSavedMilitaryExpertReport({
+          review: contractResult.review,
+          parsedReviewHash: contractResult.parsedReviewHash,
+        })
+      : null;
+
   await markWorkflowCompleted({
     workflowId,
     authoritativeResultId: contractResult.parsedReviewHash ?? correlationId,
@@ -431,13 +451,20 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
       parsedReviewHash: contractResult.parsedReviewHash,
       requestHash: contractResult.requestHash,
       generationStatus: contractResult.generationStatus,
+      reviewStatus: contractResult.review?.review_status ?? "complete",
       repairDecision: contractResult.repairDecision,
+      provisionalReleaseUsed: contractResult.provisionalRelease?.used === true,
+      authorReviewRequiredCount: savedReport?.authorReviewRequiredCount ?? 0,
+      validatedFindingCount: savedReport?.validatedFindingCount ?? null,
       manuscriptTitle: meta?.title ?? "Manuscript",
       workflowDefinitionVersion: MILITARY_EXPERT_STUDIO_DEFINITION_VERSION,
       modelId: providerSpec.modelId,
       estimatedCostUsd: budget.snapshot().totalCostUsd,
     },
-    nextBestAction: "Military Expert local test run completed. Review workflow summary in Studio.",
+    nextBestAction:
+      contractResult.generationStatus === "provisional_success"
+        ? "Military Expert local test run completed with author review required findings. Review unresolved items in Studio."
+        : "Military Expert local test run completed. Review workflow summary in Studio.",
   });
 
   return { ok: true };

@@ -54,6 +54,10 @@ import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts"
 import { validateMilitaryExpertGenerationPayload } from "./output-schema.ts";
 import { normalizeMilitaryExpertReview } from "./normalization.ts";
 import { validateMilitaryExpertReview } from "./validation.ts";
+import {
+  evaluateProvisionalRelease,
+  MAX_PROVISIONAL_UNRESOLVED_FINDINGS,
+} from "./provisional-release.ts";
 import type {
   MilitaryExpertGenerationContractInput,
   MilitaryExpertGenerationContractResult,
@@ -216,6 +220,7 @@ function payloadToReview(
   payload: MilitaryExpertGenerationPayload,
   input: MilitaryExpertGenerationContractInput,
   definitionHash: string,
+  reviewStatus: MilitaryExpertReview["review_status"] = "complete",
 ): MilitaryExpertReview {
   return {
     expert_key: MILITARY_EXPERT_KEY,
@@ -223,10 +228,13 @@ function payloadToReview(
     definition_hash: definitionHash,
     manuscript_version_id: input.manuscriptVersionId,
     review_scope: input.reviewScope,
-    review_status: "complete",
+    review_status: reviewStatus,
     summary: payload.summary,
     strengths: payload.strengths,
-    findings: payload.findings,
+    findings: payload.findings.map((finding) => ({
+      ...finding,
+      finding_status: finding.finding_status ?? "validated",
+    })),
     category_assessments: payload.category_assessments,
     overall_realism_assessment: payload.overall_realism_assessment,
     critical_issues: payload.critical_issues,
@@ -340,6 +348,85 @@ function unrelatedContentPreservationPassed(
   return true;
 }
 
+function attemptProvisionalReleaseFromContraryEvidenceFailure(args: {
+  input: MilitaryExpertGenerationContractInput;
+  rawResponse: MilitaryExpertRawGenerationResponse;
+  base: Omit<MilitaryExpertGenerationContractResult, "ok">;
+  requestHash: string;
+  systemPromptHash: string;
+  reviewPromptHash: string;
+  repairDecision: MilitaryExpertGenerationContractResult["repairDecision"];
+  startedAt: number;
+  now: () => number;
+  definitionHash: string;
+  parsedRoot: unknown;
+  repairAttempted: boolean;
+  repairSucceeded: boolean;
+  contraryEvidenceRepair?: MilitaryExpertGenerationContractResult["contraryEvidenceRepair"];
+}): MilitaryExpertGenerationContractResult | null {
+  if (args.rawResponse.finishStatus === "truncated") return null;
+
+  const result = evaluateProvisionalRelease({
+    parsedRoot: args.parsedRoot,
+    parseFailureCode: "evidence_missing",
+    manuscriptVersionId: args.input.manuscriptVersionId,
+    reviewScope: args.input.reviewScope,
+    definitionHash: args.definitionHash,
+    repairAttempted: args.repairAttempted,
+    repairSucceeded: args.repairSucceeded,
+  });
+
+  if (!result) return null;
+
+  if (!result.ok) {
+    if (result.failureCode === "TOO_MANY_UNRESOLVED_FINDINGS") {
+      return {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: "reject_output",
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: `Too many unresolved confidence findings (${result.diagnostics.unresolved_finding_count}); maximum is ${MAX_PROVISIONAL_UNRESOLVED_FINDINGS}`,
+        parseFailureCode: "TOO_MANY_UNRESOLVED_FINDINGS",
+        contraryEvidenceRepair: args.contraryEvidenceRepair,
+        provisionalRelease: {
+          used: false,
+          unresolvedCount: result.diagnostics.unresolved_finding_count,
+          unresolvedFindingIndexes: result.diagnostics.unresolved_finding_indexes,
+          eventPayload: result.diagnostics,
+        },
+      };
+    }
+    return null;
+  }
+
+  return {
+    ...args.base,
+    ok: true,
+    requestHash: args.requestHash,
+    systemPromptHash: args.systemPromptHash,
+    reviewPromptHash: args.reviewPromptHash,
+    rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+    parsedReviewHash: hashMilitaryExpertParsedReview(result.review),
+    generationStatus: "provisional_success",
+    repairDecision: args.repairDecision,
+    durationMs: Math.max(0, args.now() - args.startedAt),
+    contraryEvidenceRepair: args.contraryEvidenceRepair,
+    provisionalRelease: {
+      used: true,
+      unresolvedCount: result.qualifyingFindings.length,
+      unresolvedFindingIndexes: result.qualifyingFindings.map((item) => item.findingIndex),
+      eventPayload: result.diagnostics,
+    },
+    review: result.review,
+  };
+}
+
 function attemptContraryEvidenceSchemaRecovery(args: {
   input: MilitaryExpertGenerationContractInput;
   rawResponse: MilitaryExpertRawGenerationResponse;
@@ -372,6 +459,30 @@ function attemptContraryEvidenceSchemaRecovery(args: {
 
   const violationAnalysis = analyzeContraryEvidenceViolations(parsedRoot);
   const deterministic = applyDeterministicContraryEvidenceNormalization(parsedRoot);
+
+  const tryProvisionalOr = (
+    failure: MilitaryExpertGenerationContractResult,
+    repairAttempted: boolean,
+    repairSucceeded: boolean,
+    contraryEvidenceRepair?: MilitaryExpertGenerationContractResult["contraryEvidenceRepair"],
+  ): MilitaryExpertGenerationContractResult =>
+    attemptProvisionalReleaseFromContraryEvidenceFailure({
+      input: args.input,
+      rawResponse: args.rawResponse,
+      base: args.base,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      repairDecision: args.repairDecision,
+      startedAt: args.startedAt,
+      now: args.now,
+      definitionHash: args.request.definitionHash,
+      parsedRoot,
+      repairAttempted,
+      repairSucceeded,
+      contraryEvidenceRepair,
+    }) ?? failure;
+
   if (deterministic.applied) {
     const deterministicValidation = validateNormalizedContraryEvidencePayload(
       deterministic.normalized,
@@ -421,35 +532,41 @@ function attemptContraryEvidenceSchemaRecovery(args: {
             providerCallCompleted: false,
           })
         : undefined);
-    return {
-      ...args.base,
-      ok: false,
-      requestHash: args.requestHash,
-      systemPromptHash: args.systemPromptHash,
-      reviewPromptHash: args.reviewPromptHash,
-      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
-      parsedReviewHash: null,
-      generationStatus: "parse_failed",
-      repairDecision: "reject_output",
-      durationMs: Math.max(0, args.now() - args.startedAt),
-      failureReason: args.parseMessage,
-      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-      contraryEvidenceRepair: {
-        attempted: true,
-        succeeded: false,
+    const contraryEvidenceRepair = {
+      attempted: true,
+      succeeded: false,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        violations: violationAnalysis.violations,
+        repairAttempted: true,
+        repairSucceeded: false,
         deterministicNormalizationApplied: deterministic.applied,
-        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        eventPayload: buildContraryEvidenceRepairEventPayload({
-          violations: violationAnalysis.violations,
-          repairAttempted: true,
-          repairSucceeded: false,
-          deterministicNormalizationApplied: deterministic.applied,
-          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          providerDiagnostics,
-          repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        }),
-      },
+        primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        providerDiagnostics,
+        repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      }),
     };
+    return tryProvisionalOr(
+      {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: "reject_output",
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: args.parseMessage,
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        contraryEvidenceRepair,
+      },
+      true,
+      false,
+      contraryEvidenceRepair,
+    );
   }
 
   if (!args.input.repairResponse) return null;
@@ -500,39 +617,45 @@ function attemptContraryEvidenceSchemaRecovery(args: {
   };
 
   if (!patchParsed.ok) {
-    return {
-      ...args.base,
-      ok: false,
-      requestHash: args.requestHash,
-      systemPromptHash: args.systemPromptHash,
-      reviewPromptHash: args.reviewPromptHash,
-      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
-      parsedReviewHash: null,
-      generationStatus: "parse_failed",
-      repairDecision: "reject_output",
-      durationMs: Math.max(0, args.now() - args.startedAt),
-      failureReason: patchParsed.message,
-      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-      contraryEvidenceRepair: {
-        attempted: true,
-        succeeded: false,
-        deterministicNormalizationApplied: deterministic.applied,
-        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        eventPayload: buildContraryEvidenceRepairEventPayload({
-          ...baseRepairEventArgs,
-          repairSucceeded: false,
-          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          repairParseResult: patchParsed.code,
-          repairFailureCode: patchParsed.code,
-          patchDiagnostics: {
-            ...patchDiagnosticsBase,
-            returned_patch_count: 0,
-            patch_parse_result: patchParsed.code,
-            patch_application_result: "not_attempted",
-          },
-        }),
-      },
+    const contraryEvidenceRepair = {
+      attempted: true,
+      succeeded: false,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        ...baseRepairEventArgs,
+        repairSucceeded: false,
+        primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        repairParseResult: patchParsed.code,
+        repairFailureCode: patchParsed.code,
+        patchDiagnostics: {
+          ...patchDiagnosticsBase,
+          returned_patch_count: 0,
+          patch_parse_result: patchParsed.code,
+          patch_application_result: "not_attempted",
+        },
+      }),
     };
+    return tryProvisionalOr(
+      {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: "reject_output",
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: patchParsed.message,
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        contraryEvidenceRepair,
+      },
+      true,
+      false,
+      contraryEvidenceRepair,
+    );
   }
 
   const patchApplied = applyContraryEvidencePatches({
@@ -542,41 +665,47 @@ function attemptContraryEvidenceSchemaRecovery(args: {
   });
 
   if (!patchApplied.ok) {
-    return {
-      ...args.base,
-      ok: false,
-      requestHash: args.requestHash,
-      systemPromptHash: args.systemPromptHash,
-      reviewPromptHash: args.reviewPromptHash,
-      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
-      parsedReviewHash: null,
-      generationStatus: "parse_failed",
-      repairDecision: "reject_output",
-      durationMs: Math.max(0, args.now() - args.startedAt),
-      failureReason: patchApplied.message,
-      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-      contraryEvidenceRepair: {
-        attempted: true,
-        succeeded: false,
-        deterministicNormalizationApplied: deterministic.applied,
-        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        eventPayload: buildContraryEvidenceRepairEventPayload({
-          ...baseRepairEventArgs,
-          repairSucceeded: false,
-          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          repairParseResult: "ok",
-          repairFailureCode: patchApplied.code,
-          patchDiagnostics: {
-            ...patchDiagnosticsBase,
-            returned_patch_count: patchParsed.patch.repairs.length,
-            applied_patch_count: patchApplied.appliedPatchCount,
-            rejected_patch_count: patchApplied.rejectedPatchCount,
-            patch_parse_result: "ok",
-            patch_application_result: patchApplied.code,
-          },
-        }),
-      },
+    const contraryEvidenceRepair = {
+      attempted: true,
+      succeeded: false,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        ...baseRepairEventArgs,
+        repairSucceeded: false,
+        primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        repairParseResult: "ok",
+        repairFailureCode: patchApplied.code,
+        patchDiagnostics: {
+          ...patchDiagnosticsBase,
+          returned_patch_count: patchParsed.patch.repairs.length,
+          applied_patch_count: patchApplied.appliedPatchCount,
+          rejected_patch_count: patchApplied.rejectedPatchCount,
+          patch_parse_result: "ok",
+          patch_application_result: patchApplied.code,
+        },
+      }),
     };
+    return tryProvisionalOr(
+      {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: "reject_output",
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: patchApplied.message,
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        contraryEvidenceRepair,
+      },
+      true,
+      false,
+      contraryEvidenceRepair,
+    );
   }
 
   const patchedRawResponse = {
@@ -599,39 +728,45 @@ function attemptContraryEvidenceSchemaRecovery(args: {
   };
 
   if (!repairedParsed.ok) {
-    return {
-      ...args.base,
-      ok: false,
-      requestHash: args.requestHash,
-      systemPromptHash: args.systemPromptHash,
-      reviewPromptHash: args.reviewPromptHash,
-      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
-      parsedReviewHash: null,
-      generationStatus: "parse_failed",
-      repairDecision: "reject_output",
-      durationMs: Math.max(0, args.now() - args.startedAt),
-      failureReason: repairedParsed.message,
-      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-      contraryEvidenceRepair: {
-        attempted: true,
-        succeeded: false,
-        deterministicNormalizationApplied: deterministic.applied,
-        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        eventPayload: buildContraryEvidenceRepairEventPayload({
-          ...baseRepairEventArgs,
-          repairSucceeded: false,
-          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          repairParseResult: "ok",
-          repairValidationResult: "failed",
-          repairFailureCode: repairedParsed.code,
-          patchDiagnostics: {
-            ...successPatchDiagnostics,
-            patch_application_result: "ok",
-            patch_parse_result: "ok",
-          },
-        }),
-      },
+    const contraryEvidenceRepair = {
+      attempted: true,
+      succeeded: false,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        ...baseRepairEventArgs,
+        repairSucceeded: false,
+        primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        repairParseResult: "ok",
+        repairValidationResult: "failed",
+        repairFailureCode: repairedParsed.code,
+        patchDiagnostics: {
+          ...successPatchDiagnostics,
+          patch_application_result: "ok",
+          patch_parse_result: "ok",
+        },
+      }),
     };
+    return tryProvisionalOr(
+      {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: "reject_output",
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: repairedParsed.message,
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        contraryEvidenceRepair,
+      },
+      true,
+      false,
+      contraryEvidenceRepair,
+    );
   }
 
   const contentPreservationPassed = unrelatedContentPreservationPassed(
@@ -662,26 +797,32 @@ function attemptContraryEvidenceSchemaRecovery(args: {
   });
 
   if (!finalized.ok && finalized.generationStatus === "validation_failed") {
-    return {
-      ...finalized,
-      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-      contraryEvidenceRepair: {
-        attempted: true,
-        succeeded: false,
-        deterministicNormalizationApplied: deterministic.applied,
-        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-        eventPayload: buildContraryEvidenceRepairEventPayload({
-          ...baseRepairEventArgs,
-          repairSucceeded: false,
-          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          repairParseResult: "ok",
-          repairValidationResult: "failed",
-          repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          unrelatedContentPreservationPassed: contentPreservationPassed,
-          patchDiagnostics: successPatchDiagnostics,
-        }),
-      },
+    const contraryEvidenceRepair = {
+      attempted: true,
+      succeeded: false,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        ...baseRepairEventArgs,
+        repairSucceeded: false,
+        primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        repairParseResult: "ok",
+        repairValidationResult: "failed",
+        repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        unrelatedContentPreservationPassed: contentPreservationPassed,
+        patchDiagnostics: successPatchDiagnostics,
+      }),
     };
+    return tryProvisionalOr(
+      {
+        ...finalized,
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        contraryEvidenceRepair,
+      },
+      true,
+      false,
+      contraryEvidenceRepair,
+    );
   }
 
   if (finalized.ok && finalized.contraryEvidenceRepair?.eventPayload) {

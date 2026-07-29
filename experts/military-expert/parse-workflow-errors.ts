@@ -17,6 +17,7 @@ export type MilitaryExpertWorkflowParseErrorCode =
   | "MISSING_CONTRARY_EVIDENCE"
   | "MISSING_UNCERTAINTY_NOTE"
   | "CONTRARY_EVIDENCE_REPAIR_FAILED"
+  | "TOO_MANY_UNRESOLVED_FINDINGS"
   | "PIPELINE_FAILED";
 
 export function mapContraryEvidenceFailureToWorkflowErrorCode(
@@ -54,6 +55,9 @@ export function mapMilitaryExpertParseFailureToWorkflowErrorCode(args: {
 
   if (parseFailureCode === "CONTRARY_EVIDENCE_REPAIR_FAILED") {
     return "CONTRARY_EVIDENCE_REPAIR_FAILED";
+  }
+  if (parseFailureCode === "TOO_MANY_UNRESOLVED_FINDINGS") {
+    return "TOO_MANY_UNRESOLVED_FINDINGS";
   }
   if (contraryEvidenceFailureCode === "MISSING_CONTRARY_EVIDENCE") {
     return "MISSING_CONTRARY_EVIDENCE";

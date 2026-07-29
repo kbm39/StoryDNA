@@ -108,5 +108,12 @@ export interface MilitaryExpertGenerationContractResult {
     failureCode?: string;
     eventPayload?: Record<string, unknown>;
   };
+  trailingCommentaryNormalization?: {
+    trailing_character_count: number;
+    normalization_attempted: boolean;
+    normalization_succeeded: boolean;
+    second_payload_detected: boolean;
+  };
+  trailingCommentaryUnsafe?: boolean;
   review?: MilitaryExpertReview;
 }

@@ -189,10 +189,12 @@ describe("Military Expert PR 2 generation contract", () => {
     if (!parsed.ok) assert.equal(parsed.code, "multiple_payloads");
   });
 
-  it("13. trailing prose rejected", () => {
+  it("13. harmless trailing prose normalized", () => {
     const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_TRAILING_PROSE);
-    assert.equal(parsed.ok, false);
-    if (!parsed.ok) assert.equal(parsed.code, "trailing_content");
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.trailingCommentaryNormalization?.normalization_succeeded, true);
+    }
   });
 
   it("14. missing evidence rejected", () => {

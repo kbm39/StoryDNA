@@ -90,10 +90,12 @@ describe("Military Expert JSON truncation handling", () => {
     assert.equal(parsed.ok, true);
   });
 
-  it("8. trailing prose remains rejected", () => {
+  it("8. harmless trailing prose is normalized", () => {
     const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_TRAILING_PROSE);
-    assert.equal(parsed.ok, false);
-    if (!parsed.ok) assert.equal(parsed.code, "trailing_content");
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.trailingCommentaryNormalization?.normalization_succeeded, true);
+    }
   });
 
   it("9. schema-invalid JSON remains rejected", () => {

@@ -20,6 +20,32 @@ export type ModelJsonExtractionResult = {
   readonly multiplePayloads: boolean;
 };
 
+export type MilitaryExpertTrailingCommentaryNormalizationEvent = {
+  readonly trailing_character_count: number;
+  readonly normalization_attempted: boolean;
+  readonly normalization_succeeded: boolean;
+  readonly second_payload_detected: boolean;
+};
+
+const UNSAFE_TRAILING_COMMENTARY_PATTERNS: readonly RegExp[] = [
+  /\{/,
+  /\[/,
+  /^\s*```/m,
+  /"findings"\s*:/,
+  /"summary"\s*:/,
+  /"category(_assessments)?"\s*:/,
+  /"manuscript_evidence"/,
+  /"contrary_evidence"/,
+  /"finding_id"/,
+  /"overall_realism_assessment"/,
+  /\bcorrect(ed|ion)\b/i,
+  /\bupdated (finding|report|assessment)\b/i,
+  /\brevised (finding|report)\b/i,
+  /\badditional finding/i,
+];
+
+const OPENING_MARKDOWN_FENCE_ONLY = /^```(?:json)?[ \t]*$/i;
+
 function normalizeModelText(raw: string): string {
   return raw.replace(/\r\n/g, "\n").trim();
 }
@@ -142,12 +168,21 @@ export function extractStrictModelJsonObject(raw: string): ModelJsonExtractionRe
 
   const jsonText = candidate.slice(start, end);
   let trailingContent = candidate.slice(end);
+  const rawTrailingAfterJson = trailingContent;
   trailingContent = stripAllowedTrailingMarkdownFence(trailingContent).trim();
+
+  let trailingCategory = classifyTrailingContent(trailingContent);
+  if (
+    trailingContent.length > 0 &&
+    /^\s*```(?:json)?[ \t]*(?:\n|$)/i.test(rawTrailingAfterJson.trim())
+  ) {
+    trailingCategory = "other";
+  }
 
   return {
     jsonText,
     trailingContent,
-    trailingCategory: classifyTrailingContent(trailingContent),
+    trailingCategory,
     multiplePayloads: detectMultiplePayloads(candidate, end),
   };
 }
@@ -158,6 +193,86 @@ export function isAllowedModelJsonTrailing(category: ModelJsonTrailingCategory):
     category === "whitespace_only" ||
     category === "closing_markdown_fence"
   );
+}
+
+/** True when trailing prose looks like structured report content, evidence, or corrections. */
+export function isUnsafeTrailingCommentaryContent(trailing: string): boolean {
+  const trimmed = trailing.trim();
+  if (!trimmed) return false;
+  return UNSAFE_TRAILING_COMMENTARY_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+function resolveJsonCandidate(normalized: string): string {
+  const wholeFenceMatch = normalized.match(
+    /^```(?:json)?[ \t]*\n([\s\S]*?)\n?```(?:json)?[ \t]*$/i,
+  );
+  return wholeFenceMatch ? wholeFenceMatch[1]!.trim() : stripLeadingMarkdownFence(normalized);
+}
+
+function hasDisallowedLeadingContentBeforeJson(candidate: string, jsonStart: number): boolean {
+  const leading = candidate.slice(0, jsonStart).trim();
+  if (!leading) return false;
+  return !OPENING_MARKDOWN_FENCE_ONLY.test(leading);
+}
+
+export function buildTrailingCommentaryNormalizationEvent(args: {
+  trailingCharacterCount: number;
+  attempted: boolean;
+  succeeded: boolean;
+  secondPayloadDetected: boolean;
+}): MilitaryExpertTrailingCommentaryNormalizationEvent {
+  return Object.freeze({
+    trailing_character_count: args.trailingCharacterCount,
+    normalization_attempted: args.attempted,
+    normalization_succeeded: args.succeeded,
+    second_payload_detected: args.secondPayloadDetected,
+  });
+}
+
+/**
+ * Evaluate whether plain trailing commentary may be stripped after a complete JSON object.
+ * Fail closed on ambiguity, structured trailing content, or leading prose before JSON.
+ */
+export function evaluateTrailingCommentaryStripEligibility(
+  raw: string,
+  extraction: ModelJsonExtractionResult,
+): { eligible: true } | { eligible: false; unsafeStructuredTrailing: boolean } {
+  const normalized = normalizeModelText(raw);
+  const candidate = resolveJsonCandidate(normalized);
+  const start = candidate.indexOf("{");
+
+  if (start === -1 || extraction.multiplePayloads) {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  if (hasDisallowedLeadingContentBeforeJson(candidate, start)) {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  const end = findTopLevelJsonObjectEnd(candidate, start);
+  if (end === null) {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  if (extraction.trailingContent.length === 0 || isAllowedModelJsonTrailing(extraction.trailingCategory)) {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  if (extraction.trailingCategory !== "explanatory_prose") {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  if (isUnsafeTrailingCommentaryContent(extraction.trailingContent)) {
+    return { eligible: false, unsafeStructuredTrailing: true };
+  }
+
+  try {
+    JSON.parse(extraction.jsonText);
+  } catch {
+    return { eligible: false, unsafeStructuredTrailing: false };
+  }
+
+  return { eligible: true };
 }
 
 /** Sanitize text for safe diagnostic logging (redact long quoted strings). */

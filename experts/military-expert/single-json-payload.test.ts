@@ -74,19 +74,11 @@ describe("Military Expert single JSON payload enforcement", () => {
     assert.equal(parsed.ok, true);
   });
 
-  it("5. rejects JSON followed by explanatory prose", () => {
+  it("5. accepts JSON followed by harmless explanatory prose after normalization", () => {
     const parsed = parseMilitaryExpertGenerationResponse(FIXTURE_TRAILING_PROSE);
-    assert.equal(parsed.ok, false);
-    if (!parsed.ok) {
-      assert.equal(parsed.code, "trailing_content");
-      assert.equal(parsed.trailingCategory, "explanatory_prose");
-      assert.equal(
-        mapMilitaryExpertParseFailureToWorkflowErrorCode({
-          parseFailureCode: parsed.code,
-          trailingCategory: parsed.trailingCategory,
-        }),
-        "PROVIDER_TRAILING_PROSE",
-      );
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.trailingCommentaryNormalization?.normalization_succeeded, true);
     }
   });
 
@@ -130,13 +122,12 @@ describe("Military Expert single JSON payload enforcement", () => {
     assert.equal(parsed.ok, true);
   });
 
-  it("9. does not perform bounded provider repair", () => {
+  it("9. harmless trailing prose does not require provider repair", () => {
     const result = classifyMilitaryExpertRepairNeed({
       raw: FIXTURE_TRAILING_PROSE,
       expectedCorrelationId: FIXTURE_CORRELATION_ID,
     });
-    assert.equal(result.decision, "reject_output");
-    assert.equal(result.parseFailureCode, "trailing_content");
+    assert.equal(result.decision, "no_repair_needed");
   });
 
   it("10. rejects multiple payloads without silent cleanup", () => {
@@ -183,7 +174,7 @@ describe("Military Expert single JSON payload enforcement", () => {
           parseFailureCode: parsed.code,
           trailingCategory: parsed.trailingCategory,
         }),
-        "PROVIDER_TRAILING_PROSE",
+        "PROVIDER_MARKDOWN_WRAPPER_INVALID",
       );
     }
   });
@@ -196,10 +187,12 @@ describe("Military Expert single JSON payload enforcement", () => {
     assert.equal(LITERARY_AGENT_CONSTITUTION_DEFINITION_HASH, EXPECTED_LA_CONSTITUTION_HASH);
   });
 
-  it("15. strengthened prompt requires brace boundaries", () => {
+  it("15. strengthened prompt requires brace boundaries and no post-JSON commentary", () => {
     const prompt = buildMilitaryExpertSystemPrompt(MILITARY_EXPERT);
     assert.match(prompt, /first non-whitespace character.*`\{`/);
     assert.match(prompt, /final non-whitespace character.*`\}`/);
-    assert.match(prompt, /No markdown wrapper or code fences/);
+    assert.match(prompt, /final character of your entire response must be `\}`/);
+    assert.match(prompt, /Do not use Markdown fences/);
+    assert.match(prompt, /Do not include a conclusion, notes, apologies/);
   });
 });

@@ -31,6 +31,8 @@ export function safeErrorForCode(code: string, fallback?: string): string {
       return "The Military Expert review ran out of output space before finishing. Try again after reducing scope or contact support.";
     case "PROVIDER_TRAILING_PROSE":
       return "The Military Expert response included text after the required JSON object. Please retry the review.";
+    case "PROVIDER_TRAILING_COMMENTARY_UNSAFE":
+      return "The Military Expert response included extra material after the JSON object that could not be safely removed. Please retry the review.";
     case "PROVIDER_MULTIPLE_JSON_PAYLOADS":
       return "The Military Expert response included more than one JSON payload. Please retry the review.";
     case "PROVIDER_MARKDOWN_WRAPPER_INVALID":

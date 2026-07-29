@@ -306,6 +306,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     const trailingCategory = contractResult.parseTrailingCategory as
       | ModelJsonTrailingCategory
       | undefined;
+    const trailingCommentaryUnsafe = contractResult.trailingCommentaryUnsafe === true;
     const errorCode =
       parseFailureCode === "CONTRARY_EVIDENCE_REPAIR_FAILED"
         ? "CONTRARY_EVIDENCE_REPAIR_FAILED"
@@ -313,6 +314,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
           ? mapMilitaryExpertParseFailureToWorkflowErrorCode({
               parseFailureCode,
               trailingCategory,
+              trailingCommentaryUnsafe,
               contraryEvidenceFailureCode: initialRepairClassification.contraryEvidenceFailureCode,
             })
           : "PIPELINE_FAILED";
@@ -326,6 +328,8 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
           trailing_category: trailingCategory ?? null,
           diagnostics: contractResult.parseDiagnostics ?? null,
           contrary_evidence_repair: contractResult.contraryEvidenceRepair?.eventPayload ?? null,
+          trailing_commentary_normalization:
+            contractResult.trailingCommentaryNormalization ?? null,
         },
       }).catch(() => {});
     }
@@ -341,6 +345,14 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
   }
 
   const meta = await getManuscriptMeta(workflow.manuscript_id);
+
+  if (contractResult.trailingCommentaryNormalization?.normalization_succeeded) {
+    await insertWorkflowEvent({
+      workflowId,
+      eventType: "military_expert_trailing_commentary_removed",
+      payload: contractResult.trailingCommentaryNormalization,
+    }).catch(() => {});
+  }
 
   await markWorkflowCompleted({
     workflowId,

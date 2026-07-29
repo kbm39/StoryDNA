@@ -4,8 +4,12 @@
 
 import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
 import {
+  buildTrailingCommentaryNormalizationEvent,
+  evaluateTrailingCommentaryStripEligibility,
   extractStrictModelJsonObject,
   isAllowedModelJsonTrailing,
+  isUnsafeTrailingCommentaryContent,
+  type MilitaryExpertTrailingCommentaryNormalizationEvent,
   type ModelJsonTrailingCategory,
 } from "./model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums, type MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
@@ -42,6 +46,7 @@ export interface MilitaryExpertParseSuccess {
   payload: MilitaryExpertGenerationPayload;
   cleanedText: string;
   enumNormalizationAudits: readonly MilitaryExpertEnumNormalizationAudit[];
+  trailingCommentaryNormalization?: MilitaryExpertTrailingCommentaryNormalizationEvent;
 }
 
 export interface MilitaryExpertParseFailure {
@@ -49,6 +54,8 @@ export interface MilitaryExpertParseFailure {
   code: MilitaryExpertParseFailureCode;
   message: string;
   trailingCategory?: ModelJsonTrailingCategory;
+  trailingCommentaryUnsafe?: boolean;
+  trailingCommentaryNormalization?: MilitaryExpertTrailingCommentaryNormalizationEvent;
   diagnostics?: MilitaryExpertJsonParseDiagnostics | MilitaryExpertTrailingContentDiagnostics;
 }
 
@@ -103,7 +110,9 @@ export function parseMilitaryExpertGenerationResponse(
     }
 
     const extraction = extractStrictModelJsonObject(raw.responseText);
-    const { jsonText, trailingContent, multiplePayloads, trailingCategory } = extraction;
+    let { jsonText, trailingContent, multiplePayloads, trailingCategory } = extraction;
+    let trailingCommentaryNormalization: MilitaryExpertTrailingCommentaryNormalizationEvent | undefined;
+
     if (multiplePayloads) {
       return {
         ok: false,
@@ -116,22 +125,72 @@ export function parseMilitaryExpertGenerationResponse(
           trailingCategory,
           maxOutputTokens: options.maxOutputTokens,
         }),
+        trailingCommentaryNormalization: buildTrailingCommentaryNormalizationEvent({
+          trailingCharacterCount: trailingContent.length,
+          attempted: true,
+          succeeded: false,
+          secondPayloadDetected: true,
+        }),
       };
     }
 
     if (trailingContent.length > 0 && !isAllowedModelJsonTrailing(trailingCategory)) {
-      return {
-        ok: false,
-        code: "trailing_content",
-        message: "Trailing content after JSON payload is not allowed",
-        trailingCategory,
-        diagnostics: buildMilitaryExpertTrailingContentDiagnostics({
-          raw,
-          trailingContent,
-          trailingCategory,
-          maxOutputTokens: options.maxOutputTokens,
-        }),
-      };
+      let jsonParseFailed = false;
+      try {
+        JSON.parse(jsonText);
+      } catch {
+        jsonParseFailed = true;
+      }
+
+      if (!jsonParseFailed) {
+        const stripEligibility = evaluateTrailingCommentaryStripEligibility(raw.responseText, extraction);
+        const normalizationEvent = buildTrailingCommentaryNormalizationEvent({
+          trailingCharacterCount: trailingContent.length,
+          attempted: true,
+          succeeded: false,
+          secondPayloadDetected: false,
+        });
+
+        if (
+          raw.finishStatus !== "truncated" &&
+          stripEligibility.eligible &&
+          !isLikelyProviderOutputTruncation({
+            raw,
+            jsonText,
+            maxOutputTokens: options.maxOutputTokens,
+          })
+        ) {
+          trailingCommentaryNormalization = buildTrailingCommentaryNormalizationEvent({
+            trailingCharacterCount: trailingContent.length,
+            attempted: true,
+            succeeded: true,
+            secondPayloadDetected: false,
+          });
+          trailingContent = "";
+          trailingCategory = "none";
+        } else {
+          const unsafeStructuredTrailing =
+            stripEligibility.eligible === false && stripEligibility.unsafeStructuredTrailing;
+          return {
+            ok: false,
+            code: "trailing_content",
+            message: unsafeStructuredTrailing
+              ? "Trailing content after JSON payload contains structured report material"
+              : "Trailing content after JSON payload is not allowed",
+            trailingCategory,
+            trailingCommentaryUnsafe: unsafeStructuredTrailing ||
+              (trailingCategory === "explanatory_prose" &&
+                isUnsafeTrailingCommentaryContent(trailingContent)),
+            trailingCommentaryNormalization: normalizationEvent,
+            diagnostics: buildMilitaryExpertTrailingContentDiagnostics({
+              raw,
+              trailingContent,
+              trailingCategory,
+              maxOutputTokens: options.maxOutputTokens,
+            }),
+          };
+        }
+      }
     }
 
     if (raw.finishStatus === "truncated") {
@@ -201,7 +260,13 @@ export function parseMilitaryExpertGenerationResponse(
       };
     }
 
-    return { ok: true, payload, cleanedText: jsonText, enumNormalizationAudits: audits };
+    return {
+      ok: true,
+      payload,
+      cleanedText: jsonText,
+      enumNormalizationAudits: audits,
+      trailingCommentaryNormalization,
+    };
   } catch (error) {
     return {
       ok: false,

@@ -260,6 +260,7 @@ function finalizeSuccessfulContract(args: {
   definitionHash: string;
   enumNormalizationAudits?: readonly import("./enum-normalization.ts").MilitaryExpertEnumNormalizationAudit[];
   contraryEvidenceRepair?: MilitaryExpertGenerationContractResult["contraryEvidenceRepair"];
+  trailingCommentaryNormalization?: MilitaryExpertGenerationContractResult["trailingCommentaryNormalization"];
 }): MilitaryExpertGenerationContractResult {
   const reviewDraft = payloadToReview(args.payload, args.input, args.definitionHash);
   const normalized = normalizeMilitaryExpertReview(reviewDraft);
@@ -297,6 +298,7 @@ function finalizeSuccessfulContract(args: {
     durationMs: Math.max(0, args.now() - args.startedAt),
     enumNormalizationAudits: args.enumNormalizationAudits,
     contraryEvidenceRepair: args.contraryEvidenceRepair,
+    trailingCommentaryNormalization: args.trailingCommentaryNormalization,
     review: normalized,
   };
 }
@@ -619,6 +621,8 @@ export async function runMilitaryExpertGenerationContract(
       parseDiagnostics: parsed.diagnostics
         ? { ...parsed.diagnostics }
         : undefined,
+      trailingCommentaryNormalization: parsed.trailingCommentaryNormalization,
+      trailingCommentaryUnsafe: parsed.trailingCommentaryUnsafe,
     };
   }
 
@@ -635,6 +639,7 @@ export async function runMilitaryExpertGenerationContract(
     input,
     definitionHash: request.definitionHash,
     enumNormalizationAudits: parsed.enumNormalizationAudits,
+    trailingCommentaryNormalization: parsed.trailingCommentaryNormalization,
   });
 }
 

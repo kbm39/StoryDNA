@@ -84,7 +84,7 @@ describe("extractStrictModelJsonObject", () => {
     assert.equal(parsed.ok, true);
   });
 
-  it("rejects trailing explanatory prose", () => {
+  it("detects trailing explanatory prose before normalization", () => {
     const raw = `${VALID_JSON}\nHope this review helps.`;
     const result = extractStrictModelJsonObject(raw);
     assert.equal(result.trailingCategory, "explanatory_prose");

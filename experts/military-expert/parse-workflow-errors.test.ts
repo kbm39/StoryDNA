@@ -3,7 +3,18 @@ import { describe, it } from "node:test";
 import { mapMilitaryExpertParseFailureToWorkflowErrorCode } from "./parse-workflow-errors.ts";
 
 describe("mapMilitaryExpertParseFailureToWorkflowErrorCode", () => {
-  it("maps trailing prose to PROVIDER_TRAILING_PROSE", () => {
+  it("maps unsafe structured trailing commentary to PROVIDER_TRAILING_COMMENTARY_UNSAFE", () => {
+    assert.equal(
+      mapMilitaryExpertParseFailureToWorkflowErrorCode({
+        parseFailureCode: "trailing_content",
+        trailingCategory: "explanatory_prose",
+        trailingCommentaryUnsafe: true,
+      }),
+      "PROVIDER_TRAILING_COMMENTARY_UNSAFE",
+    );
+  });
+
+  it("maps unsafe plain trailing prose to PROVIDER_TRAILING_PROSE", () => {
     assert.equal(
       mapMilitaryExpertParseFailureToWorkflowErrorCode({
         parseFailureCode: "trailing_content",

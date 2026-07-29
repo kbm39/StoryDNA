@@ -104,11 +104,14 @@ export function buildMilitaryExpertSystemPrompt(def: ReviewerDefinition): string
 
   const output = [
     "OUTPUT REQUIREMENT",
-    "- Respond with ONE strict JSON object matching the Military Expert output schema.",
+    "- Respond with exactly ONE strict JSON object matching the Military Expert output schema.",
     "- The first non-whitespace character of your reply must be `{`.",
     "- The final non-whitespace character of your reply must be `}`.",
-    "- No markdown wrapper or code fences. No prose outside the JSON object.",
-    "- Do not echo the schema, add commentary, or append a second JSON object.",
+    "- Do not use Markdown fences or code blocks.",
+    "- Do not include an introduction before the JSON (for example, do not say \"Here is the report\").",
+    "- Do not include a conclusion, notes, apologies, summaries, or commentary after the closing `}`.",
+    "- Do not echo the schema, add prose outside the JSON object, or append a second JSON object.",
+    "- The final character of your entire response must be `}`.",
   ].join("\n");
 
   return [

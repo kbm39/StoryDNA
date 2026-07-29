@@ -44,6 +44,11 @@ import {
   normalizeRepairResponseForContract,
   validateNormalizedContraryEvidencePayload,
 } from "./contrary-evidence-schema-repair.ts";
+import {
+  applyContraryEvidencePatches,
+  buildContraryEvidencePatchDiagnostics,
+  parseContraryEvidencePatchResponse,
+} from "./contrary-evidence-patch-repair.ts";
 import { extractStrictModelJsonObject } from "./model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts";
 import { validateMilitaryExpertGenerationPayload } from "./output-schema.ts";
@@ -470,8 +475,14 @@ function attemptContraryEvidenceSchemaRecovery(args: {
         })
       : undefined);
 
-  const repairedParsed = parseMilitaryExpertGenerationResponse(normalizedRepairResponse, {
-    expectedCorrelationId: args.input.correlationId,
+  const patchDiagnosticsBase = buildContraryEvidencePatchDiagnostics({
+    violations: violationAnalysis.violations,
+  });
+
+  const patchParsed = parseContraryEvidencePatchResponse({
+    responseText: normalizedRepairResponse.responseText,
+    finishStatus: normalizedRepairResponse.finishStatus,
+    outputTokens: normalizedRepairResponse.outputTokens,
     maxOutputTokens: repairMaxOutputTokens,
   });
 
@@ -485,6 +496,106 @@ function attemptContraryEvidenceSchemaRecovery(args: {
     deterministicNormalizationApplied: deterministic.applied,
     providerDiagnostics,
     primaryFailureCode,
+    patchDiagnostics: patchDiagnosticsBase,
+  };
+
+  if (!patchParsed.ok) {
+    return {
+      ...args.base,
+      ok: false,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+      parsedReviewHash: null,
+      generationStatus: "parse_failed",
+      repairDecision: "reject_output",
+      durationMs: Math.max(0, args.now() - args.startedAt),
+      failureReason: patchParsed.message,
+      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      contraryEvidenceRepair: {
+        attempted: true,
+        succeeded: false,
+        deterministicNormalizationApplied: deterministic.applied,
+        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        eventPayload: buildContraryEvidenceRepairEventPayload({
+          ...baseRepairEventArgs,
+          repairSucceeded: false,
+          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          repairParseResult: patchParsed.code,
+          repairFailureCode: patchParsed.code,
+          patchDiagnostics: {
+            ...patchDiagnosticsBase,
+            returned_patch_count: 0,
+            patch_parse_result: patchParsed.code,
+            patch_application_result: "not_attempted",
+          },
+        }),
+      },
+    };
+  }
+
+  const patchApplied = applyContraryEvidencePatches({
+    parsedRoot,
+    patch: patchParsed.patch,
+    violations: violationAnalysis.violations,
+  });
+
+  if (!patchApplied.ok) {
+    return {
+      ...args.base,
+      ok: false,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+      parsedReviewHash: null,
+      generationStatus: "parse_failed",
+      repairDecision: "reject_output",
+      durationMs: Math.max(0, args.now() - args.startedAt),
+      failureReason: patchApplied.message,
+      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      contraryEvidenceRepair: {
+        attempted: true,
+        succeeded: false,
+        deterministicNormalizationApplied: deterministic.applied,
+        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        eventPayload: buildContraryEvidenceRepairEventPayload({
+          ...baseRepairEventArgs,
+          repairSucceeded: false,
+          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          repairParseResult: "ok",
+          repairFailureCode: patchApplied.code,
+          patchDiagnostics: {
+            ...patchDiagnosticsBase,
+            returned_patch_count: patchParsed.patch.repairs.length,
+            applied_patch_count: patchApplied.appliedPatchCount,
+            rejected_patch_count: patchApplied.rejectedPatchCount,
+            patch_parse_result: "ok",
+            patch_application_result: patchApplied.code,
+          },
+        }),
+      },
+    };
+  }
+
+  const patchedRawResponse = {
+    ...args.rawResponse,
+    responseText: JSON.stringify(patchApplied.patched),
+  };
+
+  const repairedParsed = parseMilitaryExpertGenerationResponse(patchedRawResponse, {
+    expectedCorrelationId: args.input.correlationId,
+    maxOutputTokens: args.request.maxOutputTokens,
+  });
+
+  const successPatchDiagnostics = {
+    ...patchDiagnosticsBase,
+    returned_patch_count: patchParsed.patch.repairs.length,
+    applied_patch_count: patchApplied.appliedPatchCount,
+    rejected_patch_count: patchApplied.rejectedPatchCount,
+    patch_parse_result: "ok",
+    patch_application_result: "ok",
   };
 
   if (!repairedParsed.ok) {
@@ -510,8 +621,14 @@ function attemptContraryEvidenceSchemaRecovery(args: {
           ...baseRepairEventArgs,
           repairSucceeded: false,
           primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
-          repairParseResult: repairedParsed.code,
+          repairParseResult: "ok",
+          repairValidationResult: "failed",
           repairFailureCode: repairedParsed.code,
+          patchDiagnostics: {
+            ...successPatchDiagnostics,
+            patch_application_result: "ok",
+            patch_parse_result: "ok",
+          },
         }),
       },
     };
@@ -524,7 +641,7 @@ function attemptContraryEvidenceSchemaRecovery(args: {
 
   const finalized = finalizeSuccessfulContract({
     ...args,
-    rawResponse: normalizedRepairResponse,
+    rawResponse: patchedRawResponse,
     repairDecision: "schema_repair_required",
     payload: repairedParsed.payload,
     enumNormalizationAudits: repairedParsed.enumNormalizationAudits,
@@ -539,6 +656,7 @@ function attemptContraryEvidenceSchemaRecovery(args: {
         repairParseResult: "ok",
         repairValidationResult: "ok",
         unrelatedContentPreservationPassed: contentPreservationPassed,
+        patchDiagnostics: successPatchDiagnostics,
       }),
     },
   });
@@ -560,6 +678,7 @@ function attemptContraryEvidenceSchemaRecovery(args: {
           repairValidationResult: "failed",
           repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
           unrelatedContentPreservationPassed: contentPreservationPassed,
+          patchDiagnostics: successPatchDiagnostics,
         }),
       },
     };
@@ -572,6 +691,7 @@ function attemptContraryEvidenceSchemaRecovery(args: {
       repairParseResult: "ok",
       repairValidationResult: "ok",
       unrelatedContentPreservationPassed: contentPreservationPassed,
+      patchDiagnostics: successPatchDiagnostics,
     });
   }
 

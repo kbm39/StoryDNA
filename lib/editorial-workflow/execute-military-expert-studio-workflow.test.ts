@@ -112,7 +112,7 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
 
     assert.throws(
       () => buildContraryEvidenceSchemaRepairPrompt({ parsed: parsedRoot, violations: analysis as never }),
-      /map is not a function|violations\.map/,
+      /map is not a function|violations\.map|violations is not iterable/,
     );
 
     const { violations } = planContraryEvidenceRepair(parsedRoot);
@@ -145,7 +145,7 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
     );
     assert.equal(result.ok, false);
     assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "evidence_missing");
+    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_failure_code, "patch_missing_repair");
   });
 
   it("6. truncation path does not invoke repair", () => {

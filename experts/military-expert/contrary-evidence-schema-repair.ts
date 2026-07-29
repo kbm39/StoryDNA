@@ -9,9 +9,10 @@ import {
   validateMilitaryExpertGenerationPayload,
 } from "./output-schema.ts";
 import type { MilitaryExpertParseFailureCode } from "./parsing.ts";
+import { buildContraryEvidencePatchRepairPrompt } from "./contrary-evidence-patch-repair.ts";
 
 export const MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_VERSION =
-  "military_expert_contrary_evidence_repair@v1" as const;
+  "military_expert_contrary_evidence_repair@v2" as const;
 
 /** Strict ceiling for the single optional schema-repair provider call. */
 export const MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING = Object.freeze({
@@ -55,6 +56,14 @@ export interface ContraryEvidenceRepairProviderDiagnostics {
   repair_validation_result?: string;
   repair_failure_code?: string;
   unrelated_content_preservation_passed?: boolean;
+  repair_mode?: "patch_only";
+  affected_finding_indexes?: number[];
+  requested_fields?: string[];
+  returned_patch_count?: number;
+  applied_patch_count?: number;
+  rejected_patch_count?: number;
+  patch_parse_result?: string;
+  patch_application_result?: string;
 }
 
 export interface ContraryEvidenceRepairEventPayload {
@@ -77,6 +86,14 @@ export interface ContraryEvidenceRepairEventPayload {
   repair_validation_result?: string;
   repair_failure_code?: string;
   unrelated_content_preservation_passed?: boolean;
+  repair_mode?: "patch_only";
+  affected_finding_indexes?: number[];
+  requested_fields?: string[];
+  returned_patch_count?: number;
+  applied_patch_count?: number;
+  rejected_patch_count?: number;
+  patch_parse_result?: string;
+  patch_application_result?: string;
 }
 
 const NO_CONTRARY_EVIDENCE_PATTERN =
@@ -272,44 +289,7 @@ export function buildContraryEvidenceSchemaRepairPrompt(args: {
   parsed: unknown;
   violations: readonly ContraryEvidenceFindingViolation[];
 }): { systemPrompt: string; userPrompt: string } {
-  const violationLines = args.violations.map((item) => {
-    const id = item.findingId ? ` (${item.findingId})` : "";
-    return `- findings[${item.findingIndex}]${id}: missing ${item.missingFields.join(", ")}`;
-  });
-
-  const systemPrompt = [
-    "Military Expert JSON schema repair — structural correction only.",
-    "Respond with ONE strict JSON object and nothing else.",
-    "Preserve every existing fact, finding, excerpt, score, and enum value.",
-    "Do not add, remove, or rewrite findings except to add required contrary-evidence fields.",
-    "Do not invent contrary evidence excerpts or manuscript quotes.",
-    "When no contrary evidence exists, set contrary_evidence: [] and add uncertainty_note explaining that no meaningful contrary evidence was identified.",
-    "Never send null for contrary_evidence.",
-    "Do not add top-level fields or remove required fields.",
-  ].join("\n");
-
-  const userPrompt = [
-    "Repair the JSON object below so every negative finding includes contrary_evidence handling.",
-    "",
-    "Required corrections:",
-    ...violationLines,
-    "",
-    "Compact valid empty-contrary fragment:",
-    JSON.stringify(
-      {
-        contrary_evidence: [],
-        uncertainty_note:
-          "No meaningful contrary evidence was identified in the supplied manuscript evidence.",
-      },
-      null,
-      0,
-    ),
-    "",
-    "JSON to repair:",
-    JSON.stringify(args.parsed),
-  ].join("\n");
-
-  return { systemPrompt, userPrompt };
+  return buildContraryEvidencePatchRepairPrompt(args);
 }
 
 export function buildContraryEvidenceRepairProviderDiagnostics(args: {
@@ -367,6 +347,16 @@ export function buildContraryEvidenceRepairEventPayload(args: {
   repairValidationResult?: string;
   repairFailureCode?: string;
   unrelatedContentPreservationPassed?: boolean;
+  patchDiagnostics?: {
+    repair_mode?: "patch_only";
+    affected_finding_indexes?: number[];
+    requested_fields?: string[];
+    returned_patch_count?: number;
+    applied_patch_count?: number;
+    rejected_patch_count?: number;
+    patch_parse_result?: string;
+    patch_application_result?: string;
+  };
 }): ContraryEvidenceRepairEventPayload {
   const missingFieldNames = [
     ...new Set(args.violations.flatMap((item) => [...item.missingFields])),
@@ -395,12 +385,21 @@ export function buildContraryEvidenceRepairEventPayload(args: {
     ...(args.unrelatedContentPreservationPassed !== undefined
       ? { unrelated_content_preservation_passed: args.unrelatedContentPreservationPassed }
       : {}),
+    ...(args.patchDiagnostics ?? {}),
   };
 
   if (Object.keys(mergedDiagnostics).length === 0) return base;
 
   return {
     ...base,
+    repair_mode: mergedDiagnostics.repair_mode,
+    affected_finding_indexes: mergedDiagnostics.affected_finding_indexes,
+    requested_fields: mergedDiagnostics.requested_fields,
+    returned_patch_count: mergedDiagnostics.returned_patch_count,
+    applied_patch_count: mergedDiagnostics.applied_patch_count,
+    rejected_patch_count: mergedDiagnostics.rejected_patch_count,
+    patch_parse_result: mergedDiagnostics.patch_parse_result,
+    patch_application_result: mergedDiagnostics.patch_application_result,
     workflow_correlation_id: mergedDiagnostics.workflow_correlation_id,
     repair_call_correlation_id: mergedDiagnostics.repair_call_correlation_id,
     provider_call_completed: mergedDiagnostics.provider_call_completed,

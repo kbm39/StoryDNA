@@ -53,6 +53,7 @@ describe("Military Expert repair response handoff", () => {
     );
     assert.equal(result.ok, true);
     assert.equal(result.contraryEvidenceRepair?.succeeded, true);
+    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_mode, "patch_only");
     assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "ok");
   });
 
@@ -184,7 +185,7 @@ describe("Military Expert repair response handoff", () => {
       { bypassFeatureFlag: true },
     );
     assert.equal(malformedResult.ok, false);
-    assert.equal(malformedResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "malformed_json");
+    assert.equal(malformedResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "patch_malformed_json");
 
     const multiplePayloads = baseRawResponse(
       FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS.responseText +
@@ -201,7 +202,7 @@ describe("Military Expert repair response handoff", () => {
       { bypassFeatureFlag: true },
     );
     assert.equal(multipleResult.ok, false);
-    assert.equal(multipleResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "multiple_payloads");
+    assert.equal(multipleResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "patch_multiple_payloads");
 
     const unsafeTrailing = baseRawResponse(
       buildValidGenerationJson() + '\n{"summary":"duplicate payload start',
@@ -217,8 +218,8 @@ describe("Military Expert repair response handoff", () => {
     );
     assert.equal(trailingResult.ok, false);
     assert.ok(
-      trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "trailing_content" ||
-        trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "multiple_payloads",
+      trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "patch_trailing_content" ||
+        trailingResult.contraryEvidenceRepair?.eventPayload?.repair_parse_result === "patch_multiple_payloads",
     );
   });
 

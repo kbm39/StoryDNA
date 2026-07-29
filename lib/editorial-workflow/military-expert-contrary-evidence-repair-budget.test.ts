@@ -101,7 +101,8 @@ describe("Military Expert contrary-evidence repair budget gate", () => {
     assert.equal(plan.action, "start_repair");
     if (plan.action === "start_repair") {
       assert.doesNotMatch(plan.repairPrompt.userPrompt, /MANUSCRIPT TEXT/i);
-      assert.match(plan.repairPrompt.userPrompt, /JSON to repair:/);
+      assert.match(plan.repairPrompt.userPrompt, /Affected finding context/);
+      assert.doesNotMatch(plan.repairPrompt.userPrompt, /JSON to repair:/);
     }
   });
 

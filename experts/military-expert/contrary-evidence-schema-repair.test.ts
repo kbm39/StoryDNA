@@ -12,6 +12,7 @@ import {
   buildValidGenerationJson,
   FIXTURE_CONTRARY_EVIDENCE_REPAIR_FAILED,
   FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS,
+  FIXTURE_CONTRARY_EVIDENCE_UNCERTAINTY_PATCH_SUCCESS,
   FIXTURE_CORRELATION_ID,
   FIXTURE_EMPTY_CONTRARY_NO_UNCERTAINTY,
   FIXTURE_EXPLICIT_NO_CONTRARY_OBSERVATION,
@@ -20,6 +21,8 @@ import {
   FIXTURE_TRAILING_CLOSING_FENCE,
   FIXTURE_VALID_COMPLETE_JSON,
   buildValidGenerationPayload,
+  baseRawResponse,
+  buildContraryEvidencePatchSuccessJson,
 } from "./generation-fixtures.ts";
 import { runMilitaryExpertGenerationContract, buildMilitaryExpertGenerationRequest } from "./generation-contract.ts";
 import { parseMilitaryExpertGenerationResponse } from "./parsing.ts";
@@ -96,7 +99,7 @@ describe("Military Expert contrary-evidence schema repair", () => {
       {
         ...buildValidGenerationContractInput(),
         rawResponse: FIXTURE_EMPTY_CONTRARY_NO_UNCERTAINTY,
-        repairResponse: FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS,
+        repairResponse: FIXTURE_CONTRARY_EVIDENCE_UNCERTAINTY_PATCH_SUCCESS,
       },
       { bypassFeatureFlag: true },
     );
@@ -106,11 +109,20 @@ describe("Military Expert contrary-evidence schema repair", () => {
   });
 
   it("6. repair does not alter unrelated finding content", async () => {
+    const payload = buildValidGenerationPayload();
+    const brokenFinding = { ...payload.findings[1] };
+    delete (brokenFinding as { contrary_evidence?: unknown }).contrary_evidence;
+    delete (brokenFinding as { uncertainty_note?: unknown }).uncertainty_note;
+    const raw = baseRawResponse(
+      JSON.stringify({ ...payload, findings: [payload.findings[0], brokenFinding] }),
+    );
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
-        rawResponse: FIXTURE_MISSING_CONTRARY_EVIDENCE,
-        repairResponse: FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS,
+        rawResponse: raw,
+        repairResponse: baseRawResponse(
+          buildContraryEvidencePatchSuccessJson({ findingIndex: 1 }),
+        ),
       },
       { bypassFeatureFlag: true },
     );
@@ -144,8 +156,10 @@ describe("Military Expert contrary-evidence schema repair", () => {
         parsedRootFromRaw(FIXTURE_MISSING_CONTRARY_EVIDENCE.responseText),
       ).violations,
     });
-    assert.match(prompt.userPrompt, /JSON to repair:/);
+    assert.match(prompt.userPrompt, /Affected finding context/);
+    assert.doesNotMatch(prompt.userPrompt, /JSON to repair:/);
     assert.doesNotMatch(prompt.userPrompt, /MANUSCRIPT TEXT/);
+    assert.doesNotMatch(prompt.userPrompt, /"category_assessments"/);
   });
 
   it("9. second repair attempt is prohibited without a repair response", async () => {
@@ -174,7 +188,7 @@ describe("Military Expert contrary-evidence schema repair", () => {
     );
     assert.equal(result.ok, false);
     assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
-    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "evidence_missing");
+    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_failure_code, "patch_missing_repair");
   });
 
   it("10. failed repair remains terminal and fail-closed", async () => {

@@ -281,8 +281,30 @@ export const FIXTURE_EXPLICIT_NO_CONTRARY_OBSERVATION = baseRawResponse(
   }),
 );
 
+export function buildContraryEvidencePatchSuccessJson(args?: {
+  findingIndex?: number;
+  missingFields?: ("contrary_evidence" | "uncertainty_note")[];
+}): string {
+  const findingIndex = args?.findingIndex ?? 0;
+  const repairs: Array<{ finding_index: number; field: string; value: unknown }> = [];
+  const fields = args?.missingFields ?? ["contrary_evidence", "uncertainty_note"];
+
+  if (fields.includes("contrary_evidence")) {
+    repairs.push({ finding_index: findingIndex, field: "contrary_evidence", value: [] });
+  }
+  if (fields.includes("uncertainty_note") || fields.includes("contrary_evidence")) {
+    repairs.push({
+      finding_index: findingIndex,
+      field: "uncertainty_note",
+      value: "No contrary evidence was found in the supplied scope.",
+    });
+  }
+
+  return JSON.stringify({ repairs });
+}
+
 export function buildContraryEvidenceRepairSuccessJson(): string {
-  return JSON.stringify(buildValidGenerationPayload());
+  return buildContraryEvidencePatchSuccessJson();
 }
 
 export const FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS = baseRawResponse(
@@ -291,17 +313,13 @@ export const FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS = baseRawResponse(
 
 export const FIXTURE_CONTRARY_EVIDENCE_REPAIR_FAILED = baseRawResponse(
   JSON.stringify({
-    ...buildValidGenerationPayload(),
-    findings: [
-      (() => {
-        const finding = {
-          ...buildValidGenerationPayload().findings[1],
-          finding_id: "still-missing-contrary",
-        };
-        delete (finding as { contrary_evidence?: unknown }).contrary_evidence;
-        return finding;
-      })(),
-    ],
+    repairs: [{ finding_index: 0, field: "contrary_evidence", value: [] }],
+  }),
+);
+
+export const FIXTURE_CONTRARY_EVIDENCE_UNCERTAINTY_PATCH_SUCCESS = baseRawResponse(
+  buildContraryEvidencePatchSuccessJson({
+    missingFields: ["uncertainty_note"],
   }),
 );
 

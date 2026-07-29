@@ -29,7 +29,6 @@ import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/militar
 import {
   getWorkflowById,
   isTerminalStatus,
-  markWorkflowCompleted,
   markWorkflowFailed,
   markWorkflowRunning,
   markWorkflowStarted,
@@ -41,8 +40,8 @@ import {
 import { safeErrorForCode } from "./safe-errors.ts";
 import { mapMilitaryExpertParseFailureToWorkflowErrorCode } from "@/experts/military-expert/parse-workflow-errors.ts";
 import type { ModelJsonTrailingCategory } from "@/experts/military-expert/model-json-extraction.ts";
-import { MILITARY_EXPERT_STUDIO_DEFINITION_VERSION } from "./types.ts";
 import { prepareSavedMilitaryExpertReport } from "@/lib/studio/military-expert-report-persistence.ts";
+import { fileMilitaryExpertWorkflowCompletion } from "@/lib/studio/military-expert-completion-handoff.ts";
 
 export { STUDIO_MILITARY_BUDGET } from "./studio-military-expert-budget.ts";
 
@@ -431,41 +430,41 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     }).catch(() => {});
   }
 
-  const savedReport =
-    contractResult.review && contractResult.parsedReviewHash
-      ? prepareSavedMilitaryExpertReport({
-          review: contractResult.review,
-          parsedReviewHash: contractResult.parsedReviewHash,
-        })
-      : null;
+  if (!contractResult.review || !contractResult.parsedReviewHash) {
+    await markWorkflowFailed({
+      workflowId,
+      errorCode: "COMPLETION_FILING_FAILED",
+      safeErrorMessage: safeErrorForCode(
+        "COMPLETION_FILING_FAILED",
+        "Military Expert completion filing failed before results could be published.",
+      ),
+    });
+    return { ok: false };
+  }
 
-  await markWorkflowCompleted({
-    workflowId,
-    authoritativeResultId: contractResult.parsedReviewHash ?? correlationId,
-    authoritativeResultType: "military_expert_draft_review",
-    resultSummary: {
-      expertKey: "military_expert",
-      expertVersion: contractResult.expertVersion,
-      definitionHash: contractResult.definitionHash,
-      correlationId: contractResult.correlationId,
-      parsedReviewHash: contractResult.parsedReviewHash,
-      requestHash: contractResult.requestHash,
-      generationStatus: contractResult.generationStatus,
-      reviewStatus: contractResult.review?.review_status ?? "complete",
-      repairDecision: contractResult.repairDecision,
-      provisionalReleaseUsed: contractResult.provisionalRelease?.used === true,
-      authorReviewRequiredCount: savedReport?.authorReviewRequiredCount ?? 0,
-      validatedFindingCount: savedReport?.validatedFindingCount ?? null,
-      manuscriptTitle: meta?.title ?? "Manuscript",
-      workflowDefinitionVersion: MILITARY_EXPERT_STUDIO_DEFINITION_VERSION,
-      modelId: providerSpec.modelId,
-      estimatedCostUsd: budget.snapshot().totalCostUsd,
-    },
-    nextBestAction:
-      contractResult.generationStatus === "provisional_success"
-        ? "Military Expert local test run completed with author review required findings. Review unresolved items in Studio."
-        : "Military Expert local test run completed. Review workflow summary in Studio.",
+  const savedReport = prepareSavedMilitaryExpertReport({
+    review: contractResult.review,
+    parsedReviewHash: contractResult.parsedReviewHash,
   });
 
-  return { ok: true };
+  const filed = await fileMilitaryExpertWorkflowCompletion({
+    workflowId,
+    manuscriptId: workflow.manuscript_id,
+    manuscriptVersionId: workflow.manuscript_version_id,
+    review: contractResult.review,
+    parsedReviewHash: contractResult.parsedReviewHash,
+    requestHash: contractResult.requestHash,
+    correlationId: contractResult.correlationId,
+    expertVersion: contractResult.expertVersion,
+    definitionHash: contractResult.definitionHash,
+    generationStatus: contractResult.generationStatus,
+    repairDecision: contractResult.repairDecision,
+    provisionalReleaseUsed: contractResult.provisionalRelease?.used === true,
+    savedReport,
+    manuscriptTitle: meta?.title ?? "Manuscript",
+    modelId: providerSpec.modelId,
+    estimatedCostUsd: budget.snapshot().totalCostUsd,
+  });
+
+  return filed.ok ? { ok: true } : { ok: false };
 }

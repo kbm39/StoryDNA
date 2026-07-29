@@ -12,6 +12,7 @@ import type {
 import type { WorkflowRowMetadata } from "./workflow-definitions.ts";
 import { authorPhaseLabel } from "./phase-labels.ts";
 import { ACTIVE_WORKFLOW_STATUSES, isTerminalWorkflowStatus } from "./types.ts";
+import { validateAuthoritativeResultId } from "./authoritative-result-id.ts";
 
 export type { EditorialWorkflowRow };
 
@@ -222,6 +223,7 @@ export async function markWorkflowCompleted(args: {
   resultSummary: Record<string, unknown>;
   nextBestAction?: string | null;
 }): Promise<void> {
+  validateAuthoritativeResultId(args.authoritativeResultId);
   const now = new Date().toISOString();
   await updateWorkflowRow(args.workflowId, {
     status: "completed",

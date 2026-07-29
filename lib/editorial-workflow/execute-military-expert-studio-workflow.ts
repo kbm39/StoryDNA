@@ -12,11 +12,12 @@ import {
   buildMilitaryExpertGenerationRequest,
   runMilitaryExpertGenerationContract,
 } from "@/experts/military-expert/generation-contract.ts";
+import { MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING } from "@/experts/military-expert/contrary-evidence-schema-repair.ts";
+import { planMilitaryExpertContraryEvidenceRepair } from "./plan-military-expert-contrary-evidence-repair.ts";
 import {
-  analyzeContraryEvidenceViolations,
-  buildContraryEvidenceSchemaRepairPrompt,
-  MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING,
-} from "@/experts/military-expert/contrary-evidence-schema-repair.ts";
+  STUDIO_MILITARY_BUDGET,
+  STUDIO_MILITARY_BUDGET_LIMITS,
+} from "./studio-military-expert-budget.ts";
 import { extractStrictModelJsonObject } from "@/experts/military-expert/model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums } from "@/experts/military-expert/enum-normalization.ts";
 import { classifyMilitaryExpertRepairNeed } from "@/experts/military-expert/repair-classification.ts";
@@ -38,16 +39,7 @@ import { mapMilitaryExpertParseFailureToWorkflowErrorCode } from "@/experts/mili
 import type { ModelJsonTrailingCategory } from "@/experts/military-expert/model-json-extraction.ts";
 import { MILITARY_EXPERT_STUDIO_DEFINITION_VERSION } from "./types.ts";
 
-const STUDIO_MILITARY_BUDGET = Object.freeze({
-  maxCalls: 2,
-  maxTotalCostUsd: 0.3,
-  maxCostPerCallUsd: 0.25,
-  maxInputTokens: 120_000,
-  maxOutputTokens:
-    MILITARY_EXPERT.maxTokens + MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
-  providerMaxOutputTokens: MILITARY_EXPERT.maxTokens,
-  timeoutMs: 180_000,
-});
+export { STUDIO_MILITARY_BUDGET } from "./studio-military-expert-budget.ts";
 
 export async function executeMilitaryExpertStudioWorkflow(workflowId: string): Promise<{
   ok: boolean;
@@ -207,8 +199,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
 
   if (
     !contractResult.ok &&
-    contractResult.repairDecision === "schema_repair_required" &&
-    !contractResult.contraryEvidenceRepair?.attempted
+    contractResult.repairDecision === "schema_repair_required"
   ) {
     let parsedRoot: unknown;
     try {
@@ -219,14 +210,17 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
       parsedRoot = undefined;
     }
 
-    const violationAnalysis = parsedRoot ? analyzeContraryEvidenceViolations(parsedRoot) : null;
-    const violations = violationAnalysis?.violations ?? [];
-    const repairPrompt =
-      parsedRoot && violations.length > 0
-        ? buildContraryEvidenceSchemaRepairPrompt({ parsed: parsedRoot, violations })
-        : null;
+    const repairPlan = planMilitaryExpertContraryEvidenceRepair({
+      parsedRoot,
+      budgetState: budget.state(),
+      budgetLimits: STUDIO_MILITARY_BUDGET_LIMITS,
+      pricingProfileId: providerSpec.pricingProfileId,
+      repairAlreadyAttempted: contractResult.contraryEvidenceRepair?.attempted === true,
+      schemaRepairRequired: true,
+    });
 
-    if (repairPrompt && budget.canAffordCall(MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxCostUsd, 0, MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens)) {
+    if (repairPlan.action === "start_repair") {
+      const { violations, repairPrompt } = repairPlan;
       const repairRequest = {
         ...request,
         systemPrompt: repairPrompt.systemPrompt,
@@ -298,6 +292,12 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
           },
         };
       }
+    } else if (repairPlan.action === "skip_repair") {
+      await insertWorkflowEvent({
+        workflowId,
+        eventType: "contrary_evidence_repair_skipped",
+        payload: repairPlan.skipEvent,
+      }).catch(() => {});
     }
   }
 

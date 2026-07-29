@@ -190,8 +190,12 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
 describe("executeMilitaryExpertStudioWorkflow output allowance", () => {
   it("10. workflow source derives provider allowance from MILITARY_EXPERT.maxTokens", () => {
     assert.equal(STUDIO_MILITARY_PROVIDER_MAX_OUTPUT_TOKENS, 16_000);
+    const budgetSrc = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "studio-military-expert-budget.ts"),
+      "utf8",
+    );
     assert.doesNotMatch(WORKFLOW_SRC, /8_?192/);
-    assert.match(WORKFLOW_SRC, /MILITARY_EXPERT\.maxTokens/);
+    assert.match(budgetSrc, /MILITARY_EXPERT\.maxTokens/);
     assert.match(WORKFLOW_SRC, /maxOutputTokens: STUDIO_MILITARY_BUDGET\.providerMaxOutputTokens/);
   });
 
@@ -264,6 +268,38 @@ describe("executeMilitaryExpertStudioWorkflow output allowance", () => {
         MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
       ),
       true,
+    );
+  });
+
+  it("14b. legacy run input gate blocks repair after >120k primary but repair gate allows it", () => {
+    const providerSpec = resolveProviderSpec("anthropic", ANTHROPIC_HAIKU_45_ALIAS);
+    const budget = createBudgetController({
+      maxCalls: 2,
+      maxTotalCostUsd: 0.3,
+      maxCostPerCallUsd: 0.25,
+      runMaxInputTokens: 120_000,
+      runMaxOutputTokens: STUDIO_MILITARY_RUN_MAX_OUTPUT_TOKENS,
+      providerMaxOutputTokensPerCall: STUDIO_MILITARY_PROVIDER_MAX_OUTPUT_TOKENS,
+    });
+    const primaryCost = estimateTokenCost(
+      155_000,
+      STUDIO_MILITARY_PROVIDER_MAX_OUTPUT_TOKENS,
+      providerSpec.pricingProfileId,
+    );
+    budget.recordCall(primaryCost, 155_000, STUDIO_MILITARY_PROVIDER_MAX_OUTPUT_TOKENS);
+    assert.equal(
+      budget.canAffordCall(
+        MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxCostUsd,
+        0,
+        MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+      ),
+      false,
+    );
+    assert.match(WORKFLOW_SRC, /planMilitaryExpertContraryEvidenceRepair/);
+    assert.match(WORKFLOW_SRC, /contrary_evidence_repair_skipped/);
+    assert.doesNotMatch(
+      WORKFLOW_SRC,
+      /budget\.canAffordCall\(MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING/,
     );
   });
 

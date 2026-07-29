@@ -133,6 +133,20 @@ export const FIXTURE_BARE_JSON_TRAILING_FENCE = baseRawResponse(
   buildValidGenerationJson() + "\n```",
 );
 
+export const FIXTURE_BARE_JSON_TRAILING_JSON_FENCE = baseRawResponse(
+  buildValidGenerationJson() + "\n```json",
+);
+
+export const FIXTURE_FENCED_JSON_TRAILING_JSON_FENCE = baseRawResponse(
+  "```json\n" + buildValidGenerationJson() + "\n```json",
+);
+
+export const FIXTURE_TRAILING_WHITESPACE = baseRawResponse(buildValidGenerationJson() + "\n\n  \n");
+
+export const FIXTURE_TRAILING_PARTIAL_DUPLICATE = baseRawResponse(
+  buildValidGenerationJson() + '\n{"summary":"dup',
+);
+
 export const FIXTURE_MALFORMED_JSON = baseRawResponse("{summary: not valid json");
 
 export const FIXTURE_MULTIPLE_PAYLOADS = baseRawResponse(

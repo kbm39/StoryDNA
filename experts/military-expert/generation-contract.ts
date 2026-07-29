@@ -362,6 +362,7 @@ export async function runMilitaryExpertGenerationContract(
       durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
       failureReason: parsed.message,
       parseFailureCode: parsed.code,
+      parseTrailingCategory: parsed.ok ? undefined : parsed.trailingCategory,
       parseDiagnostics: parsed.diagnostics
         ? { ...parsed.diagnostics }
         : undefined,

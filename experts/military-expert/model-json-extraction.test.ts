@@ -49,6 +49,30 @@ describe("extractStrictModelJsonObject", () => {
     assert.equal(parsed.ok, true);
   });
 
+  it("accepts JSON followed by a closing ```json fence without opening fence", () => {
+    const raw = `${VALID_JSON}\n\`\`\`json`;
+    const result = extractStrictModelJsonObject(raw);
+    assert.equal(result.trailingContent, "");
+    assert.equal(isAllowedModelJsonTrailing(result.trailingCategory), true);
+
+    const parsed = parseMilitaryExpertGenerationResponse({
+      ...FIXTURE_VALID_COMPLETE_JSON,
+      responseText: raw,
+    });
+    assert.equal(parsed.ok, true);
+  });
+
+  it("accepts fully fenced JSON with ```json closing tag", () => {
+    const raw = `\`\`\`json\n${VALID_JSON}\n\`\`\`json`;
+    const result = extractStrictModelJsonObject(raw);
+    assert.equal(result.trailingContent, "");
+    const parsed = parseMilitaryExpertGenerationResponse({
+      ...FIXTURE_VALID_COMPLETE_JSON,
+      responseText: raw,
+    });
+    assert.equal(parsed.ok, true);
+  });
+
   it("accepts fenced JSON with trailing whitespace after closing fence", () => {
     const raw = `\`\`\`json\n${VALID_JSON}\n\`\`\`   \n`;
     const result = extractStrictModelJsonObject(raw);

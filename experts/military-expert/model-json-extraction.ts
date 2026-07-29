@@ -64,12 +64,19 @@ export function findTopLevelJsonObjectEnd(text: string, startIndex: number): num
   return null;
 }
 
+const CLOSING_MARKDOWN_FENCE_LINE = /^\s*```(?:json)?[ \t]*(?:\n|$)/i;
+const CLOSING_MARKDOWN_FENCE_ONLY = /^```(?:json)?[ \t]*$/i;
+
 function stripLeadingMarkdownFence(text: string): string {
   return text.replace(/^```(?:json)?[ \t]*\n?/i, "");
 }
 
 function stripAllowedTrailingMarkdownFence(trailing: string): string {
-  return trailing.replace(/^\s*```[ \t]*(?:\n|$)/, "");
+  let rest = trailing;
+  while (CLOSING_MARKDOWN_FENCE_LINE.test(rest)) {
+    rest = rest.replace(CLOSING_MARKDOWN_FENCE_LINE, "");
+  }
+  return rest;
 }
 
 function classifyTrailingContent(trailing: string): ModelJsonTrailingCategory {
@@ -77,7 +84,7 @@ function classifyTrailingContent(trailing: string): ModelJsonTrailingCategory {
   if (trimmed.length === 0) {
     return trailing.length === 0 ? "none" : "whitespace_only";
   }
-  if (/^```[ \t]*$/.test(trimmed)) {
+  if (CLOSING_MARKDOWN_FENCE_ONLY.test(trimmed)) {
     return "closing_markdown_fence";
   }
   if (/^\{/.test(trimmed)) {
@@ -107,7 +114,9 @@ function detectMultiplePayloads(fullText: string, jsonEnd: number): boolean {
 export function extractStrictModelJsonObject(raw: string): ModelJsonExtractionResult {
   const normalized = normalizeModelText(raw);
 
-  const wholeFenceMatch = normalized.match(/^```(?:json)?[ \t]*\n([\s\S]*?)\n?```[ \t]*$/i);
+  const wholeFenceMatch = normalized.match(
+    /^```(?:json)?[ \t]*\n([\s\S]*?)\n?```(?:json)?[ \t]*$/i,
+  );
   const candidate = wholeFenceMatch ? wholeFenceMatch[1]!.trim() : stripLeadingMarkdownFence(normalized);
 
   const start = candidate.indexOf("{");

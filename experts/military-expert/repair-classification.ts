@@ -51,6 +51,14 @@ export function classifyMilitaryExpertRepairNeed(args: {
     return { decision: "no_repair_needed" };
   }
 
+  if (initial.code === "trailing_content" || initial.code === "multiple_payloads") {
+    return {
+      decision: "reject_output",
+      parseFailureCode: initial.code,
+      message: initial.message,
+    };
+  }
+
   const trimmed = args.raw.responseText.trim();
   const cleaned = applyDeterministicMilitaryExpertCleanup(args.raw.responseText);
   if (cleaned !== trimmed) {

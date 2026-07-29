@@ -25,6 +25,8 @@ import {
   verifyWorkflowVersionPin,
 } from "./workflow-store.ts";
 import { safeErrorForCode } from "./safe-errors.ts";
+import { mapMilitaryExpertParseFailureToWorkflowErrorCode } from "@/experts/military-expert/parse-workflow-errors.ts";
+import type { ModelJsonTrailingCategory } from "@/experts/military-expert/model-json-extraction.ts";
 import { MILITARY_EXPERT_STUDIO_DEFINITION_VERSION } from "./types.ts";
 
 const STUDIO_MILITARY_BUDGET = Object.freeze({
@@ -184,18 +186,27 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
   );
 
   if (!contractResult.ok || contractResult.generationStatus !== "success") {
-    const errorCode =
-      contractResult.parseFailureCode === "provider_output_truncated"
-        ? "PROVIDER_OUTPUT_TRUNCATED"
-        : "PIPELINE_FAILED";
-    if (contractResult.parseDiagnostics) {
+    const parseFailureCode = contractResult.parseFailureCode as
+      | import("@/experts/military-expert/parsing.ts").MilitaryExpertParseFailureCode
+      | undefined;
+    const trailingCategory = contractResult.parseTrailingCategory as
+      | ModelJsonTrailingCategory
+      | undefined;
+    const errorCode = parseFailureCode
+      ? mapMilitaryExpertParseFailureToWorkflowErrorCode({
+          parseFailureCode,
+          trailingCategory,
+        })
+      : "PIPELINE_FAILED";
+    if (contractResult.parseDiagnostics || parseFailureCode) {
       await insertWorkflowEvent({
         workflowId,
         eventType: "parse_failed",
         payload: {
           error_code: errorCode,
           parse_failure_code: contractResult.parseFailureCode ?? null,
-          diagnostics: contractResult.parseDiagnostics,
+          trailing_category: trailingCategory ?? null,
+          diagnostics: contractResult.parseDiagnostics ?? null,
         },
       }).catch(() => {});
     }

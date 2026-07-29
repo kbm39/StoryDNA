@@ -93,6 +93,7 @@ export interface MilitaryExpertGenerationContractResult {
   durationMs: number;
   failureReason?: string;
   parseFailureCode?: string;
+  parseTrailingCategory?: string;
   parseDiagnostics?: Record<string, unknown>;
   enumNormalizationAudits?: readonly MilitaryExpertEnumNormalizationAudit[];
   review?: MilitaryExpertReview;

@@ -1,4 +1,8 @@
-import { sanitizeModelTextSample } from "./model-json-extraction.ts";
+import {
+  findTopLevelJsonObjectEnd,
+  sanitizeModelTextSample,
+  type ModelJsonTrailingCategory,
+} from "./model-json-extraction.ts";
 import type { MilitaryExpertRawGenerationResponse } from "./generation-types.ts";
 
 export type JsonTextTerminationState =
@@ -95,6 +99,43 @@ export function isLikelyProviderOutputTruncation(args: {
   }
 
   return false;
+}
+
+export type MilitaryExpertTrailingContentDiagnostics = {
+  readonly responseLength: number;
+  readonly finishStatus: MilitaryExpertRawGenerationResponse["finishStatus"];
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly maxOutputTokens: number | null;
+  readonly completeJsonObjectFound: boolean;
+  readonly trailingContentLength: number;
+  readonly trailingCategory: ModelJsonTrailingCategory;
+  readonly sanitizedTrailingPrefix: string;
+  readonly sanitizedTrailingSuffix: string;
+};
+
+export function buildMilitaryExpertTrailingContentDiagnostics(args: {
+  raw: MilitaryExpertRawGenerationResponse;
+  trailingContent: string;
+  trailingCategory: ModelJsonTrailingCategory;
+  maxOutputTokens?: number;
+}): MilitaryExpertTrailingContentDiagnostics {
+  const normalized = args.raw.responseText.replace(/\r\n/g, "\n").trim();
+  const start = normalized.indexOf("{");
+  const end = start >= 0 ? findTopLevelJsonObjectEnd(normalized, start) : null;
+  const trailingSample = args.trailingContent.trim();
+  return Object.freeze({
+    responseLength: args.raw.responseText.length,
+    finishStatus: args.raw.finishStatus,
+    inputTokens: args.raw.inputTokens ?? null,
+    outputTokens: args.raw.outputTokens ?? null,
+    maxOutputTokens: args.maxOutputTokens ?? null,
+    completeJsonObjectFound: end !== null,
+    trailingContentLength: args.trailingContent.length,
+    trailingCategory: args.trailingCategory,
+    sanitizedTrailingPrefix: sanitizeModelTextSample(trailingSample.slice(0, 120), 100),
+    sanitizedTrailingSuffix: sanitizeModelTextSample(trailingSample.slice(-120), 100),
+  });
 }
 
 export function buildMilitaryExpertJsonParseDiagnostics(args: {

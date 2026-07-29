@@ -29,6 +29,14 @@ export function safeErrorForCode(code: string, fallback?: string): string {
       return "Publishing Workflow is temporarily unavailable. Please try again later.";
     case "PROVIDER_OUTPUT_TRUNCATED":
       return "The Military Expert review ran out of output space before finishing. Try again after reducing scope or contact support.";
+    case "PROVIDER_TRAILING_PROSE":
+      return "The Military Expert response included text after the required JSON object. Please retry the review.";
+    case "PROVIDER_MULTIPLE_JSON_PAYLOADS":
+      return "The Military Expert response included more than one JSON payload. Please retry the review.";
+    case "PROVIDER_MARKDOWN_WRAPPER_INVALID":
+      return "The Military Expert response used an invalid markdown wrapper around the JSON object. Please retry the review.";
+    case "PROVIDER_JSON_REPAIR_FAILED":
+      return "The Military Expert response could not be repaired into a valid JSON object. Please retry the review.";
     case "PIPELINE_FAILED":
       return sanitizedFallback ??
         "The Literary Agent review could not be completed. You can retry when ready.";

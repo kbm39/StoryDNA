@@ -6,6 +6,7 @@ import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical
 import {
   extractStrictModelJsonObject,
   isAllowedModelJsonTrailing,
+  type ModelJsonTrailingCategory,
 } from "./model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums, type MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
 import {
@@ -15,8 +16,10 @@ import {
 } from "./output-schema.ts";
 import {
   buildMilitaryExpertJsonParseDiagnostics,
+  buildMilitaryExpertTrailingContentDiagnostics,
   isLikelyProviderOutputTruncation,
   type MilitaryExpertJsonParseDiagnostics,
+  type MilitaryExpertTrailingContentDiagnostics,
 } from "./json-parse-diagnostics.ts";
 import type { MilitaryExpertRawGenerationResponse } from "./generation-types.ts";
 
@@ -45,7 +48,8 @@ export interface MilitaryExpertParseFailure {
   ok: false;
   code: MilitaryExpertParseFailureCode;
   message: string;
-  diagnostics?: MilitaryExpertJsonParseDiagnostics;
+  trailingCategory?: ModelJsonTrailingCategory;
+  diagnostics?: MilitaryExpertJsonParseDiagnostics | MilitaryExpertTrailingContentDiagnostics;
 }
 
 export type MilitaryExpertParseResult = MilitaryExpertParseSuccess | MilitaryExpertParseFailure;
@@ -105,6 +109,13 @@ export function parseMilitaryExpertGenerationResponse(
         ok: false,
         code: "multiple_payloads",
         message: "Multiple JSON payloads are not allowed",
+        trailingCategory,
+        diagnostics: buildMilitaryExpertTrailingContentDiagnostics({
+          raw,
+          trailingContent,
+          trailingCategory,
+          maxOutputTokens: options.maxOutputTokens,
+        }),
       };
     }
 
@@ -113,14 +124,13 @@ export function parseMilitaryExpertGenerationResponse(
         ok: false,
         code: "trailing_content",
         message: "Trailing content after JSON payload is not allowed",
-      };
-    }
-
-    if (trailingContent.length > 0 && !isAllowedModelJsonTrailing(trailingCategory)) {
-      return {
-        ok: false,
-        code: "trailing_content",
-        message: "Trailing content after JSON payload is not allowed",
+        trailingCategory,
+        diagnostics: buildMilitaryExpertTrailingContentDiagnostics({
+          raw,
+          trailingContent,
+          trailingCategory,
+          maxOutputTokens: options.maxOutputTokens,
+        }),
       };
     }
 

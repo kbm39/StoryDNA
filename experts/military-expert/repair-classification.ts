@@ -3,10 +3,17 @@
  */
 
 import {
+  analyzeContraryEvidenceViolations,
+  isRepairableContraryEvidenceSchemaFailure,
+} from "./contrary-evidence-schema-repair.ts";
+import { extractStrictModelJsonObject } from "./model-json-extraction.ts";
+import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts";
+import {
   parseMilitaryExpertGenerationResponse,
   applyDeterministicMilitaryExpertCleanup,
   type MilitaryExpertParseFailureCode,
 } from "./parsing.ts";
+import { validateMilitaryExpertGenerationPayload } from "./output-schema.ts";
 import type {
   MilitaryExpertRawGenerationResponse,
   MilitaryExpertRepairDecision,
@@ -19,6 +26,7 @@ export interface MilitaryExpertRepairClassification {
   parseFailureCode?: MilitaryExpertParseFailureCode;
   message?: string;
   cleanedText?: string;
+  contraryEvidenceFailureCode?: "MISSING_CONTRARY_EVIDENCE" | "MISSING_UNCERTAINTY_NOTE";
 }
 
 const PROVIDER_REPAIR_CODES = new Set<MilitaryExpertParseFailureCode>([
@@ -38,6 +46,47 @@ const REJECT_CODES = new Set<MilitaryExpertParseFailureCode>([
   "trailing_content",
   "provider_output_truncated",
 ]);
+
+function extractParsedRoot(rawText: string): unknown | undefined {
+  try {
+    const extraction = extractStrictModelJsonObject(rawText);
+    const parsed = JSON.parse(extraction.jsonText) as unknown;
+    return normalizeMilitaryExpertGenerationEnums(parsed).normalized;
+  } catch {
+    return undefined;
+  }
+}
+
+function classifyContraryEvidenceRepair(args: {
+  parseFailureCode: MilitaryExpertParseFailureCode;
+  message: string;
+  parsed?: unknown;
+}): MilitaryExpertRepairClassification | null {
+  if (args.parseFailureCode !== "evidence_missing") return null;
+
+  const validation = args.parsed
+    ? validateMilitaryExpertGenerationPayload(args.parsed)
+    : { ok: false, errors: [args.message] };
+
+  if (
+    !isRepairableContraryEvidenceSchemaFailure({
+      parseFailureCode: args.parseFailureCode,
+      validationErrors: validation.errors,
+      parsed: args.parsed,
+    })
+  ) {
+    return null;
+  }
+
+  const analysis = args.parsed ? analyzeContraryEvidenceViolations(args.parsed) : null;
+
+  return {
+    decision: "schema_repair_required",
+    parseFailureCode: args.parseFailureCode,
+    message: args.message,
+    contraryEvidenceFailureCode: analysis?.primaryFailureCode,
+  };
+}
 
 /** Classify whether a raw response can be cleaned deterministically or needs provider repair. */
 export function classifyMilitaryExpertRepairNeed(args: {
@@ -59,6 +108,22 @@ export function classifyMilitaryExpertRepairNeed(args: {
     };
   }
 
+  if (initial.code === "provider_output_truncated") {
+    return {
+      decision: "reject_output",
+      parseFailureCode: initial.code,
+      message: initial.message,
+    };
+  }
+
+  const parsedRoot = extractParsedRoot(args.raw.responseText);
+  const contraryRepair = classifyContraryEvidenceRepair({
+    parseFailureCode: initial.code,
+    message: initial.message,
+    parsed: parsedRoot,
+  });
+  if (contraryRepair) return contraryRepair;
+
   const trimmed = args.raw.responseText.trim();
   const cleaned = applyDeterministicMilitaryExpertCleanup(args.raw.responseText);
   if (cleaned !== trimmed) {
@@ -72,6 +137,12 @@ export function classifyMilitaryExpertRepairNeed(args: {
         cleanedText: cleaned,
       };
     }
+    const retriedContraryRepair = classifyContraryEvidenceRepair({
+      parseFailureCode: retried.code,
+      message: retried.message,
+      parsed: extractParsedRoot(cleaned),
+    });
+    if (retriedContraryRepair) return retriedContraryRepair;
     if (REJECT_CODES.has(retried.code)) {
       return {
         decision: "reject_output",

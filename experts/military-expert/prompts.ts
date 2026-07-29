@@ -147,7 +147,9 @@ export function buildMilitaryExpertReviewPrompt(input: MilitaryExpertReviewPromp
 
   const findingRules = [
     "FINDING REQUIREMENTS",
-    "- Negative findings require manuscript evidence, contrary evidence or explicit no-contrary-evidence statement, confidence, operational impact, recommendation, and preservation note.",
+    "- Negative findings require manuscript evidence, mandatory contrary_evidence array handling, confidence, operational impact, recommendation, and preservation note.",
+    "- Every negative finding MUST include contrary_evidence (array). Use [] when none exists and add uncertainty_note explaining that no meaningful contrary evidence was identified.",
+    "- Never omit contrary_evidence. Never use null. Do not substitute prose elsewhere for the required fields.",
     "- outside_expertise findings must name escalation_expert.",
     "- insufficient_evidence findings must not carry score deductions.",
     "- accurate findings must not carry negative score deductions.",

@@ -33,6 +33,17 @@ import {
 import { militaryExpertStudioOutputBudgetBlock } from "./studio-output-limits.ts";
 import { parseMilitaryExpertGenerationResponse } from "./parsing.ts";
 import { classifyMilitaryExpertRepairNeed } from "./repair-classification.ts";
+import {
+  analyzeContraryEvidenceViolations,
+  applyDeterministicContraryEvidenceNormalization,
+  buildContraryEvidenceRepairEventPayload,
+  isRepairableContraryEvidenceSchemaFailure,
+  mapContraryEvidenceValidationToFailureCode,
+  validateNormalizedContraryEvidencePayload,
+} from "./contrary-evidence-schema-repair.ts";
+import { extractStrictModelJsonObject } from "./model-json-extraction.ts";
+import { normalizeMilitaryExpertGenerationEnums } from "./enum-normalization.ts";
+import { validateMilitaryExpertGenerationPayload } from "./output-schema.ts";
 import { normalizeMilitaryExpertReview } from "./normalization.ts";
 import { validateMilitaryExpertReview } from "./validation.ts";
 import type {
@@ -225,6 +236,232 @@ function payloadToReview(
   };
 }
 
+function extractParsedRootFromRaw(raw: MilitaryExpertRawGenerationResponse): unknown | undefined {
+  try {
+    const extraction = extractStrictModelJsonObject(raw.responseText);
+    return normalizeMilitaryExpertGenerationEnums(JSON.parse(extraction.jsonText) as unknown)
+      .normalized;
+  } catch {
+    return undefined;
+  }
+}
+
+function finalizeSuccessfulContract(args: {
+  base: Omit<MilitaryExpertGenerationContractResult, "ok">;
+  requestHash: string;
+  systemPromptHash: string;
+  reviewPromptHash: string;
+  rawResponse: MilitaryExpertRawGenerationResponse;
+  repairDecision: MilitaryExpertGenerationContractResult["repairDecision"];
+  startedAt: number;
+  now: () => number;
+  payload: MilitaryExpertGenerationPayload;
+  input: MilitaryExpertGenerationContractInput;
+  definitionHash: string;
+  enumNormalizationAudits?: readonly import("./enum-normalization.ts").MilitaryExpertEnumNormalizationAudit[];
+  contraryEvidenceRepair?: MilitaryExpertGenerationContractResult["contraryEvidenceRepair"];
+}): MilitaryExpertGenerationContractResult {
+  const reviewDraft = payloadToReview(args.payload, args.input, args.definitionHash);
+  const normalized = normalizeMilitaryExpertReview(reviewDraft);
+  const validation = validateMilitaryExpertReview(normalized, {
+    expectedDefinitionHash: args.definitionHash,
+  });
+
+  if (!validation.ok) {
+    return {
+      ...args.base,
+      ok: false,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+      parsedReviewHash: hashMilitaryExpertParsedReview(normalized),
+      generationStatus: "validation_failed",
+      repairDecision: args.repairDecision,
+      durationMs: Math.max(0, args.now() - args.startedAt),
+      failureReason: validation.errors.slice(0, 5).join("; "),
+      contraryEvidenceRepair: args.contraryEvidenceRepair,
+    };
+  }
+
+  return {
+    ...args.base,
+    ok: true,
+    requestHash: args.requestHash,
+    systemPromptHash: args.systemPromptHash,
+    reviewPromptHash: args.reviewPromptHash,
+    rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+    parsedReviewHash: hashMilitaryExpertParsedReview(normalized),
+    generationStatus: "success",
+    repairDecision: args.repairDecision,
+    durationMs: Math.max(0, args.now() - args.startedAt),
+    enumNormalizationAudits: args.enumNormalizationAudits,
+    contraryEvidenceRepair: args.contraryEvidenceRepair,
+    review: normalized,
+  };
+}
+
+function attemptContraryEvidenceSchemaRecovery(args: {
+  input: MilitaryExpertGenerationContractInput;
+  rawResponse: MilitaryExpertRawGenerationResponse;
+  request: MilitaryExpertGenerationRequest;
+  base: Omit<MilitaryExpertGenerationContractResult, "ok">;
+  requestHash: string;
+  systemPromptHash: string;
+  reviewPromptHash: string;
+  repairDecision: MilitaryExpertGenerationContractResult["repairDecision"];
+  startedAt: number;
+  now: () => number;
+  parseFailureCode: string;
+  parseMessage: string;
+}): MilitaryExpertGenerationContractResult | null {
+  if (args.parseFailureCode !== "evidence_missing") return null;
+
+  const parsedRoot = extractParsedRootFromRaw(args.rawResponse);
+  if (!parsedRoot) return null;
+
+  const initialValidation = validateMilitaryExpertGenerationPayload(parsedRoot);
+  if (
+    !isRepairableContraryEvidenceSchemaFailure({
+      parseFailureCode: "evidence_missing",
+      validationErrors: initialValidation.errors,
+      parsed: parsedRoot,
+    })
+  ) {
+    return null;
+  }
+
+  const violationAnalysis = analyzeContraryEvidenceViolations(parsedRoot);
+  const deterministic = applyDeterministicContraryEvidenceNormalization(parsedRoot);
+  if (deterministic.applied) {
+    const deterministicValidation = validateNormalizedContraryEvidencePayload(
+      deterministic.normalized,
+    );
+    if (deterministicValidation.ok) {
+      const repairedParsed = parseMilitaryExpertGenerationResponse(
+        {
+          ...args.rawResponse,
+          responseText: JSON.stringify(deterministic.normalized),
+        },
+        {
+          expectedCorrelationId: args.input.correlationId,
+          maxOutputTokens: args.request.maxOutputTokens,
+        },
+      );
+      if (repairedParsed.ok) {
+        return finalizeSuccessfulContract({
+          ...args,
+          payload: repairedParsed.payload,
+          enumNormalizationAudits: repairedParsed.enumNormalizationAudits,
+          contraryEvidenceRepair: {
+            attempted: false,
+            succeeded: true,
+            deterministicNormalizationApplied: true,
+            eventPayload: buildContraryEvidenceRepairEventPayload({
+              violations: violationAnalysis.violations,
+              repairAttempted: false,
+              repairSucceeded: true,
+              deterministicNormalizationApplied: true,
+            }),
+          },
+        });
+      }
+    }
+  }
+
+  if (args.input.repairAlreadyAttempted) {
+    return {
+      ...args.base,
+      ok: false,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+      parsedReviewHash: null,
+      generationStatus: "parse_failed",
+      repairDecision: "reject_output",
+      durationMs: Math.max(0, args.now() - args.startedAt),
+      failureReason: args.parseMessage,
+      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      contraryEvidenceRepair: {
+        attempted: true,
+        succeeded: false,
+        deterministicNormalizationApplied: deterministic.applied,
+        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        eventPayload: buildContraryEvidenceRepairEventPayload({
+          violations: violationAnalysis.violations,
+          repairAttempted: true,
+          repairSucceeded: false,
+          deterministicNormalizationApplied: deterministic.applied,
+          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        }),
+      },
+    };
+  }
+
+  if (!args.input.repairResponse) return null;
+
+  const repairedParsed = parseMilitaryExpertGenerationResponse(args.input.repairResponse, {
+    expectedCorrelationId: args.input.correlationId,
+    maxOutputTokens: args.request.maxOutputTokens,
+  });
+
+  const primaryFailureCode =
+    mapContraryEvidenceValidationToFailureCode(initialValidation.errors) ??
+    violationAnalysis.violations[0]?.failureCode;
+
+  if (!repairedParsed.ok) {
+    return {
+      ...args.base,
+      ok: false,
+      requestHash: args.requestHash,
+      systemPromptHash: args.systemPromptHash,
+      reviewPromptHash: args.reviewPromptHash,
+      rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+      parsedReviewHash: null,
+      generationStatus: "parse_failed",
+      repairDecision: "reject_output",
+      durationMs: Math.max(0, args.now() - args.startedAt),
+      failureReason: repairedParsed.message,
+      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      contraryEvidenceRepair: {
+        attempted: true,
+        succeeded: false,
+        deterministicNormalizationApplied: deterministic.applied,
+        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        eventPayload: buildContraryEvidenceRepairEventPayload({
+          violations: violationAnalysis.violations,
+          repairAttempted: true,
+          repairSucceeded: false,
+          deterministicNormalizationApplied: deterministic.applied,
+          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        }),
+      },
+    };
+  }
+
+  return finalizeSuccessfulContract({
+    ...args,
+    rawResponse: args.input.repairResponse,
+    repairDecision: "schema_repair_required",
+    payload: repairedParsed.payload,
+    enumNormalizationAudits: repairedParsed.enumNormalizationAudits,
+    contraryEvidenceRepair: {
+      attempted: true,
+      succeeded: true,
+      deterministicNormalizationApplied: deterministic.applied,
+      failureCode: primaryFailureCode,
+      eventPayload: buildContraryEvidenceRepairEventPayload({
+        violations: violationAnalysis.violations,
+        repairAttempted: true,
+        repairSucceeded: true,
+        deterministicNormalizationApplied: deterministic.applied,
+        primaryFailureCode,
+      }),
+    },
+  });
+}
+
 /**
  * Test-only orchestration for the Military Expert generation contract.
  * Never calls providers, Trigger, databases, or file writers.
@@ -349,6 +586,22 @@ export async function runMilitaryExpertGenerationContract(
   });
 
   if (!parsed.ok) {
+    const recovered = attemptContraryEvidenceSchemaRecovery({
+      input,
+      rawResponse: input.rawResponse,
+      request,
+      base,
+      requestHash,
+      systemPromptHash,
+      reviewPromptHash,
+      repairDecision,
+      startedAt,
+      now: dependencies.now ?? Date.now,
+      parseFailureCode: parsed.code,
+      parseMessage: parsed.message,
+    });
+    if (recovered) return recovered;
+
     return {
       ...base,
       ok: false,
@@ -362,49 +615,27 @@ export async function runMilitaryExpertGenerationContract(
       durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
       failureReason: parsed.message,
       parseFailureCode: parsed.code,
-      parseTrailingCategory: parsed.ok ? undefined : parsed.trailingCategory,
+      parseTrailingCategory: parsed.trailingCategory,
       parseDiagnostics: parsed.diagnostics
         ? { ...parsed.diagnostics }
         : undefined,
     };
   }
 
-  const reviewDraft = payloadToReview(parsed.payload, input, request.definitionHash);
-  const normalized = normalizeMilitaryExpertReview(reviewDraft);
-  const validation = validateMilitaryExpertReview(normalized, {
-    expectedDefinitionHash: request.definitionHash,
-  });
-
-  if (!validation.ok) {
-    return {
-      ...base,
-      ok: false,
-      requestHash,
-      systemPromptHash,
-      reviewPromptHash,
-      rawResponseHash: hashMilitaryExpertRawResponse(input.rawResponse),
-      parsedReviewHash: hashMilitaryExpertParsedReview(normalized),
-      generationStatus: "validation_failed",
-      repairDecision,
-      durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
-      failureReason: validation.errors.slice(0, 5).join("; "),
-    };
-  }
-
-  return {
-    ...base,
-    ok: true,
+  return finalizeSuccessfulContract({
+    base,
     requestHash,
     systemPromptHash,
     reviewPromptHash,
-    rawResponseHash: hashMilitaryExpertRawResponse(input.rawResponse),
-    parsedReviewHash: hashMilitaryExpertParsedReview(normalized),
-    generationStatus: "success",
+    rawResponse: input.rawResponse,
     repairDecision,
-    durationMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
+    startedAt,
+    now: dependencies.now ?? Date.now,
+    payload: parsed.payload,
+    input,
+    definitionHash: request.definitionHash,
     enumNormalizationAudits: parsed.enumNormalizationAudits,
-    review: normalized,
-  };
+  });
 }
 
 export {

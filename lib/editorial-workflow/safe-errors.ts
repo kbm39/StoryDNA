@@ -37,6 +37,12 @@ export function safeErrorForCode(code: string, fallback?: string): string {
       return "The Military Expert response used an invalid markdown wrapper around the JSON object. Please retry the review.";
     case "PROVIDER_JSON_REPAIR_FAILED":
       return "The Military Expert response could not be repaired into a valid JSON object. Please retry the review.";
+    case "MISSING_CONTRARY_EVIDENCE":
+      return "The Military Expert response omitted required contrary-evidence fields on negative findings. Please retry the review.";
+    case "MISSING_UNCERTAINTY_NOTE":
+      return "The Military Expert response omitted the required uncertainty note for empty contrary evidence. Please retry the review.";
+    case "CONTRARY_EVIDENCE_REPAIR_FAILED":
+      return "The Military Expert response could not be repaired to include required contrary-evidence fields. Please retry the review.";
     case "PIPELINE_FAILED":
       return sanitizedFallback ??
         "The Literary Agent review could not be completed. You can retry when ready.";

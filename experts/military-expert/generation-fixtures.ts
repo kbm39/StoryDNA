@@ -174,12 +174,75 @@ export const FIXTURE_MISSING_CONTRARY_EVIDENCE = baseRawResponse(
   JSON.stringify({
     ...buildValidGenerationPayload(),
     findings: [
-      {
-        ...buildValidGenerationPayload().findings[1],
-        finding_id: "missing-contrary",
-        contrary_evidence: [],
-        uncertainty_note: "",
-      },
+      (() => {
+        const finding = {
+          ...buildValidGenerationPayload().findings[1],
+          finding_id: "missing-contrary",
+        };
+        delete (finding as { contrary_evidence?: unknown }).contrary_evidence;
+        delete (finding as { uncertainty_note?: unknown }).uncertainty_note;
+        return finding;
+      })(),
+    ],
+  }),
+);
+
+export const FIXTURE_EMPTY_CONTRARY_NO_UNCERTAINTY = baseRawResponse(
+  JSON.stringify({
+    ...buildValidGenerationPayload(),
+    findings: [
+      (() => {
+        const finding = {
+          ...buildValidGenerationPayload().findings[1],
+          finding_id: "empty-contrary-no-note",
+          contrary_evidence: [],
+        };
+        delete (finding as { uncertainty_note?: unknown }).uncertainty_note;
+        return finding;
+      })(),
+    ],
+  }),
+);
+
+export const FIXTURE_EXPLICIT_NO_CONTRARY_OBSERVATION = baseRawResponse(
+  JSON.stringify({
+    ...buildValidGenerationPayload(),
+    findings: [
+      (() => {
+        const finding = {
+          ...buildValidGenerationPayload().findings[1],
+          finding_id: "explicit-no-contrary",
+          observation:
+            "The radio check is slightly informal for a tactical net. No contrary evidence was found in the supplied scope.",
+        };
+        delete (finding as { contrary_evidence?: unknown }).contrary_evidence;
+        delete (finding as { uncertainty_note?: unknown }).uncertainty_note;
+        return finding;
+      })(),
+    ],
+  }),
+);
+
+export function buildContraryEvidenceRepairSuccessJson(): string {
+  return JSON.stringify(buildValidGenerationPayload());
+}
+
+export const FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS = baseRawResponse(
+  buildContraryEvidenceRepairSuccessJson(),
+);
+
+export const FIXTURE_CONTRARY_EVIDENCE_REPAIR_FAILED = baseRawResponse(
+  JSON.stringify({
+    ...buildValidGenerationPayload(),
+    findings: [
+      (() => {
+        const finding = {
+          ...buildValidGenerationPayload().findings[1],
+          finding_id: "still-missing-contrary",
+        };
+        delete (finding as { contrary_evidence?: unknown }).contrary_evidence;
+        return finding;
+      })(),
     ],
   }),
 );

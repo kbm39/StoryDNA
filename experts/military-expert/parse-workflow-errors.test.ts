@@ -32,12 +32,22 @@ describe("mapMilitaryExpertParseFailureToWorkflowErrorCode", () => {
     );
   });
 
-  it("maps truncation to PROVIDER_OUTPUT_TRUNCATED", () => {
+  it("maps contrary evidence missing to MISSING_CONTRARY_EVIDENCE", () => {
     assert.equal(
       mapMilitaryExpertParseFailureToWorkflowErrorCode({
-        parseFailureCode: "provider_output_truncated",
+        parseFailureCode: "evidence_missing",
+        contraryEvidenceFailureCode: "MISSING_CONTRARY_EVIDENCE",
       }),
-      "PROVIDER_OUTPUT_TRUNCATED",
+      "MISSING_CONTRARY_EVIDENCE",
+    );
+  });
+
+  it("maps repair failure to CONTRARY_EVIDENCE_REPAIR_FAILED", () => {
+    assert.equal(
+      mapMilitaryExpertParseFailureToWorkflowErrorCode({
+        parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      }),
+      "CONTRARY_EVIDENCE_REPAIR_FAILED",
     );
   });
 });

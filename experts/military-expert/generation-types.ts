@@ -14,6 +14,7 @@ export type MilitaryExpertRepairDecision =
   | "no_repair_needed"
   | "deterministic_cleanup_allowed"
   | "provider_repair_required"
+  | "schema_repair_required"
   | "reject_output";
 
 export interface MilitaryExpertGenerationProvenance {
@@ -71,6 +72,10 @@ export interface MilitaryExpertGenerationContractInput {
   genreContext?: string | null;
   countryPeriod?: string | null;
   rawResponse?: MilitaryExpertRawGenerationResponse;
+  /** Optional synthetic repair response for harness-only schema repair. */
+  repairResponse?: MilitaryExpertRawGenerationResponse;
+  /** When true, a schema repair pass was already attempted and must not repeat. */
+  repairAlreadyAttempted?: boolean;
 }
 
 export interface MilitaryExpertGenerationContractResult {
@@ -96,5 +101,12 @@ export interface MilitaryExpertGenerationContractResult {
   parseTrailingCategory?: string;
   parseDiagnostics?: Record<string, unknown>;
   enumNormalizationAudits?: readonly MilitaryExpertEnumNormalizationAudit[];
+  contraryEvidenceRepair?: {
+    attempted: boolean;
+    succeeded: boolean;
+    deterministicNormalizationApplied: boolean;
+    failureCode?: string;
+    eventPayload?: Record<string, unknown>;
+  };
   review?: MilitaryExpertReview;
 }

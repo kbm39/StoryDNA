@@ -7,6 +7,7 @@ import { createBudgetController } from "@/lib/expert-calibration/live/budget-con
 import { estimateTokenCost } from "@/lib/expert-calibration/cost-analysis.ts";
 import { resolveProviderSpec, ANTHROPIC_HAIKU_45_ALIAS } from "@/lib/expert-calibration/live/provider-allowlist.ts";
 import { createAnthropicProviderInvoker } from "@/lib/expert-calibration/live/providers/anthropic/invoke.ts";
+import { MILITARY_EXPERT } from "@/experts/military-expert/definition.ts";
 import {
   buildMilitaryExpertGenerationRequest,
   runMilitaryExpertGenerationContract,
@@ -42,8 +43,9 @@ const STUDIO_MILITARY_BUDGET = Object.freeze({
   maxTotalCostUsd: 0.3,
   maxCostPerCallUsd: 0.25,
   maxInputTokens: 120_000,
-  maxOutputTokens: 8_192,
-  providerMaxOutputTokens: 8_192,
+  maxOutputTokens:
+    MILITARY_EXPERT.maxTokens + MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+  providerMaxOutputTokens: MILITARY_EXPERT.maxTokens,
   timeoutMs: 180_000,
 });
 
@@ -187,6 +189,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     manuscriptText: ctx.extractedText,
     canonicalWordCount: ctx.wordCount ?? 0,
     manuscriptHash: ctx.contentHash,
+    maxOutputTokens: STUDIO_MILITARY_BUDGET.providerMaxOutputTokens,
   };
 
   let contractResult = await runMilitaryExpertGenerationContract(

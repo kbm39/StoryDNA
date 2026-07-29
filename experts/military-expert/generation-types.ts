@@ -71,6 +71,7 @@ export interface MilitaryExpertGenerationContractInput {
   manuscriptHash: string;
   genreContext?: string | null;
   countryPeriod?: string | null;
+  maxOutputTokens?: number;
   rawResponse?: MilitaryExpertRawGenerationResponse;
   /** Optional synthetic repair response for harness-only schema repair. */
   repairResponse?: MilitaryExpertRawGenerationResponse;

@@ -20,6 +20,7 @@ export function militaryExpertStudioOutputBudgetBlock(): string {
     `- summary: at most ${limits.maxSummaryWords} words.`,
     `- observation / recommendation fields: keep each under ${limits.maxObservationWords} / ${limits.maxRecommendationWords} words.`,
     "- Omit lower-priority findings rather than exceeding these limits.",
+    "- Additional token capacity exists to ensure completion, not to increase findings or repeat information.",
     "- Finish the JSON object completely within the output budget.",
   ].join("\n");
 }

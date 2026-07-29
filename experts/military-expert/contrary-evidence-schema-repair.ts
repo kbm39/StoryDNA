@@ -41,6 +41,22 @@ export interface ContraryEvidenceRepairAnalysis {
   >;
 }
 
+export interface ContraryEvidenceRepairProviderDiagnostics {
+  workflow_correlation_id: string;
+  repair_call_correlation_id?: string;
+  provider_call_completed: boolean;
+  provider_stop_reason?: string;
+  repair_input_tokens?: number;
+  repair_output_tokens?: number;
+  repair_max_output_tokens: number;
+  repair_estimated_cost_usd?: number;
+  repair_response_length?: number;
+  repair_parse_result?: string;
+  repair_validation_result?: string;
+  repair_failure_code?: string;
+  unrelated_content_preservation_passed?: boolean;
+}
+
 export interface ContraryEvidenceRepairEventPayload {
   finding_indexes: number[];
   missing_field_names: string[];
@@ -48,6 +64,19 @@ export interface ContraryEvidenceRepairEventPayload {
   repair_succeeded: boolean;
   deterministic_normalization_applied: boolean;
   primary_failure_code?: ContraryEvidenceFailureCode;
+  workflow_correlation_id?: string;
+  repair_call_correlation_id?: string;
+  provider_call_completed?: boolean;
+  provider_stop_reason?: string;
+  repair_input_tokens?: number;
+  repair_output_tokens?: number;
+  repair_max_output_tokens?: number;
+  repair_estimated_cost_usd?: number;
+  repair_response_length?: number;
+  repair_parse_result?: string;
+  repair_validation_result?: string;
+  repair_failure_code?: string;
+  unrelated_content_preservation_passed?: boolean;
 }
 
 const NO_CONTRARY_EVIDENCE_PATTERN =
@@ -283,24 +312,108 @@ export function buildContraryEvidenceSchemaRepairPrompt(args: {
   return { systemPrompt, userPrompt };
 }
 
+export function buildContraryEvidenceRepairProviderDiagnostics(args: {
+  workflowCorrelationId: string;
+  repairCallCorrelationId?: string;
+  repairRaw?: {
+    finishStatus?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    responseText?: string;
+  } | null;
+  providerCallCompleted: boolean;
+  repairMaxOutputTokens: number;
+  repairEstimatedCostUsd?: number;
+  repairParseResult?: string;
+  repairValidationResult?: string;
+  repairFailureCode?: string;
+  unrelatedContentPreservationPassed?: boolean;
+}): ContraryEvidenceRepairProviderDiagnostics {
+  return {
+    workflow_correlation_id: args.workflowCorrelationId,
+    repair_call_correlation_id: args.repairCallCorrelationId,
+    provider_call_completed: args.providerCallCompleted,
+    provider_stop_reason: args.repairRaw?.finishStatus,
+    repair_input_tokens: args.repairRaw?.inputTokens,
+    repair_output_tokens: args.repairRaw?.outputTokens,
+    repair_max_output_tokens: args.repairMaxOutputTokens,
+    repair_estimated_cost_usd: args.repairEstimatedCostUsd,
+    repair_response_length: args.repairRaw?.responseText?.length,
+    repair_parse_result: args.repairParseResult,
+    repair_validation_result: args.repairValidationResult,
+    repair_failure_code: args.repairFailureCode,
+    unrelated_content_preservation_passed: args.unrelatedContentPreservationPassed,
+  };
+}
+
+export function normalizeRepairResponseForContract<T extends { correlationId: string }>(
+  repairRaw: T,
+  workflowCorrelationId: string,
+): T {
+  return {
+    ...repairRaw,
+    correlationId: workflowCorrelationId,
+  };
+}
+
 export function buildContraryEvidenceRepairEventPayload(args: {
   violations: readonly ContraryEvidenceFindingViolation[];
   repairAttempted: boolean;
   repairSucceeded: boolean;
   deterministicNormalizationApplied: boolean;
   primaryFailureCode?: ContraryEvidenceFailureCode;
+  providerDiagnostics?: Partial<ContraryEvidenceRepairProviderDiagnostics>;
+  repairParseResult?: string;
+  repairValidationResult?: string;
+  repairFailureCode?: string;
+  unrelatedContentPreservationPassed?: boolean;
 }): ContraryEvidenceRepairEventPayload {
   const missingFieldNames = [
     ...new Set(args.violations.flatMap((item) => [...item.missingFields])),
   ];
 
-  return {
+  const base: ContraryEvidenceRepairEventPayload = {
     finding_indexes: args.violations.map((item) => item.findingIndex),
     missing_field_names: missingFieldNames,
     repair_attempted: args.repairAttempted,
     repair_succeeded: args.repairSucceeded,
     deterministic_normalization_applied: args.deterministicNormalizationApplied,
     primary_failure_code: args.primaryFailureCode,
+  };
+
+  const mergedDiagnostics: Partial<ContraryEvidenceRepairProviderDiagnostics> = {
+    ...(args.providerDiagnostics ?? {}),
+    ...(args.repairParseResult !== undefined
+      ? { repair_parse_result: args.repairParseResult }
+      : {}),
+    ...(args.repairValidationResult !== undefined
+      ? { repair_validation_result: args.repairValidationResult }
+      : {}),
+    ...(args.repairFailureCode !== undefined
+      ? { repair_failure_code: args.repairFailureCode }
+      : {}),
+    ...(args.unrelatedContentPreservationPassed !== undefined
+      ? { unrelated_content_preservation_passed: args.unrelatedContentPreservationPassed }
+      : {}),
+  };
+
+  if (Object.keys(mergedDiagnostics).length === 0) return base;
+
+  return {
+    ...base,
+    workflow_correlation_id: mergedDiagnostics.workflow_correlation_id,
+    repair_call_correlation_id: mergedDiagnostics.repair_call_correlation_id,
+    provider_call_completed: mergedDiagnostics.provider_call_completed,
+    provider_stop_reason: mergedDiagnostics.provider_stop_reason,
+    repair_input_tokens: mergedDiagnostics.repair_input_tokens,
+    repair_output_tokens: mergedDiagnostics.repair_output_tokens,
+    repair_max_output_tokens: mergedDiagnostics.repair_max_output_tokens,
+    repair_estimated_cost_usd: mergedDiagnostics.repair_estimated_cost_usd,
+    repair_response_length: mergedDiagnostics.repair_response_length,
+    repair_parse_result: mergedDiagnostics.repair_parse_result,
+    repair_validation_result: mergedDiagnostics.repair_validation_result,
+    repair_failure_code: mergedDiagnostics.repair_failure_code,
+    unrelated_content_preservation_passed: mergedDiagnostics.unrelated_content_preservation_passed,
   };
 }
 

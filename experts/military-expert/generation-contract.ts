@@ -37,8 +37,11 @@ import {
   analyzeContraryEvidenceViolations,
   applyDeterministicContraryEvidenceNormalization,
   buildContraryEvidenceRepairEventPayload,
+  buildContraryEvidenceRepairProviderDiagnostics,
   isRepairableContraryEvidenceSchemaFailure,
   mapContraryEvidenceValidationToFailureCode,
+  MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING,
+  normalizeRepairResponseForContract,
   validateNormalizedContraryEvidencePayload,
 } from "./contrary-evidence-schema-repair.ts";
 import { extractStrictModelJsonObject } from "./model-json-extraction.ts";
@@ -305,6 +308,33 @@ function finalizeSuccessfulContract(args: {
   };
 }
 
+function unrelatedContentPreservationPassed(
+  primaryRoot: unknown,
+  repairedPayload: import("./output-schema.ts").MilitaryExpertGenerationPayload,
+): boolean {
+  if (!primaryRoot || typeof primaryRoot !== "object" || Array.isArray(primaryRoot)) {
+    return true;
+  }
+  const primaryFindings = Array.isArray((primaryRoot as Record<string, unknown>).findings)
+    ? ((primaryRoot as Record<string, unknown>).findings as unknown[])
+    : [];
+  for (const repaired of repairedPayload.findings) {
+    const primary = primaryFindings.find((item) => {
+      if (!item || typeof item !== "object") return false;
+      return (item as Record<string, unknown>).finding_id === repaired.finding_id;
+    }) as Record<string, unknown> | undefined;
+    if (!primary) continue;
+    if (primary.realism_status !== repaired.realism_status) return false;
+    if (String(primary.observation ?? "").trim() !== String(repaired.observation ?? "").trim()) {
+      return false;
+    }
+    if (String(primary.title ?? "").trim() !== String(repaired.title ?? "").trim()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function attemptContraryEvidenceSchemaRecovery(args: {
   input: MilitaryExpertGenerationContractInput;
   rawResponse: MilitaryExpertRawGenerationResponse;
@@ -373,7 +403,19 @@ function attemptContraryEvidenceSchemaRecovery(args: {
     }
   }
 
-  if (args.input.repairAlreadyAttempted) {
+  if (args.input.repairAlreadyAttempted && !args.input.repairResponse) {
+    const providerDiagnostics =
+      args.input.repairProviderDiagnostics ??
+      (args.input.repairCallCorrelationId
+        ? buildContraryEvidenceRepairProviderDiagnostics({
+            workflowCorrelationId: args.input.correlationId,
+            repairCallCorrelationId: args.input.repairCallCorrelationId,
+            repairMaxOutputTokens:
+              args.input.repairMaxOutputTokens ??
+              MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+            providerCallCompleted: false,
+          })
+        : undefined);
     return {
       ...args.base,
       ok: false,
@@ -398,6 +440,8 @@ function attemptContraryEvidenceSchemaRecovery(args: {
           repairSucceeded: false,
           deterministicNormalizationApplied: deterministic.applied,
           primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          providerDiagnostics,
+          repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
         }),
       },
     };
@@ -405,14 +449,43 @@ function attemptContraryEvidenceSchemaRecovery(args: {
 
   if (!args.input.repairResponse) return null;
 
-  const repairedParsed = parseMilitaryExpertGenerationResponse(args.input.repairResponse, {
+  const repairMaxOutputTokens =
+    args.input.repairMaxOutputTokens ??
+    MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens;
+
+  const normalizedRepairResponse = normalizeRepairResponseForContract(
+    args.input.repairResponse,
+    args.input.correlationId,
+  );
+
+  const providerDiagnostics =
+    args.input.repairProviderDiagnostics ??
+    (args.input.repairCallCorrelationId
+      ? buildContraryEvidenceRepairProviderDiagnostics({
+          workflowCorrelationId: args.input.correlationId,
+          repairCallCorrelationId: args.input.repairCallCorrelationId,
+          repairRaw: args.input.repairResponse,
+          repairMaxOutputTokens,
+          providerCallCompleted: true,
+        })
+      : undefined);
+
+  const repairedParsed = parseMilitaryExpertGenerationResponse(normalizedRepairResponse, {
     expectedCorrelationId: args.input.correlationId,
-    maxOutputTokens: args.request.maxOutputTokens,
+    maxOutputTokens: repairMaxOutputTokens,
   });
 
   const primaryFailureCode =
     mapContraryEvidenceValidationToFailureCode(initialValidation.errors) ??
     violationAnalysis.violations[0]?.failureCode;
+
+  const baseRepairEventArgs = {
+    violations: violationAnalysis.violations,
+    repairAttempted: true,
+    deterministicNormalizationApplied: deterministic.applied,
+    providerDiagnostics,
+    primaryFailureCode,
+  };
 
   if (!repairedParsed.ok) {
     return {
@@ -434,19 +507,24 @@ function attemptContraryEvidenceSchemaRecovery(args: {
         deterministicNormalizationApplied: deterministic.applied,
         failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
         eventPayload: buildContraryEvidenceRepairEventPayload({
-          violations: violationAnalysis.violations,
-          repairAttempted: true,
+          ...baseRepairEventArgs,
           repairSucceeded: false,
-          deterministicNormalizationApplied: deterministic.applied,
           primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          repairParseResult: repairedParsed.code,
+          repairFailureCode: repairedParsed.code,
         }),
       },
     };
   }
 
-  return finalizeSuccessfulContract({
+  const contentPreservationPassed = unrelatedContentPreservationPassed(
+    parsedRoot,
+    repairedParsed.payload,
+  );
+
+  const finalized = finalizeSuccessfulContract({
     ...args,
-    rawResponse: args.input.repairResponse,
+    rawResponse: normalizedRepairResponse,
     repairDecision: "schema_repair_required",
     payload: repairedParsed.payload,
     enumNormalizationAudits: repairedParsed.enumNormalizationAudits,
@@ -456,14 +534,48 @@ function attemptContraryEvidenceSchemaRecovery(args: {
       deterministicNormalizationApplied: deterministic.applied,
       failureCode: primaryFailureCode,
       eventPayload: buildContraryEvidenceRepairEventPayload({
-        violations: violationAnalysis.violations,
-        repairAttempted: true,
+        ...baseRepairEventArgs,
         repairSucceeded: true,
-        deterministicNormalizationApplied: deterministic.applied,
-        primaryFailureCode,
+        repairParseResult: "ok",
+        repairValidationResult: "ok",
+        unrelatedContentPreservationPassed: contentPreservationPassed,
       }),
     },
   });
+
+  if (!finalized.ok && finalized.generationStatus === "validation_failed") {
+    return {
+      ...finalized,
+      parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+      contraryEvidenceRepair: {
+        attempted: true,
+        succeeded: false,
+        deterministicNormalizationApplied: deterministic.applied,
+        failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+        eventPayload: buildContraryEvidenceRepairEventPayload({
+          ...baseRepairEventArgs,
+          repairSucceeded: false,
+          primaryFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          repairParseResult: "ok",
+          repairValidationResult: "failed",
+          repairFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+          unrelatedContentPreservationPassed: contentPreservationPassed,
+        }),
+      },
+    };
+  }
+
+  if (finalized.ok && finalized.contraryEvidenceRepair?.eventPayload) {
+    finalized.contraryEvidenceRepair.eventPayload = buildContraryEvidenceRepairEventPayload({
+      ...baseRepairEventArgs,
+      repairSucceeded: true,
+      repairParseResult: "ok",
+      repairValidationResult: "ok",
+      unrelatedContentPreservationPassed: contentPreservationPassed,
+    });
+  }
+
+  return finalized;
 }
 
 /**

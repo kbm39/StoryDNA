@@ -13,6 +13,10 @@ import {
   runMilitaryExpertGenerationContract,
 } from "@/experts/military-expert/generation-contract.ts";
 import { MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING } from "@/experts/military-expert/contrary-evidence-schema-repair.ts";
+import {
+  buildContraryEvidenceRepairProviderDiagnostics,
+  normalizeRepairResponseForContract,
+} from "@/experts/military-expert/contrary-evidence-schema-repair.ts";
 import { planMilitaryExpertContraryEvidenceRepair } from "./plan-military-expert-contrary-evidence-repair.ts";
 import {
   STUDIO_MILITARY_BUDGET,
@@ -259,28 +263,60 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
       }
 
       if (repairInvoke.ok && repairInvoke.rawResponse) {
+        const repairCallCorrelationId = `${correlationId}-repair`;
         const repairInputTokens = repairInvoke.rawResponse.inputTokens ?? 0;
         const repairOutputTokens = repairInvoke.rawResponse.outputTokens ?? 0;
-        budget.recordCall(
-          estimateTokenCost(
-            repairInputTokens,
-            repairOutputTokens,
-            providerSpec.pricingProfileId,
-          ),
+        const repairEstimatedCostUsd = estimateTokenCost(
           repairInputTokens,
           repairOutputTokens,
+          providerSpec.pricingProfileId,
+        );
+        budget.recordCall(repairEstimatedCostUsd, repairInputTokens, repairOutputTokens);
+
+        const repairProviderDiagnostics = buildContraryEvidenceRepairProviderDiagnostics({
+          workflowCorrelationId: correlationId,
+          repairCallCorrelationId,
+          repairRaw: repairInvoke.rawResponse,
+          repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+          repairEstimatedCostUsd,
+          providerCallCompleted: true,
+        });
+
+        const normalizedRepairResponse = normalizeRepairResponseForContract(
+          repairInvoke.rawResponse,
+          correlationId,
         );
 
         contractResult = await runMilitaryExpertGenerationContract(
           {
             ...contractInput,
             rawResponse: invokeResult.rawResponse,
-            repairResponse: repairInvoke.rawResponse,
-            repairAlreadyAttempted: true,
+            repairResponse: normalizedRepairResponse,
+            repairCallCorrelationId,
+            repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+            repairProviderDiagnostics,
           },
           { bypassFeatureFlag: true },
         );
+
+        await insertWorkflowEvent({
+          workflowId,
+          eventType: "contrary_evidence_repair_completed",
+          payload: contractResult.contraryEvidenceRepair?.eventPayload ?? {
+            repair_attempted: true,
+            repair_succeeded: contractResult.ok,
+            ...repairProviderDiagnostics,
+          },
+        }).catch(() => {});
       } else {
+        const repairCallCorrelationId = `${correlationId}-repair`;
+        const repairProviderDiagnostics = buildContraryEvidenceRepairProviderDiagnostics({
+          workflowCorrelationId: correlationId,
+          repairCallCorrelationId,
+          repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+          providerCallCompleted: false,
+        });
+
         contractResult = {
           ...contractResult,
           parseFailureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
@@ -289,8 +325,22 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
             succeeded: false,
             deterministicNormalizationApplied: false,
             failureCode: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+            eventPayload: {
+              repair_attempted: true,
+              repair_succeeded: false,
+              deterministic_normalization_applied: false,
+              primary_failure_code: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+              repair_failure_code: "CONTRARY_EVIDENCE_REPAIR_FAILED",
+              ...repairProviderDiagnostics,
+            },
           },
         };
+
+        await insertWorkflowEvent({
+          workflowId,
+          eventType: "contrary_evidence_repair_completed",
+          payload: contractResult.contraryEvidenceRepair.eventPayload,
+        }).catch(() => {});
       }
     } else if (repairPlan.action === "skip_repair") {
       await insertWorkflowEvent({

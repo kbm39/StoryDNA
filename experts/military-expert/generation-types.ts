@@ -9,6 +9,7 @@ import {
 } from "./contracts.ts";
 import type { MilitaryExpertReview } from "./contracts.ts";
 import type { MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
+import type { ContraryEvidenceRepairProviderDiagnostics } from "./contrary-evidence-schema-repair.ts";
 
 export type MilitaryExpertRepairDecision =
   | "no_repair_needed"
@@ -77,6 +78,12 @@ export interface MilitaryExpertGenerationContractInput {
   repairResponse?: MilitaryExpertRawGenerationResponse;
   /** When true, a schema repair pass was already attempted and must not repeat. */
   repairAlreadyAttempted?: boolean;
+  /** Max output tokens for repair response parse diagnostics (defaults to repair ceiling). */
+  repairMaxOutputTokens?: number;
+  /** Provider correlation id used for the repair invoke (may differ from workflow id). */
+  repairCallCorrelationId?: string;
+  /** Safe provider diagnostics from the repair invoke for event payloads. */
+  repairProviderDiagnostics?: ContraryEvidenceRepairProviderDiagnostics;
 }
 
 export interface MilitaryExpertGenerationContractResult {

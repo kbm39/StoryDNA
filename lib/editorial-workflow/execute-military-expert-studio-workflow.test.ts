@@ -119,7 +119,21 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
     assert.doesNotThrow(() => violations.map((item) => item.findingIndex));
   });
 
-  it("5. one repair attempt limit", async () => {
+  it("5. one repair attempt limit blocks without repair response", async () => {
+    const blocked = await runMilitaryExpertGenerationContract(
+      {
+        ...buildValidGenerationContractInput(),
+        rawResponse: FIXTURE_MISSING_CONTRARY_EVIDENCE,
+        repairAlreadyAttempted: true,
+      },
+      { bypassFeatureFlag: true },
+    );
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
+    assert.equal(blocked.contraryEvidenceRepair?.eventPayload?.repair_parse_result, undefined);
+  });
+
+  it("5b. repairAlreadyAttempted with repairResponse evaluates failed repair", async () => {
     const result = await runMilitaryExpertGenerationContract(
       {
         ...buildValidGenerationContractInput(),
@@ -131,6 +145,7 @@ describe("executeMilitaryExpertStudioWorkflow contrary-evidence repair wiring", 
     );
     assert.equal(result.ok, false);
     assert.equal(result.parseFailureCode, "CONTRARY_EVIDENCE_REPAIR_FAILED");
+    assert.equal(result.contraryEvidenceRepair?.eventPayload?.repair_parse_result, "evidence_missing");
   });
 
   it("6. truncation path does not invoke repair", () => {

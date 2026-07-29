@@ -9,6 +9,7 @@ import { LITERARY_AGENT_CONSTITUTION_DEFINITION_HASH } from "@/lib/expert-review
 import {
   analyzeQualifyingUnresolvedFindings,
   evaluateProvisionalRelease,
+  MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS,
   MAX_PROVISIONAL_UNRESOLVED_FINDINGS,
 } from "./provisional-release.ts";
 import {
@@ -105,7 +106,7 @@ describe("Military Expert provisional release", () => {
   it("4. ten unresolved findings do not release normally", async () => {
     const result = await runFailedRepairContract(FIXTURE_TEN_UNRESOLVED);
     assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "TOO_MANY_UNRESOLVED_FINDINGS");
+    assert.equal(result.parseFailureCode, "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS");
   });
 
   it("5. unresolved contrary_evidence qualifies only when rest of finding is valid", () => {
@@ -308,7 +309,7 @@ describe("Military Expert provisional release", () => {
   it("21. repair failure with 10+ findings remains blocked", async () => {
     const result = await runFailedRepairContract(FIXTURE_TEN_UNRESOLVED);
     assert.equal(result.ok, false);
-    assert.equal(result.parseFailureCode, "TOO_MANY_UNRESOLVED_FINDINGS");
+    assert.equal(result.parseFailureCode, "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS");
   });
 
   it("22. exactly one repair attempt remains enforced", async () => {
@@ -339,6 +340,7 @@ describe("Military Expert provisional release", () => {
   });
 
   it("threshold constant is authoritative", () => {
+    assert.equal(MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS, 9);
     assert.equal(MAX_PROVISIONAL_UNRESOLVED_FINDINGS, 9);
   });
 
@@ -398,6 +400,51 @@ describe("Military Expert provisional release", () => {
     if (built?.ok) {
       assert.equal(built.review.review_status, "completed_with_author_review_required");
       assert.equal(built.qualifyingFindings.length, 2);
+    }
+  });
+
+  it("26. primary report releases provisionally without provider repair when experiment enabled", async () => {
+    const prior = { ...process.env };
+    process.env.NODE_ENV = "development";
+    process.env.STUDIO_ENABLED = "true";
+    process.env.STUDIO_MILITARY_EXPERT_ENABLED = "1";
+
+    try {
+      const result = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: FIXTURE_MISSING_CONTRARY_EVIDENCE,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(result.ok, true);
+      assert.equal(result.generationStatus, "provisional_success");
+      assert.equal(result.review?.review_status, "completed_with_author_review_required");
+      assert.equal(result.contraryEvidenceRepair?.attempted, undefined);
+      assert.equal(result.provisionalRelease?.used, true);
+    } finally {
+      process.env = prior;
+    }
+  });
+
+  it("27. primary provisional path does not run when experiment disabled", async () => {
+    const prior = { ...process.env };
+    process.env.NODE_ENV = "development";
+    process.env.STUDIO_ENABLED = "true";
+    delete process.env.STUDIO_MILITARY_EXPERT_ENABLED;
+
+    try {
+      const result = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: FIXTURE_MISSING_CONTRARY_EVIDENCE,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(result.ok, false);
+      assert.notEqual(result.generationStatus, "provisional_success");
+    } finally {
+      process.env = prior;
     }
   });
 });

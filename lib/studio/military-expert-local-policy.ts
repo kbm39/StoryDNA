@@ -12,6 +12,10 @@ export const STUDIO_MILITARY_EXPERT_LAUNCH_ACK =
 
 export const STUDIO_MILITARY_EXPERT_FLAG_NAME = "STUDIO_MILITARY_EXPERT_ENABLED" as const;
 
+export function isMilitaryExpertPrimaryProvisionalReleaseEnabled(): boolean {
+  return isStudioMilitaryExpertLocalOverrideEnabled();
+}
+
 export function isStudioMilitaryExpertLocalOverrideEnabled(): boolean {
   if (process.env.NODE_ENV === "production") return false;
   if (!isStudioFeatureEnabled()) return false;

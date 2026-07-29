@@ -356,6 +356,7 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
       | import("@/experts/military-expert/parsing.ts").MilitaryExpertParseFailureCode
       | "CONTRARY_EVIDENCE_REPAIR_FAILED"
       | "TOO_MANY_UNRESOLVED_FINDINGS"
+      | "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS"
       | undefined;
     const trailingCategory = contractResult.parseTrailingCategory as
       | ModelJsonTrailingCategory
@@ -365,8 +366,9 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
     const errorCode =
       parseFailureCode === "CONTRARY_EVIDENCE_REPAIR_FAILED"
         ? "CONTRARY_EVIDENCE_REPAIR_FAILED"
-        : parseFailureCode === "TOO_MANY_UNRESOLVED_FINDINGS"
-          ? "TOO_MANY_UNRESOLVED_FINDINGS"
+        : parseFailureCode === "TOO_MANY_UNRESOLVED_FINDINGS" ||
+            parseFailureCode === "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS"
+          ? "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS"
           : parseFailureCode
           ? mapMilitaryExpertParseFailureToWorkflowErrorCode({
               parseFailureCode,

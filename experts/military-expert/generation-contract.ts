@@ -56,8 +56,9 @@ import { normalizeMilitaryExpertReview } from "./normalization.ts";
 import { validateMilitaryExpertReview } from "./validation.ts";
 import {
   evaluateProvisionalRelease,
-  MAX_PROVISIONAL_UNRESOLVED_FINDINGS,
+  MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS,
 } from "./provisional-release.ts";
+import { isMilitaryExpertPrimaryProvisionalReleaseEnabled } from "@/lib/studio/military-expert-local-policy.ts";
 import type {
   MilitaryExpertGenerationContractInput,
   MilitaryExpertGenerationContractResult,
@@ -379,7 +380,7 @@ function attemptProvisionalReleaseFromContraryEvidenceFailure(args: {
   if (!result) return null;
 
   if (!result.ok) {
-    if (result.failureCode === "TOO_MANY_UNRESOLVED_FINDINGS") {
+    if (result.failureCode === "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS") {
       return {
         ...args.base,
         ok: false,
@@ -391,8 +392,8 @@ function attemptProvisionalReleaseFromContraryEvidenceFailure(args: {
         generationStatus: "parse_failed",
         repairDecision: "reject_output",
         durationMs: Math.max(0, args.now() - args.startedAt),
-        failureReason: `Too many unresolved confidence findings (${result.diagnostics.unresolved_finding_count}); maximum is ${MAX_PROVISIONAL_UNRESOLVED_FINDINGS}`,
-        parseFailureCode: "TOO_MANY_UNRESOLVED_FINDINGS",
+        failureReason: `Too many unresolved contrary-evidence findings (${result.diagnostics.unresolved_finding_count}); maximum is ${MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS}`,
+        parseFailureCode: "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS",
         contraryEvidenceRepair: args.contraryEvidenceRepair,
         provisionalRelease: {
           used: false,
@@ -567,6 +568,37 @@ function attemptContraryEvidenceSchemaRecovery(args: {
       false,
       contraryEvidenceRepair,
     );
+  }
+
+  if (
+    isMilitaryExpertPrimaryProvisionalReleaseEnabled() &&
+    !args.input.repairAlreadyAttempted &&
+    !args.input.repairResponse
+  ) {
+    const primaryFailureCode =
+      mapContraryEvidenceValidationToFailureCode(initialValidation.errors) ??
+      violationAnalysis.violations[0]?.failureCode ??
+      "evidence_missing";
+    const provisionalFromPrimary = tryProvisionalOr(
+      {
+        ...args.base,
+        ok: false,
+        requestHash: args.requestHash,
+        systemPromptHash: args.systemPromptHash,
+        reviewPromptHash: args.reviewPromptHash,
+        rawResponseHash: hashMilitaryExpertRawResponse(args.rawResponse),
+        parsedReviewHash: null,
+        generationStatus: "parse_failed",
+        repairDecision: args.repairDecision,
+        durationMs: Math.max(0, args.now() - args.startedAt),
+        failureReason: args.parseMessage,
+        parseFailureCode: primaryFailureCode,
+      },
+      false,
+      false,
+    );
+    if (provisionalFromPrimary) return provisionalFromPrimary;
+    return null;
   }
 
   if (!args.input.repairResponse) return null;

@@ -37,12 +37,19 @@ import {
 } from "./runtime-definition.ts";
 import { validateMilitaryExpertReviewForProvisional } from "./validation.ts";
 
-/** Maximum unresolved confidence findings allowed for provisional release. */
-export const MAX_PROVISIONAL_UNRESOLVED_FINDINGS = 9;
+/** Maximum qualifying contrary-evidence findings allowed for provisional release. */
+export const MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS = 9;
+
+/** @deprecated Use MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS */
+export const MAX_PROVISIONAL_UNRESOLVED_FINDINGS = MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS;
 
 export type ProvisionalReleaseFailureCode =
-  | "TOO_MANY_UNRESOLVED_FINDINGS"
+  | "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS"
   | "PROVISIONAL_RELEASE_NOT_ELIGIBLE";
+
+/** @deprecated Use TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS */
+export const TOO_MANY_UNRESOLVED_FINDINGS_CODE =
+  "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS" as const;
 
 export interface QualifyingUnresolvedFinding {
   findingIndex: number;
@@ -491,7 +498,7 @@ export function buildProvisionalReleaseDiagnostics(args: {
     repair_attempted: args.repairAttempted,
     repair_succeeded: args.repairSucceeded,
     provisional_release_used: args.provisionalReleaseUsed,
-    provisional_threshold: MAX_PROVISIONAL_UNRESOLVED_FINDINGS,
+    provisional_threshold: MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS,
     final_review_status: args.finalReviewStatus,
     failure_code: args.failureCode,
   };
@@ -534,11 +541,11 @@ export function evaluateProvisionalRelease(args: {
       failureCode,
     });
 
-  if (qualifying.length > MAX_PROVISIONAL_UNRESOLVED_FINDINGS) {
+  if (qualifying.length > MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS) {
     return {
       ok: false,
-      failureCode: "TOO_MANY_UNRESOLVED_FINDINGS",
-      diagnostics: baseDiagnostics("blocked", "TOO_MANY_UNRESOLVED_FINDINGS"),
+      failureCode: "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS",
+      diagnostics: baseDiagnostics("blocked", "TOO_MANY_UNRESOLVED_CONTRARY_EVIDENCE_FINDINGS"),
     };
   }
 
@@ -571,7 +578,7 @@ export type ProvisionalReleaseDecision = "normal" | "provisional" | "blocked";
 
 export function evaluateProvisionalReleaseDecision(count: number): ProvisionalReleaseDecision {
   if (count <= 0) return "normal";
-  if (count <= MAX_PROVISIONAL_UNRESOLVED_FINDINGS) return "provisional";
+  if (count <= MAX_PROVISIONAL_CONTRARY_EVIDENCE_FINDINGS) return "provisional";
   return "blocked";
 }
 

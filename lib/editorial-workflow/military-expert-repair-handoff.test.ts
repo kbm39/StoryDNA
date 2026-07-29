@@ -269,33 +269,42 @@ describe("Military Expert repair response handoff", () => {
   });
 
   it("10. workflow sequence primary fail → repair response → contract re-eval succeeds", async () => {
-    const primary = FIXTURE_MISSING_CONTRARY_EVIDENCE;
-    const primaryEval = await runMilitaryExpertGenerationContract(
-      {
-        ...buildValidGenerationContractInput(),
-        rawResponse: primary,
-      },
-      { bypassFeatureFlag: true },
-    );
-    assert.equal(primaryEval.ok, false);
-    assert.equal(primaryEval.repairDecision, "schema_repair_required");
+    const prior = { ...process.env };
+    process.env.NODE_ENV = "development";
+    process.env.STUDIO_ENABLED = "true";
+    delete process.env.STUDIO_MILITARY_EXPERT_ENABLED;
 
-    const repairRaw = normalizeRepairResponseForContract(
-      repairResponseWithSuffix(FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS),
-      FIXTURE_CORRELATION_ID,
-    );
-    const reEval = await runMilitaryExpertGenerationContract(
-      {
-        ...buildValidGenerationContractInput(),
-        rawResponse: primary,
-        repairResponse: repairRaw,
-        repairCallCorrelationId: REPAIR_CALL_CORRELATION_ID,
-        repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
-      },
-      { bypassFeatureFlag: true },
-    );
-    assert.equal(reEval.ok, true);
-    assert.equal(reEval.contraryEvidenceRepair?.attempted, true);
+    try {
+      const primary = FIXTURE_MISSING_CONTRARY_EVIDENCE;
+      const primaryEval = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: primary,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(primaryEval.ok, false);
+      assert.equal(primaryEval.repairDecision, "schema_repair_required");
+
+      const repairRaw = normalizeRepairResponseForContract(
+        repairResponseWithSuffix(FIXTURE_CONTRARY_EVIDENCE_REPAIR_SUCCESS),
+        FIXTURE_CORRELATION_ID,
+      );
+      const reEval = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: primary,
+          repairResponse: repairRaw,
+          repairCallCorrelationId: REPAIR_CALL_CORRELATION_ID,
+          repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(reEval.ok, true);
+      assert.equal(reEval.contraryEvidenceRepair?.attempted, true);
+    } finally {
+      process.env = prior;
+    }
   });
 
   it("11. no real provider calls in repair handoff tests", async () => {

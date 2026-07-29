@@ -7,10 +7,10 @@ import type { MilitaryExpertFinding } from "@/experts/military-expert/contracts.
 export const MILITARY_EXPERT_AUTHOR_REVIEW_REQUIRED_HEADING = "AUTHOR REVIEW REQUIRED" as const;
 
 export const MILITARY_EXPERT_AUTHOR_REVIEW_REQUIRED_INTRO =
-  "StoryDNA identified this concern but could not complete its check for evidence that may weaken or contradict it." as const;
+  "StoryDNA identified this concern and found manuscript evidence supporting it, but it could not complete its check for evidence that may weaken or contradict the concern." as const;
 
 export const MILITARY_EXPERT_AUTHOR_REVIEW_REQUIRED_DISCLAIMER =
-  "StoryDNA could not complete its confidence check for this finding. The concern may still be valid, but it should not be treated as confirmed until you review it or discuss it with the expert." as const;
+  "This finding is provisional and should not be treated as confirmed until you review it or discuss it with the expert." as const;
 
 export const MILITARY_EXPERT_AUTHOR_REVIEW_ACTIONS = [
   "Review Evidence",
@@ -58,8 +58,7 @@ export function buildAuthorReviewRequiredSection(
         supportingEvidenceSummary: summarizeEvidence(finding),
         unresolvedChecks: missing.map(describeMissingField),
         provisionalStatus: "author_review_required" as const,
-        recommendedAuthorAction:
-          "Review the supporting evidence and decide whether to challenge, discuss, accept provisionally, dismiss, or mark resolved.",
+        recommendedAuthorAction: "Investigate before revising.",
         actions: MILITARY_EXPERT_AUTHOR_REVIEW_ACTIONS,
       }),
     ];

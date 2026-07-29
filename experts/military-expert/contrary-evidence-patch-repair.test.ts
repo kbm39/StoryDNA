@@ -314,29 +314,38 @@ describe("Military Expert patch-only contrary-evidence repair", () => {
   });
 
   it("23. workflow sequence primary fail → patch call → apply → revalidate → save path", async () => {
-    const primary = FIXTURE_EMPTY_CONTRARY_NO_UNCERTAINTY;
-    const primaryEval = await runMilitaryExpertGenerationContract(
-      {
-        ...buildValidGenerationContractInput(),
-        rawResponse: primary,
-      },
-      { bypassFeatureFlag: true },
-    );
-    assert.equal(primaryEval.ok, false);
-    assert.equal(primaryEval.repairDecision, "schema_repair_required");
+    const prior = { ...process.env };
+    process.env.NODE_ENV = "development";
+    process.env.STUDIO_ENABLED = "true";
+    delete process.env.STUDIO_MILITARY_EXPERT_ENABLED;
 
-    const reEval = await runMilitaryExpertGenerationContract(
-      {
-        ...buildValidGenerationContractInput(),
-        rawResponse: primary,
-        repairResponse: FIXTURE_CONTRARY_EVIDENCE_UNCERTAINTY_PATCH_SUCCESS,
-        repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
-      },
-      { bypassFeatureFlag: true },
-    );
-    assert.equal(reEval.ok, true);
-    assert.equal(reEval.contraryEvidenceRepair?.eventPayload?.repair_mode, "patch_only");
-    assert.equal(reEval.contraryEvidenceRepair?.eventPayload?.applied_patch_count, 1);
+    try {
+      const primary = FIXTURE_EMPTY_CONTRARY_NO_UNCERTAINTY;
+      const primaryEval = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: primary,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(primaryEval.ok, false);
+      assert.equal(primaryEval.repairDecision, "schema_repair_required");
+
+      const reEval = await runMilitaryExpertGenerationContract(
+        {
+          ...buildValidGenerationContractInput(),
+          rawResponse: primary,
+          repairResponse: FIXTURE_CONTRARY_EVIDENCE_UNCERTAINTY_PATCH_SUCCESS,
+          repairMaxOutputTokens: MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens,
+        },
+        { bypassFeatureFlag: true },
+      );
+      assert.equal(reEval.ok, true);
+      assert.equal(reEval.contraryEvidenceRepair?.eventPayload?.repair_mode, "patch_only");
+      assert.equal(reEval.contraryEvidenceRepair?.eventPayload?.applied_patch_count, 1);
+    } finally {
+      process.env = prior;
+    }
   });
 
   it("24. no real provider call occurs in patch repair tests", async () => {

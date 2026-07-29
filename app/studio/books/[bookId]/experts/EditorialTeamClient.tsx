@@ -49,8 +49,13 @@ function recruitDisabled(
   return false;
 }
 
-function runStatusLabel(status: StudioEditorialTeamMember["runStatus"]): string {
-  switch (status) {
+function runStatusLabel(
+  member: StudioEditorialTeamMember,
+): string {
+  if (member.expertKey === "military_expert" && member.completedReportStatusLabel) {
+    return member.completedReportStatusLabel;
+  }
+  switch (member.runStatus) {
     case "queued":
       return "Queued";
     case "running":
@@ -449,7 +454,7 @@ function TeamMemberCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h4 className="font-serif text-lg font-semibold">{member.displayName}</h4>
         <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-xs font-medium">
-          {runStatusLabel(member.runStatus)}
+          {runStatusLabel(member)}
         </span>
       </div>
       <p className="mt-1 text-sm text-black/65">{member.purpose}</p>
@@ -539,12 +544,21 @@ function TeamMemberCard({
               </button>
             ) : null}
             {member.latestReviewId ? (
-              <Link
-                href={`/manuscripts/${bookId}`}
-                className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:border-accent"
-              >
-                Open Latest Review
-              </Link>
+              member.expertKey === "military_expert" ? (
+                <Link
+                  href={`/studio/books/${bookId}/experts/military-expert/reports/${member.latestReviewId}`}
+                  className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:border-accent"
+                >
+                  View Military Expert Report
+                </Link>
+              ) : (
+                <Link
+                  href={`/manuscripts/${bookId}`}
+                  className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:border-accent"
+                >
+                  Open Latest Review
+                </Link>
+              )
             ) : null}
             <Link
               href={`/studio/books/${bookId}/revisions`}

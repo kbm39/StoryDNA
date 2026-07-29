@@ -11,6 +11,7 @@ import { countAcceptedRevisions, mapDbDispositionToStudio } from "./decisions.ts
 import { getEditorialTeamMembers } from "./editorial-team.ts";
 import { classifyExpertExecution } from "./expert-classification.ts";
 import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/military-expert-local-policy.ts";
+import { resolveMilitaryExpertTeamRunStatus } from "@/lib/studio/military-expert-draft-review-view.ts";
 import { buildStudioCostSummary } from "./cost-tracking.ts";
 import { buildRoundtableShell } from "./roundtable.ts";
 import {
@@ -156,10 +157,20 @@ export async function enrichEditorialTeamWithRunStatus(
   );
   const latestLaReview = laReviews[0] ?? null;
 
+  const militaryTeamRunStatus =
+    isStudioMilitaryExpertLocalOverrideEnabled()
+      ? await resolveMilitaryExpertTeamRunStatus(
+          manuscriptId,
+          militaryWorkflow?.status ?? null,
+          militaryWorkflow?.authoritativeResultId ?? null,
+        )
+      : null;
+
   return members.map((member) => {
     let runStatus: StudioExpertRunStatus = "waiting";
     let lastReviewAt: string | null = null;
     let latestReviewId: string | null = null;
+    let completedReportStatusLabel: string | null = null;
 
     if (member.expertKey === "literary_agent") {
       if (literaryWorkflow) {
@@ -170,8 +181,11 @@ export async function enrichEditorialTeamWithRunStatus(
         latestReviewId = latestLaReview.id;
       }
     } else if (member.expertKey === "military_expert") {
-      if (militaryWorkflow) {
-        runStatus = mapWorkflowStatusToRunStatus(militaryWorkflow.status);
+      if (militaryTeamRunStatus) {
+        runStatus = militaryTeamRunStatus.runStatus;
+        lastReviewAt = militaryTeamRunStatus.lastReviewAt;
+        latestReviewId = militaryTeamRunStatus.latestReviewId;
+        completedReportStatusLabel = militaryTeamRunStatus.completedReportStatusLabel;
       } else if (!isStudioMilitaryExpertLocalOverrideEnabled()) {
         runStatus = "blocked";
       }
@@ -181,7 +195,13 @@ export async function enrichEditorialTeamWithRunStatus(
       runStatus = "blocked";
     }
 
-    return Object.freeze({ ...member, runStatus, lastReviewAt, latestReviewId });
+    return Object.freeze({
+      ...member,
+      runStatus,
+      lastReviewAt,
+      latestReviewId,
+      completedReportStatusLabel,
+    });
   });
 }
 

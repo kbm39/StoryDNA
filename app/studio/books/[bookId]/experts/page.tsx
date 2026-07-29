@@ -48,6 +48,7 @@ function buildRecruitCandidate(key: string, manuscriptId: string): StudioEditori
     runStatus: "waiting",
     lastReviewAt: null,
     latestReviewId: null,
+    completedReportStatusLabel: null,
   });
 }
 

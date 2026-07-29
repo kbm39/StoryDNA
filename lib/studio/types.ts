@@ -168,6 +168,7 @@ export interface StudioEditorialTeamMember {
   readonly runStatus: StudioExpertRunStatus;
   readonly lastReviewAt: string | null;
   readonly latestReviewId: string | null;
+  readonly completedReportStatusLabel: string | null;
 }
 
 export interface StudioEditorialHealth {

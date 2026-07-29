@@ -6,6 +6,10 @@ import type {
   MilitaryExpertFinding,
   MilitaryExpertReview,
 } from "@/experts/military-expert/contracts.ts";
+import {
+  serializeMilitaryExpertFindingContent,
+  type PersistedMilitaryExpertFindingContent,
+} from "@/lib/studio/military-expert-finding-content.ts";
 
 export interface SavedMilitaryExpertFindingRecord {
   readonly findingId: string;
@@ -17,6 +21,7 @@ export interface SavedMilitaryExpertFindingRecord {
   readonly severity: string;
   readonly confidence: string;
   readonly missingConfidenceFields: readonly ("contrary_evidence" | "uncertainty_note")[];
+  readonly findingContent: PersistedMilitaryExpertFindingContent;
 }
 
 export interface SavedMilitaryExpertReport {
@@ -69,5 +74,6 @@ function toSavedFinding(
     severity: finding.severity,
     confidence: finding.confidence,
     missingConfidenceFields,
+    findingContent: serializeMilitaryExpertFindingContent(finding, missingConfidenceFields),
   });
 }

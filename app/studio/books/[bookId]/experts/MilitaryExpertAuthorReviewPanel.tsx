@@ -1,11 +1,12 @@
 "use client";
 
-import type { MilitaryExpertAuthorReviewRequiredItem } from "@/lib/studio/military-expert-display.ts";
+import { MilitaryExpertAuthorReviewFindingCard } from "@/app/studio/books/[bookId]/experts/MilitaryExpertFindingCard.tsx";
+import type { MilitaryExpertFindingDisplayItem } from "@/lib/studio/military-expert-finding-display.ts";
 
 export function MilitaryExpertAuthorReviewPanel({
   items,
 }: {
-  items: readonly MilitaryExpertAuthorReviewRequiredItem[];
+  items: readonly MilitaryExpertFindingDisplayItem[];
 }) {
   if (items.length === 0) return null;
 
@@ -23,31 +24,7 @@ export function MilitaryExpertAuthorReviewPanel({
 
       <ul className="space-y-4">
         {items.map((item) => (
-          <li
-            key={item.findingId}
-            className="rounded-lg border border-amber-200/80 bg-white/80 p-4 dark:border-amber-500/20 dark:bg-black/20"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
-              {item.heading}
-            </p>
-            <h4 className="mt-2 text-base font-medium text-slate-900 dark:text-slate-100">
-              {item.title}
-            </h4>
-            <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{item.intro}</p>
-            <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{item.concern}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Supporting evidence: {item.supportingEvidenceSummary}
-            </p>
-            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 dark:text-slate-400">
-              {item.unresolvedChecks.map((check) => (
-                <li key={check}>{check}</li>
-              ))}
-            </ul>
-            <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">{item.disclaimer}</p>
-            <p className="mt-3 text-sm font-medium text-slate-800 dark:text-slate-200">
-              {item.recommendedAuthorAction}
-            </p>
-          </li>
+          <MilitaryExpertAuthorReviewFindingCard key={item.findingId} item={item} />
         ))}
       </ul>
     </section>

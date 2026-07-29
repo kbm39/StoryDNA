@@ -2,15 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { EditorialWorkflowRow } from "@/lib/editorial-workflow/types.ts";
 import {
-  MILITARY_EXPERT_AUTHOR_RESPONSE_UNAVAILABLE,
   MILITARY_EXPERT_CONCERNS_REQUIRING_ATTENTION_LABEL,
   MILITARY_EXPERT_COUNT_EXPLANATION,
   MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING,
   MILITARY_EXPERT_NEED_YOUR_REVIEW_LABEL,
-  MILITARY_EXPERT_NO_EVIDENCE_EXCERPT_SUMMARY,
   MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE,
   buildMilitaryExpertCountExplanation,
 } from "@/lib/studio/military-expert-display.ts";
+import {
+  MILITARY_EXPERT_INVESTIGATE_BEFORE_REVISING,
+  MILITARY_EXPERT_NOT_PROVIDED,
+} from "@/lib/studio/military-expert-finding-display.ts";
 import {
   buildCompletedReportStatusLabel,
   buildMilitaryExpertReportDisplayModel,
@@ -24,6 +26,8 @@ import {
   type MilitaryExpertDraftFindingRow,
   type MilitaryExpertDraftReviewRow,
 } from "@/lib/studio/military-expert-draft-review-view.ts";
+import { serializeMilitaryExpertFindingContent } from "@/lib/studio/military-expert-finding-content.ts";
+import { FIXTURE_COMMUNICATIONS_TERMINOLOGY } from "@/experts/military-expert/fixtures.ts";
 
 const MANUSCRIPT_ID = "e63c07fa-634d-4d32-8052-6194ff965d91";
 const OTHER_MANUSCRIPT_ID = "11111111-1111-4111-8111-111111111111";
@@ -62,6 +66,7 @@ function findingRow(
     realism_status: "probable_concern",
     confidence: "medium",
     board_candidate_kind: "revision_candidate",
+    finding_content: serializeMilitaryExpertFindingContent(FIXTURE_COMMUNICATIONS_TERMINOLOGY, []),
     ...overrides,
   });
 }
@@ -391,14 +396,25 @@ describe("military-expert report display", () => {
   it("17. author review items omit interactive actions and include honest instruction", () => {
     const model = buildMilitaryExpertReportDisplayModel({
       review: reviewRow(),
-      findings: [findingRow({ finding_status: "author_review_required" })],
+      findings: [
+        findingRow({
+          finding_status: "author_review_required",
+          finding_content: serializeMilitaryExpertFindingContent(
+            {
+              ...FIXTURE_COMMUNICATIONS_TERMINOLOGY,
+              finding_status: "author_review_required",
+              uncertainty_note: "Verification incomplete.",
+            },
+            ["contrary_evidence"],
+          ),
+        }),
+      ],
     });
     const item = model.authorReviewRequiredItems[0];
     assert.ok(item);
-    assert.equal(item.authorResponseToolsAvailable, false);
-    assert.equal(item.recommendedAuthorAction, MILITARY_EXPERT_AUTHOR_RESPONSE_UNAVAILABLE);
+    assert.equal(item.recommendedAction, MILITARY_EXPERT_INVESTIGATE_BEFORE_REVISING);
     assert.doesNotMatch(item.concern, /Structural finding/i);
-    assert.doesNotMatch(item.supportingEvidenceSummary, /Supporting evidence recorded/i);
+    assert.doesNotMatch(item.concern, /StoryDNA completed its check/i);
   });
 
   it("18. placeholder stub copy is absent from display model", () => {
@@ -406,16 +422,25 @@ describe("military-expert report display", () => {
       review: reviewRow(),
       findings: [
         findingRow({ finding_id: "validated-1", finding_status: "validated" }),
-        findingRow({ finding_id: "review-1", finding_status: "author_review_required" }),
+        findingRow({
+          finding_id: "review-1",
+          finding_status: "author_review_required",
+          finding_content: serializeMilitaryExpertFindingContent(
+            {
+              ...FIXTURE_COMMUNICATIONS_TERMINOLOGY,
+              finding_status: "author_review_required",
+            },
+            ["contrary_evidence"],
+          ),
+        }),
       ],
     });
-    const validatedObservation = model.revisionCandidates[0]?.taskLanguage ?? "";
-    const investigationLanguage = model.investigationCandidates[0]?.taskLanguage ?? "";
+    const validatedItem = model.confirmedFindingItems[0];
     const authorItem = model.authorReviewRequiredItems[0];
 
-    assert.doesNotMatch(validatedObservation, /Investigate whether/i);
-    assert.doesNotMatch(investigationLanguage, /Investigate whether/i);
-    assert.equal(authorItem?.supportingEvidenceSummary, MILITARY_EXPERT_NO_EVIDENCE_EXCERPT_SUMMARY);
+    assert.doesNotMatch(validatedItem?.concern ?? "", /Investigate whether/i);
+    assert.doesNotMatch(validatedItem?.concern ?? "", /StoryDNA completed its check/i);
+    assert.match(authorItem?.supportingEvidence.summary ?? "", /Chapter 6/i);
   });
 
   it("19. revision board integration is deferred with honest wording", () => {
@@ -450,8 +475,34 @@ describe("military-expert report display", () => {
       findings,
     });
     assert.equal(model.confirmedFindings.length, 7);
+    assert.equal(model.confirmedFindingItems.length, 7);
     assert.equal(model.authorReviewRequiredFindings.length, 3);
     assert.equal(model.authorReviewRequiredItems.length, 3);
+  });
+
+  it("21. saved review without persisted content handled honestly", () => {
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow({ id: REVIEW_UUID }),
+      findings: [
+        findingRow({
+          finding_id: "legacy-confirmed",
+          finding_status: "validated",
+          finding_content: null,
+        }),
+        findingRow({
+          finding_id: "legacy-review",
+          finding_status: "author_review_required",
+          finding_content: null,
+        }),
+      ],
+    });
+
+    assert.equal(model.legacyContentOnly, true);
+    assert.equal(model.confirmedFindingItems[0]?.concern, MILITARY_EXPERT_NOT_PROVIDED);
+    assert.equal(
+      model.authorReviewRequiredItems[0]?.recommendedAction,
+      MILITARY_EXPERT_INVESTIGATE_BEFORE_REVISING,
+    );
   });
 });
 

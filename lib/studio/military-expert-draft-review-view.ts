@@ -10,10 +10,12 @@ import { classifyAuthoritativeResultIdValue } from "@/lib/editorial-workflow/aut
 import { getWorkflowById } from "@/lib/editorial-workflow/workflow-store.ts";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
-  buildAuthorReviewRequiredSection,
   buildMilitaryExpertCountExplanation,
-  type MilitaryExpertAuthorReviewRequiredItem,
 } from "@/lib/studio/military-expert-display.ts";
+import {
+  buildMilitaryExpertFindingDisplayItems,
+  type MilitaryExpertFindingDisplayItem,
+} from "@/lib/studio/military-expert-finding-display.ts";
 import {
   buildMilitaryExpertBoardCandidates,
   partitionMilitaryExpertBoardCandidates,
@@ -21,7 +23,6 @@ import {
 } from "@/lib/studio/military-expert-revision-board.ts";
 import {
   computeMilitaryExpertScoreSummary,
-  isProvisionalFinding,
   type MilitaryExpertScoreSummary,
 } from "@/lib/studio/military-expert-scoring.ts";
 import type { StudioExpertRunStatus } from "@/lib/studio/types.ts";
@@ -53,6 +54,7 @@ export interface MilitaryExpertDraftFindingRow {
   readonly realism_status: string;
   readonly confidence: string;
   readonly board_candidate_kind: string | null;
+  readonly finding_content: unknown;
 }
 
 export interface MilitaryExpertReportDisplayModel {
@@ -67,12 +69,14 @@ export interface MilitaryExpertReportDisplayModel {
   readonly scoreSummary: MilitaryExpertScoreSummary;
   readonly confirmedFindings: readonly MilitaryExpertDraftFindingRow[];
   readonly authorReviewRequiredFindings: readonly MilitaryExpertDraftFindingRow[];
-  readonly authorReviewRequiredItems: readonly MilitaryExpertAuthorReviewRequiredItem[];
+  readonly confirmedFindingItems: readonly MilitaryExpertFindingDisplayItem[];
+  readonly authorReviewRequiredItems: readonly MilitaryExpertFindingDisplayItem[];
   readonly revisionCandidates: readonly MilitaryExpertBoardCandidate[];
   readonly investigationCandidates: readonly MilitaryExpertBoardCandidate[];
   readonly countExplanation: string | null;
   readonly revisionBoardIntegrationAvailable: false;
   readonly isProvisional: boolean;
+  readonly legacyContentOnly: boolean;
 }
 
 export interface MilitaryExpertTeamRunStatus {
@@ -132,52 +136,60 @@ function rowFromFindingDb(raw: Record<string, unknown>): MilitaryExpertDraftFind
     realism_status: String(raw.realism_status),
     confidence: String(raw.confidence),
     board_candidate_kind: raw.board_candidate_kind ? String(raw.board_candidate_kind) : null,
+    finding_content: raw.finding_content ?? null,
   });
 }
 
-function structuralTitle(row: MilitaryExpertDraftFindingRow): string {
-  return `${row.category.replace(/_/g, " ")} (${row.severity})`;
-}
+function findingRowToScoringFinding(row: MilitaryExpertDraftFindingRow): MilitaryExpertFinding {
+  const displayInput = {
+    findingId: row.finding_id,
+    findingIndex: row.finding_index,
+    findingStatus: row.finding_status,
+    category: row.category,
+    severity: row.severity,
+    confidence: row.confidence,
+    findingContent: row.finding_content,
+  };
+  const displayItems = buildMilitaryExpertFindingDisplayItems([displayInput]);
+  const display = displayItems[0]!;
 
-function findingRowToStubFinding(row: MilitaryExpertDraftFindingRow): MilitaryExpertFinding {
-  const title = structuralTitle(row);
   return {
     finding_id: row.finding_id,
     category: row.category as MilitaryExpertFinding["category"],
-    title,
-    observation: `StoryDNA completed its check for this finding (${row.realism_status.replace(/_/g, " ")}).`,
+    title: display.title,
+    observation: display.concern,
     manuscript_evidence: [],
     confidence: row.confidence as MilitaryExpertFinding["confidence"],
     severity: row.severity as MilitaryExpertFinding["severity"],
     realism_status: row.realism_status as MilitaryExpertFinding["realism_status"],
-    operational_impact: "Operational impact details are not shown in this summary view.",
-    story_impact: "Story impact details are not shown in this summary view.",
-    recommendation: "Review category and realism details before revising.",
+    operational_impact: display.whyItMatters,
+    story_impact: "",
+    recommendation: display.recommendedAction,
     recommendation_type: "correct",
-    preservation_note: "",
+    preservation_note: display.revisionGuidance,
     author_challenge_allowed: true,
     finding_status:
       row.finding_status === "author_review_required" ? "author_review_required" : "validated",
   };
 }
 
-function stubReviewFromRows(
+function scoringReviewFromRows(
   review: MilitaryExpertDraftReviewRow,
   findings: readonly MilitaryExpertDraftFindingRow[],
 ): MilitaryExpertReview {
   return {
     expert_key: "military_expert",
-    expert_version: "structural-view",
+    expert_version: "display-view",
     definition_hash: "0000000000000000000000000000000000000000000000000000000000000000",
     manuscript_version_id: review.manuscript_version_id,
     review_scope: "full_manuscript",
     review_status: review.review_status as MilitaryExpertReviewStatus,
-    summary: "Military Expert draft review (structural summary).",
+    summary: "",
     strengths: [],
-    findings: findings.map(findingRowToStubFinding),
+    findings: findings.map(findingRowToScoringFinding),
     category_assessments: [],
     overall_realism_assessment: {
-      conclusion: "See findings below.",
+      conclusion: "",
       confidence: "medium",
       primary_strengths: [],
       primary_concerns: [],
@@ -189,10 +201,10 @@ function stubReviewFromRows(
     escalation_recommendations: [],
     uncertainty_summary: "",
     author_challenge_supported: true,
-    next_step: "Review findings in Studio.",
+    next_step: "",
     provenance: {
-      validator_version: "structural-view",
-      normalization_version: "structural-view",
+      validator_version: "display-view",
+      normalization_version: "display-view",
       definition_hash: "0000000000000000000000000000000000000000000000000000000000000000",
     },
   };
@@ -203,9 +215,9 @@ export function buildMilitaryExpertReportDisplayModel(args: {
   findings: readonly MilitaryExpertDraftFindingRow[];
 }): MilitaryExpertReportDisplayModel {
   const { review, findings } = args;
-  const stubReview = stubReviewFromRows(review, findings);
-  const scoreSummary = computeMilitaryExpertScoreSummary(stubReview);
-  const boardCandidates = buildMilitaryExpertBoardCandidates(stubReview);
+  const scoringReview = scoringReviewFromRows(review, findings);
+  const scoreSummary = computeMilitaryExpertScoreSummary(scoringReview);
+  const boardCandidates = buildMilitaryExpertBoardCandidates(scoringReview);
   const { revisionCandidates, investigationCandidates } =
     partitionMilitaryExpertBoardCandidates(boardCandidates);
 
@@ -214,8 +226,19 @@ export function buildMilitaryExpertReportDisplayModel(args: {
   );
   const confirmedFindings = findings.filter((row) => row.finding_status !== "author_review_required");
 
-  const authorReviewRequiredItems = buildAuthorReviewRequiredSection(
-    stubReview.findings.filter(isProvisionalFinding),
+  const displayInputs = findings.map((row) => ({
+    findingId: row.finding_id,
+    findingIndex: row.finding_index,
+    findingStatus: row.finding_status,
+    category: row.category,
+    severity: row.severity,
+    confidence: row.confidence,
+    findingContent: row.finding_content,
+  }));
+  const displayItems = buildMilitaryExpertFindingDisplayItems(displayInputs);
+  const confirmedFindingItems = displayItems.filter((item) => item.status === "confirmed");
+  const authorReviewRequiredItems = displayItems.filter(
+    (item) => item.status === "author_review_required",
   );
 
   const countExplanation = buildMilitaryExpertCountExplanation(
@@ -235,6 +258,7 @@ export function buildMilitaryExpertReportDisplayModel(args: {
     scoreSummary,
     confirmedFindings,
     authorReviewRequiredFindings,
+    confirmedFindingItems,
     authorReviewRequiredItems,
     revisionCandidates,
     investigationCandidates,
@@ -243,6 +267,7 @@ export function buildMilitaryExpertReportDisplayModel(args: {
     isProvisional:
       review.review_status === "completed_with_author_review_required" ||
       review.provisional_release_used,
+    legacyContentOnly: displayItems.some((item) => !item.contentPersisted),
   });
 }
 
@@ -250,13 +275,25 @@ async function loadFindingsForReview(
   supabase: SupabaseClient,
   reviewId: string,
 ): Promise<readonly MilitaryExpertDraftFindingRow[]> {
-  const { data, error } = await supabase
+  const selectWithContent =
+    "finding_index, finding_id, finding_status, category, severity, realism_status, confidence, board_candidate_kind, finding_content";
+  const selectStructuralOnly =
+    "finding_index, finding_id, finding_status, category, severity, realism_status, confidence, board_candidate_kind";
+
+  let { data, error } = await supabase
     .from("studio_military_expert_draft_findings")
-    .select(
-      "finding_index, finding_id, finding_status, category, severity, realism_status, confidence, board_candidate_kind",
-    )
+    .select(selectWithContent)
     .eq("review_id", reviewId)
     .order("finding_index", { ascending: true });
+
+  if (error && /finding_content/i.test(error.message)) {
+    ({ data, error } = await supabase
+      .from("studio_military_expert_draft_findings")
+      .select(selectStructuralOnly)
+      .eq("review_id", reviewId)
+      .order("finding_index", { ascending: true }));
+  }
+
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => rowFromFindingDb(row as Record<string, unknown>));
 }

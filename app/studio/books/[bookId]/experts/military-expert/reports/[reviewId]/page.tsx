@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MilitaryExpertAuthorReviewPanel } from "@/app/studio/books/[bookId]/experts/MilitaryExpertAuthorReviewPanel.tsx";
+import { MilitaryExpertConfirmedFindingCard } from "@/app/studio/books/[bookId]/experts/MilitaryExpertFindingCard.tsx";
 import { StudioNav } from "@/app/studio/components/StudioShell.tsx";
 import { getStudioBookWorkspace } from "@/lib/studio/book-workspace.ts";
 import {
@@ -10,57 +11,6 @@ import {
   MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE,
 } from "@/lib/studio/military-expert-display.ts";
 import { loadMilitaryExpertReportDisplayModel } from "@/lib/studio/military-expert-draft-review-view.ts";
-
-function formatFindingTitle(category: string, severity: string): string {
-  return `${category.replace(/_/g, " ")} (${severity})`;
-}
-
-function FindingList({
-  title,
-  description,
-  findings,
-}: {
-  title: string;
-  description: string;
-  findings: readonly {
-    finding_id: string;
-    category: string;
-    severity: string;
-    realism_status: string;
-    confidence: string;
-  }[];
-}) {
-  if (findings.length === 0) return null;
-
-  return (
-    <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
-      <h3 className="font-serif text-lg font-semibold">{title}</h3>
-      <p className="mt-1 text-sm text-black/55 dark:text-white/55">{description}</p>
-      <ul className="mt-4 space-y-3">
-        {findings.map((finding) => (
-          <li
-            key={finding.finding_id}
-            className="rounded-lg border border-black/10 p-4 text-sm dark:border-white/10"
-          >
-            <p className="font-medium">
-              {formatFindingTitle(finding.category, finding.severity)}
-            </p>
-            <dl className="mt-2 grid gap-1 text-xs text-black/60 dark:text-white/60 sm:grid-cols-2">
-              <div>
-                <dt className="inline font-medium">Realism: </dt>
-                <dd className="inline">{finding.realism_status.replace(/_/g, " ")}</dd>
-              </div>
-              <div>
-                <dt className="inline font-medium">Confidence: </dt>
-                <dd className="inline">{finding.confidence}</dd>
-              </div>
-            </dl>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 function CandidateList({
   title,
@@ -134,6 +84,16 @@ export default async function MilitaryExpertReportPage({
         </div>
       ) : null}
 
+      {report.legacyContentOnly ? (
+        <div
+          className="rounded-xl border border-black/10 bg-paper p-4 text-sm text-black/65 dark:border-white/10 dark:text-white/65"
+          role="note"
+        >
+          This review was saved before full finding content persistence was enabled. Structural
+          summaries and honest placeholders are shown where original prose was not stored.
+        </div>
+      ) : null}
+
       <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
         <h3 className="font-serif text-lg font-semibold">Summary</h3>
         {report.countExplanation ? (
@@ -167,11 +127,21 @@ export default async function MilitaryExpertReportPage({
         </dl>
       </section>
 
-      <FindingList
-        title={MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING}
-        description="Every finding StoryDNA finished checking, excluding items still waiting for your review."
-        findings={report.confirmedFindings}
-      />
+      {report.confirmedFindingItems.length > 0 ? (
+        <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
+          <h3 className="font-serif text-lg font-semibold">
+            {MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING}
+          </h3>
+          <p className="mt-1 text-sm text-black/55 dark:text-white/55">
+            Every finding StoryDNA finished checking, excluding items still waiting for your review.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {report.confirmedFindingItems.map((item) => (
+              <MilitaryExpertConfirmedFindingCard key={item.findingId} item={item} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <MilitaryExpertAuthorReviewPanel items={report.authorReviewRequiredItems} />
 

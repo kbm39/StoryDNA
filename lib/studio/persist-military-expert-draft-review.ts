@@ -114,6 +114,7 @@ export async function persistMilitaryExpertDraftReview(
     realism_status: finding.realismStatus,
     confidence: finding.confidence,
     board_candidate_kind: boardKinds.get(finding.findingIndex) ?? null,
+    finding_content: finding.findingContent,
   }));
 
   if (findingRows.length > 0) {

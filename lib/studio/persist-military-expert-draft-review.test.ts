@@ -148,7 +148,7 @@ describe("persistMilitaryExpertDraftReview", () => {
     assert.equal(mock.insertedReviews.length, 0);
   });
 
-  it("4. links findings with board candidate kinds", async () => {
+  it("4. links findings with board candidate kinds and full content", async () => {
     const review = buildValidMilitaryExpertReview();
     const parsedReviewHash = hashMilitaryExpertParsedReview(review);
     const mock = createMockSupabase();
@@ -178,6 +178,50 @@ describe("persistMilitaryExpertDraftReview", () => {
       ),
     );
     assert.equal(mock.insertedFindings[0]?.review_id, REVIEW_UUID);
+    assert.ok(mock.insertedFindings[0]?.finding_content);
+    assert.equal(
+      (mock.insertedFindings[0]?.finding_content as { title?: string }).title,
+      review.findings[0]?.title,
+    );
+  });
+
+  it("6. persists author-review-required finding prose", async () => {
+    const review = buildValidMilitaryExpertReview();
+    review.findings[0] = {
+      ...review.findings[0]!,
+      finding_status: "author_review_required",
+      uncertainty_note: "Could not verify contrary evidence.",
+    };
+    const parsedReviewHash = hashMilitaryExpertParsedReview(review);
+    const mock = createMockSupabase();
+
+    await persistMilitaryExpertDraftReview(
+      {
+        workflowId: WORKFLOW_ID,
+        manuscriptId: MANUSCRIPT_ID,
+        manuscriptVersionId: VERSION_ID,
+        review,
+        parsedReviewHash,
+        requestHash: null,
+        correlationId: "correlation-id",
+        generationStatus: "provisional_success",
+        provisionalReleaseUsed: true,
+        expertVersion: review.expert_version,
+        definitionHash: review.definition_hash,
+        estimatedCostUsd: 0.2,
+        unresolvedMissingFieldsByIndex: new Map([[0, ["contrary_evidence"]]]),
+      },
+      { supabase: mock.supabase as never },
+    );
+
+    const content = mock.insertedFindings[0]?.finding_content as {
+      observation?: string;
+      uncertainty_note?: string;
+      missing_confidence_fields?: string[];
+    };
+    assert.equal(content.observation, review.findings[0]?.observation);
+    assert.equal(content.uncertainty_note, "Could not verify contrary evidence.");
+    assert.deepEqual(content.missing_confidence_fields, ["contrary_evidence"]);
   });
 
   it("5. throws on invalid parsed hash before insert", async () => {

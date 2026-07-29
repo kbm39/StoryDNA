@@ -216,10 +216,12 @@ export async function executeMilitaryExpertStudioWorkflow(workflowId: string): P
       parsedRoot = undefined;
     }
 
-    const violations = parsedRoot ? analyzeContraryEvidenceViolations(parsedRoot) : [];
-    const repairPrompt = parsedRoot
-      ? buildContraryEvidenceSchemaRepairPrompt({ parsed: parsedRoot, violations })
-      : null;
+    const violationAnalysis = parsedRoot ? analyzeContraryEvidenceViolations(parsedRoot) : null;
+    const violations = violationAnalysis?.violations ?? [];
+    const repairPrompt =
+      parsedRoot && violations.length > 0
+        ? buildContraryEvidenceSchemaRepairPrompt({ parsed: parsedRoot, violations })
+        : null;
 
     if (repairPrompt && budget.canAffordCall(MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxCostUsd, 0, MILITARY_EXPERT_CONTRARY_EVIDENCE_REPAIR_CEILING.maxOutputTokens)) {
       const repairRequest = {

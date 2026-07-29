@@ -7,15 +7,23 @@ import {
 } from "@/app/actions/editorial-workflows.ts";
 import { cancelEditorialWorkflow } from "@/lib/editorial-workflow/cancel-workflow.ts";
 import { validateStudioWorkflowCancellation } from "@/lib/editorial-workflow/cancel-workflow-policy.ts";
-import { getWorkflowById } from "@/lib/editorial-workflow/workflow-store.ts";
+import { getWorkflowById, getWorkflowEventsForClient } from "@/lib/editorial-workflow/workflow-store.ts";
 import { getManuscriptReviewContext } from "@/lib/reviews.ts";
 import { requireStudioAccess } from "@/lib/studio/access.ts";
+import { getStudioReviewExecution } from "@/lib/studio/review-dashboard.ts";
+import {
+  buildWorkflowActivityLog,
+  buildWorkflowProgressTimeline,
+  formatWorkflowElapsed,
+  pickActiveStudioWorkflow,
+} from "@/lib/studio/workflow-progress-timeline.ts";
+import type { InternalPhase } from "@/lib/editorial-workflow/types.ts";
+import type { StudioWorkflowProgressView } from "@/lib/studio/types.ts";
 import {
   recruitEditorialTeamMember,
   removeEditorialTeamMember,
   updateEditorialTeamMemberNotes,
 } from "@/lib/studio/editorial-team.ts";
-import { isEditorialWorkflowEnabled } from "@/lib/editorial-workflow/feature-flag.ts";
 import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/military-expert-local-policy.ts";
 import {
   isExpertLaunchableInStudio,
@@ -233,5 +241,37 @@ export async function getStudioLaunchContext(manuscriptId: string): Promise<{
       wordCount: ctx.wordCount,
       versionLabel,
     };
+  });
+}
+
+export async function getStudioWorkflowProgress(
+  manuscriptId: string,
+): Promise<StudioWorkflowProgressView | null> {
+  return guarded(manuscriptId, async () => {
+    const [literary, military] = await Promise.all([
+      getStudioReviewExecution(manuscriptId, "literary_agent_review"),
+      getStudioReviewExecution(manuscriptId, "military_expert_review"),
+    ]);
+    const base = pickActiveStudioWorkflow(literary, military);
+    if (!base) return null;
+
+    const row = await getWorkflowById(base.workflowId);
+    if (!row || row.manuscript_id !== manuscriptId) return null;
+    const events = await getWorkflowEventsForClient(base.workflowId);
+    const endIso = row?.completed_at ?? row?.failed_at ?? row?.cancelled_at ?? null;
+    const workflow = Object.freeze({
+      ...base,
+      elapsed: formatWorkflowElapsed(base.startedAt, endIso),
+    });
+    const timeline = buildWorkflowProgressTimeline({
+      workflowType: base.workflowType,
+      status: base.status,
+      currentPhase: (base.currentPhase as InternalPhase | null) ?? null,
+      isTerminal: base.isTerminal,
+      events,
+    });
+    const activity = buildWorkflowActivityLog(events);
+
+    return Object.freeze({ workflow, timeline, activity });
   });
 }

@@ -1,8 +1,9 @@
 import "server-only";
 import { getWorkflowForClient } from "@/lib/editorial-workflow/start-literary-agent-workflow.ts";
 import { isEditorialWorkflowEnabled } from "@/lib/editorial-workflow/feature-flag.ts";
-import { getActiveWorkflowForManuscript } from "@/lib/editorial-workflow/workflow-store.ts";
+import { getActiveWorkflowForManuscript, getWorkflowEventsForClient } from "@/lib/editorial-workflow/workflow-store.ts";
 import { authorPhaseLabel } from "@/lib/editorial-workflow/phase-labels.ts";
+import type { InternalPhase } from "@/lib/editorial-workflow/types.ts";
 import { getEditorialIssues, getRevisionCandidates } from "@/lib/agent-revisions.ts";
 import { listReviews } from "@/lib/reviews.ts";
 import { getAuthorEditResponses } from "@/lib/suggested-edits.ts";
@@ -12,10 +13,16 @@ import { classifyExpertExecution } from "./expert-classification.ts";
 import { isStudioMilitaryExpertLocalOverrideEnabled } from "@/lib/studio/military-expert-local-policy.ts";
 import { buildStudioCostSummary } from "./cost-tracking.ts";
 import { buildRoundtableShell } from "./roundtable.ts";
+import {
+  buildWorkflowActivityLog,
+  buildWorkflowProgressTimeline,
+  pickActiveStudioWorkflow,
+} from "./workflow-progress-timeline.ts";
 import type {
   StudioEditorialTeamMember,
   StudioExpertRunStatus,
   StudioReviewExecutionView,
+  StudioWorkflowProgressView,
 } from "./types.ts";
 
 function mapWorkflowStatusToRunStatus(
@@ -99,6 +106,7 @@ export async function getStudioReviewExecution(
 
   return Object.freeze({
     workflowId: workflow.id,
+    workflowType,
     expertKey: workflowType === "military_expert_review" ? "military_expert" : "literary_agent",
     expertDisplayName: workflowType === "military_expert_review" ? "Military Expert" : "Literary Agent",
     status: workflow.status,
@@ -177,6 +185,24 @@ export async function enrichEditorialTeamWithRunStatus(
   });
 }
 
+async function buildStudioWorkflowProgressView(
+  workflow: StudioReviewExecutionView,
+): Promise<StudioWorkflowProgressView> {
+  const events = await getWorkflowEventsForClient(workflow.workflowId);
+  const timeline = buildWorkflowProgressTimeline({
+    workflowType: workflow.workflowType,
+    status: workflow.status,
+    currentPhase: (workflow.currentPhase as InternalPhase | null) ?? null,
+    isTerminal: workflow.isTerminal,
+    events,
+  });
+  return Object.freeze({
+    workflow,
+    timeline,
+    activity: buildWorkflowActivityLog(events),
+  });
+}
+
 export async function getStudioExpertDeskContext(manuscriptId: string) {
   const [members, literaryWorkflowView, militaryWorkflowView, issues, candidates, { responses }] =
     await Promise.all([
@@ -201,9 +227,15 @@ export async function getStudioExpertDeskContext(manuscriptId: string) {
     candidateCount: candidates.length,
   });
 
+  const activeWorkflow = pickActiveStudioWorkflow(literaryWorkflowView, militaryWorkflowView);
+  const workflowProgress = activeWorkflow
+    ? await buildStudioWorkflowProgressView(activeWorkflow)
+    : null;
+
   return Object.freeze({
     team: enrichedTeam,
-    activeWorkflow: literaryWorkflowView ?? militaryWorkflowView,
+    activeWorkflow,
+    workflowProgress,
     roundtable,
     issueCount: issues.length,
     candidateCount: candidates.length,

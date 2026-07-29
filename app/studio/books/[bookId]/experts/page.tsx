@@ -89,7 +89,7 @@ export default async function StudioExpertDeskPage({
         versionLabel={versionLabel}
         team={context.team}
         availableExperts={availableExperts}
-        activeWorkflow={context.activeWorkflow}
+        workflowProgress={context.workflowProgress}
         roundtable={context.roundtable}
         editorialHealth={context.editorialHealth}
       />

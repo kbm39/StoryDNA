@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type {
   StudioEditorialHealth,
   StudioEditorialTeamMember,
-  StudioReviewExecutionView,
   StudioRoundtableShell,
+  StudioWorkflowProgressView,
 } from "@/lib/studio/types.ts";
 import type { StudioLaunchScope } from "@/lib/studio/types.ts";
 import {
@@ -22,6 +22,8 @@ import {
   computeLaunchWizardCanLaunch,
   launchWizardNeedsPrivateUseAck,
 } from "@/lib/studio/launch-wizard-state.ts";
+import { useStudioWorkflowSubscription } from "./useStudioWorkflowSubscription.ts";
+import { WorkflowProgressTimeline } from "./WorkflowProgressTimeline.tsx";
 
 function isMilitaryExpertMember(member: StudioEditorialTeamMember): boolean {
   return member.expertKey === "military_expert";
@@ -290,15 +292,19 @@ function LaunchWizard({
 
 function ReviewDashboard({
   bookId,
-  workflow,
+  initialProgress,
   onCancel,
 }: {
   bookId: string;
-  workflow: StudioReviewExecutionView;
+  initialProgress: StudioWorkflowProgressView;
   onCancel: () => void;
 }) {
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const { progress } = useStudioWorkflowSubscription(bookId, initialProgress);
+  const workflow = progress.workflow;
+  const timeline = progress.timeline;
+  const activity = progress.activity;
 
   function cancel() {
     start(async () => {
@@ -323,6 +329,7 @@ function ReviewDashboard({
         <span className="text-xs text-black/55">Elapsed: {workflow.elapsed}</span>
       </div>
       <p className="mt-2 text-sm">{workflow.progressSummary ?? workflow.currentPhaseLabel}</p>
+      <WorkflowProgressTimeline timeline={timeline} activity={activity} />
       {workflow.safeErrorMessage ? (
         <p className="mt-2 text-sm text-red-700">{workflow.safeErrorMessage}</p>
       ) : null}
@@ -587,7 +594,7 @@ export function EditorialTeamClient({
   versionLabel,
   team,
   availableExperts,
-  activeWorkflow,
+  workflowProgress,
   roundtable,
   editorialHealth,
 }: {
@@ -597,7 +604,7 @@ export function EditorialTeamClient({
   versionLabel: string | null;
   team: readonly StudioEditorialTeamMember[];
   availableExperts: readonly StudioEditorialTeamMember[];
-  activeWorkflow: StudioReviewExecutionView | null;
+  workflowProgress: StudioWorkflowProgressView | null;
   roundtable: StudioRoundtableShell | null;
   editorialHealth: StudioEditorialHealth;
 }) {
@@ -637,8 +644,13 @@ export function EditorialTeamClient({
         </label>
       </div>
 
-      {activeWorkflow ? (
-        <ReviewDashboard bookId={bookId} workflow={activeWorkflow} onCancel={() => window.location.reload()} />
+      {workflowProgress ? (
+        <ReviewDashboard
+          key={workflowProgress.workflow.workflowId}
+          bookId={bookId}
+          initialProgress={workflowProgress}
+          onCancel={() => window.location.reload()}
+        />
       ) : null}
 
       <section aria-labelledby="editorial-team-heading">

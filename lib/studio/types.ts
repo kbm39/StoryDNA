@@ -192,6 +192,7 @@ export interface StudioCostSummary {
 
 export interface StudioReviewExecutionView {
   readonly workflowId: string;
+  readonly workflowType: "literary_agent_review" | "military_expert_review";
   readonly expertKey: string;
   readonly expertDisplayName: string;
   readonly status: string;
@@ -206,6 +207,26 @@ export interface StudioReviewExecutionView {
   readonly authoritativeResultId: string | null;
   readonly resultSummary: unknown;
   readonly cost: StudioCostSummary;
+}
+
+export interface StudioWorkflowTimelineStep {
+  readonly id: string;
+  readonly label: string;
+  readonly state: "completed" | "current" | "upcoming" | "failed";
+  readonly timestamp: string | null;
+}
+
+export interface StudioWorkflowActivityEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly timestamp: string;
+  readonly tone: "neutral" | "progress" | "issue";
+}
+
+export interface StudioWorkflowProgressView {
+  readonly workflow: StudioReviewExecutionView;
+  readonly timeline: readonly StudioWorkflowTimelineStep[];
+  readonly activity: readonly StudioWorkflowActivityEntry[];
 }
 
 export interface StudioRoundtableShell {

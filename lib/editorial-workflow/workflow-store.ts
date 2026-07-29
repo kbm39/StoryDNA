@@ -48,6 +48,31 @@ export async function getActiveWorkflowForManuscript(args: {
   return data ? rowFromDb(data) : null;
 }
 
+export async function getWorkflowEventsForClient(workflowId: string): Promise<
+  readonly {
+    eventType: string;
+    phase: InternalPhase | null;
+    payload: Record<string, unknown>;
+    createdAt: string;
+  }[]
+> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("editorial_workflow_events")
+    .select("event_type, phase, payload, created_at")
+    .eq("workflow_id", workflowId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) =>
+    Object.freeze({
+      eventType: String(row.event_type),
+      phase: (row.phase as InternalPhase | null) ?? null,
+      payload: (row.payload as Record<string, unknown>) ?? {},
+      createdAt: String(row.created_at),
+    }),
+  );
+}
+
 export async function insertWorkflowEvent(args: {
   workflowId: string;
   eventType: string;

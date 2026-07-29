@@ -225,7 +225,7 @@ describe("Military Expert provisional release", () => {
       buildMilitaryExpertBoardCandidates(result.review),
     );
     assert.equal(partitioned.investigationCandidates.length, 1);
-    assert.match(partitioned.investigationCandidates[0]?.taskLanguage ?? "", /Investigate whether/);
+    assert.match(partitioned.investigationCandidates[0]?.taskLanguage ?? "", /Review the cited evidence/);
   });
 
   it("15. provisional findings do not create normal revision candidates", async () => {
@@ -265,14 +265,8 @@ describe("Military Expert provisional release", () => {
     const section = buildAuthorReviewRequiredSection(result.review.findings);
     assert.equal(section.length, 1);
     assert.match(section[0]?.heading ?? "", /AUTHOR REVIEW REQUIRED/);
-    assert.deepEqual(section[0]?.actions, [
-      "Review Evidence",
-      "Challenge Finding",
-      "Discuss With Expert",
-      "Accept Provisionally",
-      "Dismiss",
-      "Mark Resolved",
-    ]);
+    assert.equal(section[0]?.authorResponseToolsAvailable, false);
+    assert.match(section[0]?.recommendedAuthorAction ?? "", /Author response tools are not yet available/);
     assert.match(DISPLAY_SRC, /Author Review Required/);
   });
 

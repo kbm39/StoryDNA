@@ -35,7 +35,7 @@ function toBoardCandidate(
       kind: "investigation_candidate",
       title: finding.title,
       taskLanguage:
-        "Investigate whether this concern is supported before revising the manuscript.",
+        "Review the cited evidence and decide whether a manuscript change is needed before revising.",
       sourceExpert: "Military Expert",
     });
   }

@@ -44,17 +44,9 @@ export function MilitaryExpertAuthorReviewPanel({
               ))}
             </ul>
             <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">{item.disclaimer}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {item.actions.map((action) => (
-                <button
-                  key={action}
-                  type="button"
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
+            <p className="mt-3 text-sm font-medium text-slate-800 dark:text-slate-200">
+              {item.recommendedAuthorAction}
+            </p>
           </li>
         ))}
       </ul>

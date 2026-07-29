@@ -11,6 +11,7 @@ import { getWorkflowById } from "@/lib/editorial-workflow/workflow-store.ts";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   buildAuthorReviewRequiredSection,
+  buildMilitaryExpertCountExplanation,
   type MilitaryExpertAuthorReviewRequiredItem,
 } from "@/lib/studio/military-expert-display.ts";
 import {
@@ -69,6 +70,8 @@ export interface MilitaryExpertReportDisplayModel {
   readonly authorReviewRequiredItems: readonly MilitaryExpertAuthorReviewRequiredItem[];
   readonly revisionCandidates: readonly MilitaryExpertBoardCandidate[];
   readonly investigationCandidates: readonly MilitaryExpertBoardCandidate[];
+  readonly countExplanation: string | null;
+  readonly revisionBoardIntegrationAvailable: false;
   readonly isProvisional: boolean;
 }
 
@@ -137,18 +140,19 @@ function structuralTitle(row: MilitaryExpertDraftFindingRow): string {
 }
 
 function findingRowToStubFinding(row: MilitaryExpertDraftFindingRow): MilitaryExpertFinding {
+  const title = structuralTitle(row);
   return {
     finding_id: row.finding_id,
     category: row.category as MilitaryExpertFinding["category"],
-    title: structuralTitle(row),
-    observation: `Structural finding ${row.finding_id} — ${row.realism_status}.`,
+    title,
+    observation: `StoryDNA completed its check for this finding (${row.realism_status.replace(/_/g, " ")}).`,
     manuscript_evidence: [],
     confidence: row.confidence as MilitaryExpertFinding["confidence"],
     severity: row.severity as MilitaryExpertFinding["severity"],
     realism_status: row.realism_status as MilitaryExpertFinding["realism_status"],
-    operational_impact: "See report for operational impact.",
-    story_impact: "See report for story impact.",
-    recommendation: "Review finding details before revising.",
+    operational_impact: "Operational impact details are not shown in this summary view.",
+    story_impact: "Story impact details are not shown in this summary view.",
+    recommendation: "Review category and realism details before revising.",
     recommendation_type: "correct",
     preservation_note: "",
     author_challenge_allowed: true,
@@ -214,6 +218,11 @@ export function buildMilitaryExpertReportDisplayModel(args: {
     stubReview.findings.filter(isProvisionalFinding),
   );
 
+  const countExplanation = buildMilitaryExpertCountExplanation(
+    confirmedFindings.length,
+    scoreSummary.confirmedIssueCount,
+  );
+
   return Object.freeze({
     reviewId: review.id,
     manuscriptId: review.manuscript_id,
@@ -229,6 +238,8 @@ export function buildMilitaryExpertReportDisplayModel(args: {
     authorReviewRequiredItems,
     revisionCandidates,
     investigationCandidates,
+    countExplanation,
+    revisionBoardIntegrationAvailable: false as const,
     isProvisional:
       review.review_status === "completed_with_author_review_required" ||
       review.provisional_release_used,

@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { EditorialWorkflowRow } from "@/lib/editorial-workflow/types.ts";
 import {
+  MILITARY_EXPERT_AUTHOR_RESPONSE_UNAVAILABLE,
+  MILITARY_EXPERT_CONCERNS_REQUIRING_ATTENTION_LABEL,
+  MILITARY_EXPERT_COUNT_EXPLANATION,
+  MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING,
+  MILITARY_EXPERT_NEED_YOUR_REVIEW_LABEL,
+  MILITARY_EXPERT_NO_EVIDENCE_EXCERPT_SUMMARY,
+  MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE,
+  buildMilitaryExpertCountExplanation,
+} from "@/lib/studio/military-expert-display.ts";
+import {
   buildCompletedReportStatusLabel,
   buildMilitaryExpertReportDisplayModel,
   getLatestCompletedMilitaryExpertDraftReview,
@@ -324,6 +334,124 @@ describe("military-expert report display", () => {
     const meHref = militaryExpertReportHref(MANUSCRIPT_ID, REVIEW_UUID);
     assert.doesNotMatch(meHref, /^\/manuscripts\//);
     assert.match(meHref, /\/experts\/military-expert\/reports\//);
+  });
+
+  it("14. summary labels are accurate and non-conflicting", () => {
+    assert.equal(MILITARY_EXPERT_CONCERNS_REQUIRING_ATTENTION_LABEL, "Concerns requiring attention");
+    assert.equal(MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING, "Fully validated findings");
+    assert.equal(MILITARY_EXPERT_NEED_YOUR_REVIEW_LABEL, "Need your review");
+  });
+
+  it("15. count labels match what they actually measure", () => {
+    const findings = [
+      findingRow({ finding_id: "concern-1", finding_status: "validated", realism_status: "confirmed_error" }),
+      findingRow({ finding_id: "concern-2", finding_status: "validated", realism_status: "probable_concern" }),
+      findingRow({ finding_id: "concern-3", finding_status: "validated", realism_status: "context_dependent" }),
+      findingRow({ finding_id: "concern-4", finding_status: "validated", realism_status: "plausible_but_unusual" }),
+      findingRow({ finding_id: "accurate-1", finding_status: "validated", realism_status: "accurate" }),
+      findingRow({ finding_id: "accurate-2", finding_status: "validated", realism_status: "accurate" }),
+      findingRow({ finding_id: "accurate-3", finding_status: "validated", realism_status: "accurate" }),
+      findingRow({ finding_id: "review-1", finding_status: "author_review_required" }),
+      findingRow({ finding_id: "review-2", finding_status: "author_review_required" }),
+      findingRow({ finding_id: "review-3", finding_status: "author_review_required" }),
+    ];
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow({ validated_finding_count: 7, author_review_required_count: 3 }),
+      findings,
+    });
+
+    assert.equal(model.scoreSummary.confirmedIssueCount, 4);
+    assert.equal(model.confirmedFindings.length, 7);
+    assert.equal(model.authorReviewRequiredFindings.length, 3);
+  });
+
+  it("16. count explanation appears when counts measure different concepts", () => {
+    const explanation = buildMilitaryExpertCountExplanation(7, 4);
+    assert.equal(explanation, MILITARY_EXPERT_COUNT_EXPLANATION);
+
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow({ validated_finding_count: 7, author_review_required_count: 3 }),
+      findings: [
+        findingRow({ finding_id: "c1", finding_status: "validated", realism_status: "confirmed_error" }),
+        findingRow({ finding_id: "c2", finding_status: "validated", realism_status: "probable_concern" }),
+        findingRow({ finding_id: "c3", finding_status: "validated", realism_status: "context_dependent" }),
+        findingRow({ finding_id: "c4", finding_status: "validated", realism_status: "plausible_but_unusual" }),
+        findingRow({ finding_id: "a1", finding_status: "validated", realism_status: "accurate" }),
+        findingRow({ finding_id: "a2", finding_status: "validated", realism_status: "accurate" }),
+        findingRow({ finding_id: "a3", finding_status: "validated", realism_status: "accurate" }),
+        findingRow({ finding_id: "r1", finding_status: "author_review_required" }),
+        findingRow({ finding_id: "r2", finding_status: "author_review_required" }),
+        findingRow({ finding_id: "r3", finding_status: "author_review_required" }),
+      ],
+    });
+    assert.ok(model.countExplanation);
+    assert.match(model.countExplanation ?? "", /concerns count/i);
+  });
+
+  it("17. author review items omit interactive actions and include honest instruction", () => {
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow(),
+      findings: [findingRow({ finding_status: "author_review_required" })],
+    });
+    const item = model.authorReviewRequiredItems[0];
+    assert.ok(item);
+    assert.equal(item.authorResponseToolsAvailable, false);
+    assert.equal(item.recommendedAuthorAction, MILITARY_EXPERT_AUTHOR_RESPONSE_UNAVAILABLE);
+    assert.doesNotMatch(item.concern, /Structural finding/i);
+    assert.doesNotMatch(item.supportingEvidenceSummary, /Supporting evidence recorded/i);
+  });
+
+  it("18. placeholder stub copy is absent from display model", () => {
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow(),
+      findings: [
+        findingRow({ finding_id: "validated-1", finding_status: "validated" }),
+        findingRow({ finding_id: "review-1", finding_status: "author_review_required" }),
+      ],
+    });
+    const validatedObservation = model.revisionCandidates[0]?.taskLanguage ?? "";
+    const investigationLanguage = model.investigationCandidates[0]?.taskLanguage ?? "";
+    const authorItem = model.authorReviewRequiredItems[0];
+
+    assert.doesNotMatch(validatedObservation, /Investigate whether/i);
+    assert.doesNotMatch(investigationLanguage, /Investigate whether/i);
+    assert.equal(authorItem?.supportingEvidenceSummary, MILITARY_EXPERT_NO_EVIDENCE_EXCERPT_SUMMARY);
+  });
+
+  it("19. revision board integration is deferred with honest wording", () => {
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow(),
+      findings: [findingRow()],
+    });
+    assert.equal(model.revisionBoardIntegrationAvailable, false);
+    assert.match(MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE, /not yet available/i);
+  });
+
+  it("20. seven validated and three author-review findings remain visible", () => {
+    const findings = [
+      ...Array.from({ length: 7 }, (_, index) =>
+        findingRow({
+          finding_index: index,
+          finding_id: `validated-${index}`,
+          finding_status: "validated",
+          realism_status: index < 4 ? "probable_concern" : "accurate",
+        }),
+      ),
+      ...Array.from({ length: 3 }, (_, index) =>
+        findingRow({
+          finding_index: 7 + index,
+          finding_id: `review-${index}`,
+          finding_status: "author_review_required",
+        }),
+      ),
+    ];
+    const model = buildMilitaryExpertReportDisplayModel({
+      review: reviewRow({ validated_finding_count: 7, author_review_required_count: 3 }),
+      findings,
+    });
+    assert.equal(model.confirmedFindings.length, 7);
+    assert.equal(model.authorReviewRequiredFindings.length, 3);
+    assert.equal(model.authorReviewRequiredItems.length, 3);
   });
 });
 

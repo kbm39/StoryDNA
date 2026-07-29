@@ -3,13 +3,25 @@ import { notFound } from "next/navigation";
 import { MilitaryExpertAuthorReviewPanel } from "@/app/studio/books/[bookId]/experts/MilitaryExpertAuthorReviewPanel.tsx";
 import { StudioNav } from "@/app/studio/components/StudioShell.tsx";
 import { getStudioBookWorkspace } from "@/lib/studio/book-workspace.ts";
+import {
+  MILITARY_EXPERT_CONCERNS_REQUIRING_ATTENTION_LABEL,
+  MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING,
+  MILITARY_EXPERT_NEED_YOUR_REVIEW_LABEL,
+  MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE,
+} from "@/lib/studio/military-expert-display.ts";
 import { loadMilitaryExpertReportDisplayModel } from "@/lib/studio/military-expert-draft-review-view.ts";
+
+function formatFindingTitle(category: string, severity: string): string {
+  return `${category.replace(/_/g, " ")} (${severity})`;
+}
 
 function FindingList({
   title,
+  description,
   findings,
 }: {
   title: string;
+  description: string;
   findings: readonly {
     finding_id: string;
     category: string;
@@ -23,22 +35,17 @@ function FindingList({
   return (
     <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
       <h3 className="font-serif text-lg font-semibold">{title}</h3>
+      <p className="mt-1 text-sm text-black/55 dark:text-white/55">{description}</p>
       <ul className="mt-4 space-y-3">
         {findings.map((finding) => (
           <li
             key={finding.finding_id}
             className="rounded-lg border border-black/10 p-4 text-sm dark:border-white/10"
           >
-            <p className="font-medium">{finding.finding_id}</p>
+            <p className="font-medium">
+              {formatFindingTitle(finding.category, finding.severity)}
+            </p>
             <dl className="mt-2 grid gap-1 text-xs text-black/60 dark:text-white/60 sm:grid-cols-2">
-              <div>
-                <dt className="inline font-medium">Category: </dt>
-                <dd className="inline">{finding.category.replace(/_/g, " ")}</dd>
-              </div>
-              <div>
-                <dt className="inline font-medium">Severity: </dt>
-                <dd className="inline">{finding.severity}</dd>
-              </div>
               <div>
                 <dt className="inline font-medium">Realism: </dt>
                 <dd className="inline">{finding.realism_status.replace(/_/g, " ")}</dd>
@@ -129,6 +136,9 @@ export default async function MilitaryExpertReportPage({
 
       <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
         <h3 className="font-serif text-lg font-semibold">Summary</h3>
+        {report.countExplanation ? (
+          <p className="mt-2 text-sm text-black/60 dark:text-white/60">{report.countExplanation}</p>
+        ) : null}
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-black/50 dark:text-white/50">Review status</dt>
@@ -139,11 +149,15 @@ export default async function MilitaryExpertReportPage({
             <dd className="font-medium">{report.generationStatus.replace(/_/g, " ")}</dd>
           </div>
           <div>
-            <dt className="text-black/50 dark:text-white/50">Confirmed issues</dt>
+            <dt className="text-black/50 dark:text-white/50">
+              {MILITARY_EXPERT_CONCERNS_REQUIRING_ATTENTION_LABEL}
+            </dt>
             <dd className="font-medium">{report.scoreSummary.confirmedIssueCount}</dd>
           </div>
           <div>
-            <dt className="text-black/50 dark:text-white/50">Author review required</dt>
+            <dt className="text-black/50 dark:text-white/50">
+              {MILITARY_EXPERT_NEED_YOUR_REVIEW_LABEL}
+            </dt>
             <dd className="font-medium">{report.scoreSummary.authorReviewRequiredCount}</dd>
           </div>
           <div>
@@ -153,19 +167,30 @@ export default async function MilitaryExpertReportPage({
         </dl>
       </section>
 
-      <FindingList title="Confirmed Findings" findings={report.confirmedFindings} />
+      <FindingList
+        title={MILITARY_EXPERT_FULLY_VALIDATED_FINDINGS_HEADING}
+        description="Every finding StoryDNA finished checking, excluding items still waiting for your review."
+        findings={report.confirmedFindings}
+      />
 
       <MilitaryExpertAuthorReviewPanel items={report.authorReviewRequiredItems} />
 
+      <div
+        className="rounded-xl border border-black/10 bg-paper p-4 text-sm text-black/65 dark:border-white/10 dark:text-white/65"
+        role="note"
+      >
+        {MILITARY_EXPERT_REVISION_BOARD_UNAVAILABLE}
+      </div>
+
       <CandidateList
         title="Investigation Candidates"
-        description="Findings that need author investigation before revising."
+        description="Findings that need your review before revising. Shown here for reference only."
         candidates={report.investigationCandidates}
       />
 
       <CandidateList
         title="Revision Candidates"
-        description="Validated findings that may warrant manuscript revision."
+        description="Validated findings that may warrant manuscript revision. Shown here for reference only."
         candidates={report.revisionCandidates}
       />
     </section>

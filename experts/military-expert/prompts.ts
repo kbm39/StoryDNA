@@ -110,6 +110,9 @@ export function buildMilitaryExpertSystemPrompt(def: ReviewerDefinition): string
     "- Do not use Markdown fences or code blocks.",
     "- Do not include an introduction before the JSON (for example, do not say \"Here is the report\").",
     "- Do not include a conclusion, notes, apologies, summaries, or commentary after the closing `}`.",
+    "- Do not add a Markdown summary for the author after the JSON object.",
+    "- Do not repeat the memo outside the JSON with headings, bullet points, or recommendations.",
+    "- Any author-facing summary belongs only in the required JSON fields (summary, next_step, preservation_note, uncertainty_summary).",
     "- Do not echo the schema, add prose outside the JSON object, or append a second JSON object.",
     "- The final character of your entire response must be `}`.",
   ].join("\n");

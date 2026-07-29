@@ -9,6 +9,7 @@ import type { MilitaryExpertParseFailureCode } from "./parsing.ts";
 export type MilitaryExpertWorkflowParseErrorCode =
   | "PROVIDER_TRAILING_PROSE"
   | "PROVIDER_TRAILING_COMMENTARY_UNSAFE"
+  | "PROVIDER_TRAILING_MARKDOWN_UNSAFE"
   | "PROVIDER_MULTIPLE_JSON_PAYLOADS"
   | "PROVIDER_MARKDOWN_WRAPPER_INVALID"
   | "PROVIDER_JSON_REPAIR_FAILED"
@@ -37,12 +38,19 @@ export function mapMilitaryExpertParseFailureToWorkflowErrorCode(args: {
   parseFailureCode: MilitaryExpertParseFailureCode | ContraryEvidenceFailureCode | string;
   trailingCategory?: ModelJsonTrailingCategory;
   trailingCommentaryUnsafe?: boolean;
+  trailingMarkdownSummaryUnsafe?: boolean;
   contraryEvidenceFailureCode?: Exclude<
     ContraryEvidenceFailureCode,
     "CONTRARY_EVIDENCE_REPAIR_FAILED"
   >;
 }): MilitaryExpertWorkflowParseErrorCode {
-  const { parseFailureCode, trailingCategory, trailingCommentaryUnsafe, contraryEvidenceFailureCode } = args;
+  const {
+    parseFailureCode,
+    trailingCategory,
+    trailingCommentaryUnsafe,
+    trailingMarkdownSummaryUnsafe,
+    contraryEvidenceFailureCode,
+  } = args;
 
   if (parseFailureCode === "CONTRARY_EVIDENCE_REPAIR_FAILED") {
     return "CONTRARY_EVIDENCE_REPAIR_FAILED";
@@ -69,6 +77,9 @@ export function mapMilitaryExpertParseFailureToWorkflowErrorCode(args: {
       trailingCategory === "partial_duplicate_json"
     ) {
       return "PROVIDER_MULTIPLE_JSON_PAYLOADS";
+    }
+    if (trailingMarkdownSummaryUnsafe) {
+      return "PROVIDER_TRAILING_MARKDOWN_UNSAFE";
     }
     if (
       trailingCategory === "closing_markdown_fence" ||

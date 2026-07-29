@@ -702,6 +702,8 @@ export function militaryExpertOutputSchemaPromptBlock(): string {
     "OUTPUT CONTRACT — respond with exactly ONE JSON object only.",
     "- Begin with `{` and end with `}`; the final character of your response must be `}`.",
     "- No markdown fences. No introduction before the JSON. No conclusion or commentary after the closing `}`.",
+    "- Do not add a Markdown summary for the author after the JSON object.",
+    "- Do not repeat the memo outside the JSON with headings, bullet points, or recommendations.",
     "- Do not say \"Here is the report.\" Do not add notes, summaries, apologies, or explanations outside the object.",
     "- Do not add any top-level field outside the required list below.",
     `- Prohibited extra top-level fields (never create these): ${MILITARY_EXPERT_PROHIBITED_TOP_LEVEL_FIELDS.join(", ")}.`,

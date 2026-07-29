@@ -194,5 +194,6 @@ describe("Military Expert single JSON payload enforcement", () => {
     assert.match(prompt, /final character of your entire response must be `\}`/);
     assert.match(prompt, /Do not use Markdown fences/);
     assert.match(prompt, /Do not include a conclusion, notes, apologies/);
+    assert.match(prompt, /Do not add a Markdown summary for the author after the JSON object/);
   });
 });

@@ -5,11 +5,16 @@
 import { MAX_CANONICAL_OUTPUT_BYTES } from "@/lib/expert-review-engine/canonical-output.ts";
 import {
   buildTrailingCommentaryNormalizationEvent,
+  buildTrailingMarkdownSummaryNormalizationEvent,
   evaluateTrailingCommentaryStripEligibility,
+  evaluateTrailingMarkdownSummaryStripEligibility,
   extractStrictModelJsonObject,
   isAllowedModelJsonTrailing,
+  isRecognizableMarkdownSummaryProse,
   isUnsafeTrailingCommentaryContent,
+  isUnsafeTrailingMarkdownSummaryContent,
   type MilitaryExpertTrailingCommentaryNormalizationEvent,
+  type MilitaryExpertTrailingMarkdownSummaryNormalizationEvent,
   type ModelJsonTrailingCategory,
 } from "./model-json-extraction.ts";
 import { normalizeMilitaryExpertGenerationEnums, type MilitaryExpertEnumNormalizationAudit } from "./enum-normalization.ts";
@@ -47,6 +52,7 @@ export interface MilitaryExpertParseSuccess {
   cleanedText: string;
   enumNormalizationAudits: readonly MilitaryExpertEnumNormalizationAudit[];
   trailingCommentaryNormalization?: MilitaryExpertTrailingCommentaryNormalizationEvent;
+  trailingMarkdownSummaryNormalization?: MilitaryExpertTrailingMarkdownSummaryNormalizationEvent;
 }
 
 export interface MilitaryExpertParseFailure {
@@ -55,7 +61,9 @@ export interface MilitaryExpertParseFailure {
   message: string;
   trailingCategory?: ModelJsonTrailingCategory;
   trailingCommentaryUnsafe?: boolean;
+  trailingMarkdownSummaryUnsafe?: boolean;
   trailingCommentaryNormalization?: MilitaryExpertTrailingCommentaryNormalizationEvent;
+  trailingMarkdownSummaryNormalization?: MilitaryExpertTrailingMarkdownSummaryNormalizationEvent;
   diagnostics?: MilitaryExpertJsonParseDiagnostics | MilitaryExpertTrailingContentDiagnostics;
 }
 
@@ -112,6 +120,9 @@ export function parseMilitaryExpertGenerationResponse(
     const extraction = extractStrictModelJsonObject(raw.responseText);
     let { jsonText, trailingContent, multiplePayloads, trailingCategory } = extraction;
     let trailingCommentaryNormalization: MilitaryExpertTrailingCommentaryNormalizationEvent | undefined;
+    let trailingMarkdownSummaryNormalization:
+      | MilitaryExpertTrailingMarkdownSummaryNormalizationEvent
+      | undefined;
 
     if (multiplePayloads) {
       return {
@@ -144,7 +155,17 @@ export function parseMilitaryExpertGenerationResponse(
 
       if (!jsonParseFailed) {
         const stripEligibility = evaluateTrailingCommentaryStripEligibility(raw.responseText, extraction);
+        const markdownStripEligibility = evaluateTrailingMarkdownSummaryStripEligibility(
+          raw.responseText,
+          extraction,
+        );
         const normalizationEvent = buildTrailingCommentaryNormalizationEvent({
+          trailingCharacterCount: trailingContent.length,
+          attempted: true,
+          succeeded: false,
+          secondPayloadDetected: false,
+        });
+        const markdownNormalizationEvent = buildTrailingMarkdownSummaryNormalizationEvent({
           trailingCharacterCount: trailingContent.length,
           attempted: true,
           succeeded: false,
@@ -168,9 +189,32 @@ export function parseMilitaryExpertGenerationResponse(
           });
           trailingContent = "";
           trailingCategory = "none";
+        } else if (
+          raw.finishStatus !== "truncated" &&
+          markdownStripEligibility.eligible &&
+          !isLikelyProviderOutputTruncation({
+            raw,
+            jsonText,
+            maxOutputTokens: options.maxOutputTokens,
+          })
+        ) {
+          trailingMarkdownSummaryNormalization = buildTrailingMarkdownSummaryNormalizationEvent({
+            trailingCharacterCount: trailingContent.length,
+            attempted: true,
+            succeeded: true,
+            secondPayloadDetected: false,
+          });
+          trailingContent = "";
+          trailingCategory = "none";
         } else {
           const unsafeStructuredTrailing =
-            stripEligibility.eligible === false && stripEligibility.unsafeStructuredTrailing;
+            (stripEligibility.eligible === false && stripEligibility.unsafeStructuredTrailing) ||
+            (markdownStripEligibility.eligible === false &&
+              markdownStripEligibility.unsafeStructuredTrailing);
+          const trailingMarkdownSummaryUnsafe =
+            unsafeStructuredTrailing &&
+            isRecognizableMarkdownSummaryProse(trailingContent) &&
+            isUnsafeTrailingMarkdownSummaryContent(trailingContent, jsonText);
           return {
             ok: false,
             code: "trailing_content",
@@ -181,7 +225,9 @@ export function parseMilitaryExpertGenerationResponse(
             trailingCommentaryUnsafe: unsafeStructuredTrailing ||
               (trailingCategory === "explanatory_prose" &&
                 isUnsafeTrailingCommentaryContent(trailingContent)),
+            trailingMarkdownSummaryUnsafe,
             trailingCommentaryNormalization: normalizationEvent,
+            trailingMarkdownSummaryNormalization: markdownNormalizationEvent,
             diagnostics: buildMilitaryExpertTrailingContentDiagnostics({
               raw,
               trailingContent,
@@ -266,6 +312,7 @@ export function parseMilitaryExpertGenerationResponse(
       cleanedText: jsonText,
       enumNormalizationAudits: audits,
       trailingCommentaryNormalization,
+      trailingMarkdownSummaryNormalization,
     };
   } catch (error) {
     return {

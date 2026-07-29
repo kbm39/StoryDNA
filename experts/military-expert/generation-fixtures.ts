@@ -155,6 +155,64 @@ export const FIXTURE_MULTIPLE_PAYLOADS = baseRawResponse(
 
 export const FIXTURE_TRAILING_PROSE = baseRawResponse(buildValidGenerationJson() + "\nExtra prose.");
 
+export function buildSafeMarkdownAuthorSummary(): string {
+  return [
+    "## Summary for Author",
+    "",
+    "- Command scenes remain credible overall.",
+    "- Radio phrasing is slightly informal but preserves tension.",
+    "- Next step: revise radio phrasing and confirm rank references.",
+  ].join("\n");
+}
+
+export const FIXTURE_TRAILING_MARKDOWN_SUMMARY = baseRawResponse(
+  buildValidGenerationJson() + "\n```\n\n" + buildSafeMarkdownAuthorSummary(),
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_SUMMARY_HEADINGS = baseRawResponse(
+  buildValidGenerationJson() +
+    "\n\n## Key Takeaways\n\n- Clear squad dialogue under pressure\n- Informal radio check noted as minor concern",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_NEW_FINDING = baseRawResponse(
+  buildValidGenerationJson() +
+    "\n\n## Additional Review\n\n- **New finding:** logistics timing error in chapter two.",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_CHANGED_SEVERITY = baseRawResponse(
+  buildValidGenerationJson() +
+    "\n\n## Summary for Author\n\n- Severity should be critical for the radio check issue.",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_CHANGED_RECOMMENDATION = baseRawResponse(
+  buildValidGenerationJson() +
+    "\n\n## Summary for Author\n\n- Recommendation should be remove the radio scene entirely.",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_NEW_EVIDENCE = baseRawResponse(
+  buildValidGenerationJson() +
+    '\n\n## Summary for Author\n\n- Evidence: "The colonel personally rewired the encrypted satellite terminal before dawn."',
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_CORRECTION = baseRawResponse(
+  buildValidGenerationJson() +
+    "\n\n## Correction\n\nThis JSON report understated the command-chain issue; the memo replaces it.",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_FENCED_SECOND_PAYLOAD = baseRawResponse(
+  buildValidGenerationJson() + '\n\n```json\n{"second_payload":true}\n```',
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_MALFORMED = baseRawResponse(
+  "{summary: broken}\n\n## Summary for Author\n\n- Nothing valid here.",
+);
+
+export const FIXTURE_TRAILING_MARKDOWN_TRUNCATED = baseRawResponse(
+  buildValidGenerationJson().slice(0, -20) + "\n\n## Summary for Author\n\n- Trailing summary.",
+  undefined,
+  { finishStatus: "truncated" },
+);
+
 export const FIXTURE_MISSING_EVIDENCE = baseRawResponse(
   JSON.stringify({
     ...buildValidGenerationPayload(),

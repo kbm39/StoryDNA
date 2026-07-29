@@ -14,6 +14,17 @@ describe("mapMilitaryExpertParseFailureToWorkflowErrorCode", () => {
     );
   });
 
+  it("maps unsafe trailing Markdown summary to PROVIDER_TRAILING_MARKDOWN_UNSAFE", () => {
+    assert.equal(
+      mapMilitaryExpertParseFailureToWorkflowErrorCode({
+        parseFailureCode: "trailing_content",
+        trailingCategory: "other",
+        trailingMarkdownSummaryUnsafe: true,
+      }),
+      "PROVIDER_TRAILING_MARKDOWN_UNSAFE",
+    );
+  });
+
   it("maps unsafe plain trailing prose to PROVIDER_TRAILING_PROSE", () => {
     assert.equal(
       mapMilitaryExpertParseFailureToWorkflowErrorCode({

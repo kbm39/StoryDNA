@@ -114,6 +114,13 @@ export interface MilitaryExpertGenerationContractResult {
     normalization_succeeded: boolean;
     second_payload_detected: boolean;
   };
+  trailingMarkdownSummaryNormalization?: {
+    trailing_character_count: number;
+    normalization_attempted: boolean;
+    normalization_succeeded: boolean;
+    second_payload_detected: boolean;
+  };
   trailingCommentaryUnsafe?: boolean;
+  trailingMarkdownSummaryUnsafe?: boolean;
   review?: MilitaryExpertReview;
 }

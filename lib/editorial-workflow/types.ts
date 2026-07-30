@@ -4,6 +4,7 @@ export const WORKFLOW_TYPES = [
   "literary_agent_review",
   "military_expert_review",
   "military_expert_v2_inventory",
+  "military_expert_v2_scene_review",
 ] as const;
 export type WorkflowType = (typeof WORKFLOW_TYPES)[number];
 
@@ -40,6 +41,9 @@ export type WaitingReason = (typeof WAITING_REASONS)[number];
 export const INTERNAL_PHASES = [
   "validating",
   "preparing",
+  "reviewing_scenes",
+  "repairing_scenes",
+  "validating_coverage",
   "memo_generation",
   "memo_repair",
   "contrary_evidence",
@@ -71,6 +75,14 @@ export interface WorkflowInputSnapshot {
   authorGuidancePauseSupported: boolean;
   /** Reserved: Next Best Action surfaced on completion in later milestones. */
   nextBestActionOnCompletion: boolean;
+  /** Phase 2A scene review handoff — present for military_expert_v2_scene_review workflows. */
+  phase2a?: {
+    selectionSnapshotId: string;
+    inventoryId: string;
+    manuscriptId: string;
+    manuscriptVersionId: string;
+    selectedSceneIds: string[];
+  };
 }
 
 export interface EditorialWorkflowRow {
@@ -135,6 +147,8 @@ export const LITERARY_AGENT_DEFINITION_VERSION = "literary_agent_review@v1";
 export const MILITARY_EXPERT_STUDIO_DEFINITION_VERSION = "military_expert_review@v1-draft";
 export const MILITARY_EXPERT_V2_INVENTORY_DEFINITION_VERSION =
   "military_expert_v2_inventory@v1";
+export const MILITARY_EXPERT_V2_SCENE_REVIEW_DEFINITION_VERSION =
+  "military_expert_v2_scene_review@v1";
 
 export function isTerminalWorkflowStatus(status: WorkflowStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";

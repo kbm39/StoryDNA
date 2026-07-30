@@ -13,6 +13,7 @@ import {
   MILITARY_EXPERT_V2_SYNTHESIS_CONTRACT_VERSION,
 } from "./synthesis-contract.ts";
 import type { MilitaryExpertV2SynthesisInput } from "./synthesis-input.ts";
+import { compactSceneSummariesForPrompt } from "./synthesis-input.ts";
 import { PHASE2B_SYNTHESIS_MAX_OUTPUT_TOKENS } from "./synthesis-budget.ts";
 
 export const MILITARY_EXPERT_V2_SYNTHESIS_PROMPT_VERSION =
@@ -135,12 +136,13 @@ export function buildMilitaryExpertV2SynthesisUserPrompt(args: {
   synthesisId: string;
   input: MilitaryExpertV2SynthesisInput;
 }): string {
+  const compactSummaries = compactSceneSummariesForPrompt(args.input);
   return [
     "Synthesize the following completed scene reviews into a cross-scene Military Expert report.",
     "Use ONLY the scene summaries below — do not invent manuscript content.",
     "",
     "Scene review summaries (JSON):",
-    JSON.stringify(args.input.scene_summaries, null, 2),
+    JSON.stringify(compactSummaries),
     "",
     "Coverage context:",
     JSON.stringify(
@@ -151,13 +153,14 @@ export function buildMilitaryExpertV2SynthesisUserPrompt(args: {
         coverage: args.input.coverage,
       },
       null,
-      2,
+      0,
     ),
     "",
     `Required identifiers: synthesis_id=${args.synthesisId}, inventory_id=${args.input.inventory_id}, selection_snapshot_id=${args.input.selection_snapshot_id}, manuscript_id=${args.input.manuscript_id}, manuscript_version_id=${args.input.manuscript_version_id}`,
     "",
-    "Respond with one JSON object using snake_case keys matching military_expert_v2_synthesis@v1, including:",
-    "recurring_strengths, recurring_concerns, single_scene_findings, cross_scene_findings, top_priority_findings, author_review_required_items, coverage_summary, overall_authenticity_assessment, top_revision_priorities, methodology_scope_statement.",
+    "Respond with one JSON object using snake_case keys matching military_expert_v2_synthesis@v1.",
+    "Include recurring_strengths, recurring_concerns, single_scene_findings, cross_scene_findings, top_priority_findings (max 12 ids), author_review_required_items, coverage_summary.scope_statement, overall_authenticity_assessment, top_revision_priorities, methodology_scope_statement.",
+    "Cap cross_scene_findings at 6 and single_scene_findings at 12 distinct synthesized findings.",
     "Each finding needs: finding_id, title, plain_english_explanation, source_scene_ids, source_scene_review_ids, best_locators, military_domains, evidence_summary, why_it_matters, revision_significance, confidence, contrary_evidence_summary, safe_editorial_guidance, determination, synthesis_kind.",
   ].join("\n");
 }

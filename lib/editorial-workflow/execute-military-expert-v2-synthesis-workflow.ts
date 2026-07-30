@@ -384,18 +384,31 @@ export async function executeMilitaryExpertV2SynthesisWorkflow(workflowId: strin
   };
 
   const parsed = parseSynthesisProviderResponse(invokeResult.rawResponse.responseText);
-  const normalizedJson = parsed.ok
-    ? normalizeSynthesisProviderOutput(parsed.json, validationCtx.sceneReviewIdBySceneId)
-    : null;
-  let validation = validateSynthesisDocument(
-    normalizedJson
-      ? mergeProviderOutputIntoSynthesisDocument(normalizedJson, mergeCtx)
-      : null,
-    validationCtx,
-    { skipQualityScoring: true },
-  );
+  let validation: SynthesisValidationResult;
+  if (!parsed.ok) {
+    validation = {
+      ok: false,
+      document: null,
+      structuralErrors: Object.freeze(["Document failed contract parsing."]),
+      qualityErrors: Object.freeze([]),
+      extractionError: parsed.error ?? "JSON extraction or parse failed.",
+    };
+  } else {
+    const normalizedJson = normalizeSynthesisProviderOutput(
+      parsed.json,
+      validationCtx.sceneReviewIdBySceneId,
+    );
+    validation = validateSynthesisDocument(
+      mergeProviderOutputIntoSynthesisDocument(normalizedJson, mergeCtx),
+      validationCtx,
+      { skipQualityScoring: true },
+    );
+  }
 
   let lastRawJson = invokeResult.rawResponse.responseText;
+  let normalizedJson = parsed.ok
+    ? normalizeSynthesisProviderOutput(parsed.json, validationCtx.sceneReviewIdBySceneId)
+    : null;
 
   while (!validation.ok && repairCount < PHASE2B_MAX_REPAIR_ATTEMPTS) {
     await setWorkflowPhase(workflowId, "memo_repair");

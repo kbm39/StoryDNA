@@ -187,3 +187,55 @@ export function assembleMilitaryExpertV2SynthesisInput(args: {
 export function estimateSynthesisInputCharCount(input: MilitaryExpertV2SynthesisInput): number {
   return JSON.stringify(input).length;
 }
+
+const PROMPT_TEXT_LIMIT = 320;
+
+function truncateForPrompt(text: string, limit = PROMPT_TEXT_LIMIT): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit - 1)}…`;
+}
+
+/** Compact scene summaries for provider prompts — omits raw evidence lists. */
+export function compactSceneSummariesForPrompt(
+  input: MilitaryExpertV2SynthesisInput,
+): readonly Record<string, unknown>[] {
+  return input.scene_summaries.map((scene) =>
+    Object.freeze({
+      scene_id: scene.scene_id,
+      scene_review_id: scene.scene_review_id,
+      review_status: scene.review_status,
+      locator_label: scene.locator_label,
+      scene_types: scene.scene_types,
+      action_categories: scene.action_categories,
+      realism_summary: scene.realism_summary
+        ? truncateForPrompt(scene.realism_summary, 240)
+        : null,
+      confidence: scene.confidence,
+      insufficient_evidence: scene.insufficient_evidence,
+      authenticity_strengths: scene.authenticity_strengths.map((s) =>
+        Object.freeze({
+          title: s.title,
+          explanation: truncateForPrompt(s.explanation, 220),
+          why_it_matters: truncateForPrompt(s.why_it_matters, 180),
+          determination: s.determination,
+          confidence: s.confidence,
+          locator: s.locator,
+        }),
+      ),
+      authenticity_concerns: scene.authenticity_concerns.map((c) =>
+        Object.freeze({
+          title: c.title,
+          explanation: truncateForPrompt(c.explanation, 220),
+          why_it_matters: truncateForPrompt(c.why_it_matters, 180),
+          determination: c.determination,
+          confidence: c.confidence,
+          locator: c.locator,
+        }),
+      ),
+      editorial_suggestions: scene.editorial_suggestions
+        .slice(0, 3)
+        .map((s) => truncateForPrompt(s, 160)),
+    }),
+  );
+}

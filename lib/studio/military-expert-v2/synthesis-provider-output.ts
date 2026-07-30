@@ -106,12 +106,35 @@ function normalizeFinding(raw: unknown, index: number): Record<string, unknown> 
   if (!Array.isArray(obj.best_locators)) obj.best_locators = [String(obj.best_locators)];
   obj.military_domains = normalizeDomains(obj.military_domains);
   if (!obj.synthesis_kind) obj.synthesis_kind = "single_scene";
+  const kindKey = String(obj.synthesis_kind).trim().toLowerCase();
+  const kindAliases: Record<string, string> = {
+    cross_scene: "cross_scene_pattern",
+    pattern: "cross_scene_pattern",
+    single: "single_scene",
+    book: "book_level",
+  };
+  obj.synthesis_kind = kindAliases[kindKey] ?? kindKey;
   if (obj.synthesis_kind === "book_level" && Array.isArray(obj.source_scene_ids) && obj.source_scene_ids.length < 3) {
     obj.synthesis_kind = "cross_scene_pattern";
   }
   if (!obj.determination) obj.determination = "confirmed";
   if (!obj.confidence) obj.confidence = "medium";
+  if (obj.confidence === "moderate") obj.confidence = "medium";
   if (!obj.revision_significance) obj.revision_significance = "important";
+  if (obj.revision_significance === "high") obj.revision_significance = "critical";
+  if (obj.revision_significance === "low") obj.revision_significance = "minor";
+  const explanation =
+    typeof obj.plain_english_explanation === "string" ? obj.plain_english_explanation.trim() : "";
+  if (!obj.evidence_summary && explanation) obj.evidence_summary = explanation.slice(0, 280);
+  if (!obj.why_it_matters && explanation) obj.why_it_matters = explanation.slice(0, 220);
+  if (!obj.safe_editorial_guidance) {
+    obj.safe_editorial_guidance =
+      "Revise this scene with a military consultant to preserve authenticity without adding procedural instruction.";
+  }
+  if (!Array.isArray(obj.best_locators) || obj.best_locators.length === 0) {
+    const sceneIds = Array.isArray(obj.source_scene_ids) ? obj.source_scene_ids : [];
+    obj.best_locators = sceneIds.length > 0 ? [`Scene ${sceneIds[0]}`] : ["Selected scene review"];
+  }
   return obj;
 }
 

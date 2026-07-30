@@ -15,7 +15,7 @@ import { isMilitaryExpertV2AvailableInStudio } from "../military-expert-v2-featu
 import { resolvePhase2ASceneReviewModelConfig } from "./scene-review-budget.ts";
 import type { MilitaryExpertV2SynthesisInput } from "./synthesis-input.ts";
 
-export const STUDIO_MILITARY_V2_SYNTHESIS_OPUS_BUDGET_USD = 25.0;
+export const STUDIO_MILITARY_V2_SYNTHESIS_OPUS_BUDGET_USD = 50.0;
 
 export const PHASE2B_SYNTHESIS_PROVIDER = "anthropic" as const;
 

@@ -32,6 +32,35 @@ const snapshotId =
 const phase2aWorkflowId =
   process.env.PHASE2A_WORKFLOW_ID ?? "6ffa7629-b831-4d5c-81c0-3784b470849a";
 
+async function resetFailedSynthesisState(supabase, snapshotId) {
+  await supabase
+    .from("studio_military_expert_v2_synthesis_repairs")
+    .delete()
+    .in(
+      "synthesis_id",
+      (
+        await supabase
+          .from("studio_military_expert_v2_syntheses")
+          .select("synthesis_id")
+          .eq("selection_snapshot_id", snapshotId)
+          .eq("status", "failed")
+      ).data?.map((r) => r.synthesis_id) ?? [],
+    );
+
+  await supabase
+    .from("studio_military_expert_v2_syntheses")
+    .update({
+      status: "queued",
+      error_code: null,
+      safe_error_message: null,
+      synthesis_content: null,
+      repair_count: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("selection_snapshot_id", snapshotId)
+    .eq("status", "failed");
+}
+
 async function findOrCreateWorkflow(handoff) {
   const supabase = getSupabaseAdmin();
   const { data: existing } = await supabase
@@ -47,7 +76,25 @@ async function findOrCreateWorkflow(handoff) {
     return existing.id;
   }
 
-  if (existing && existing.status !== "cancelled" && existing.status !== "failed") {
+  if (existing?.status === "failed") {
+    await resetFailedSynthesisState(supabase, snapshotId);
+    await supabase
+      .from("editorial_workflows")
+      .update({
+        status: "queued",
+        error_code: null,
+        safe_error_message: null,
+        failed_at: null,
+        attempt_count: 0,
+        authoritative_result_id: null,
+        authoritative_result_type: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+    return existing.id;
+  }
+
+  if (existing && existing.status !== "cancelled") {
     return existing.id;
   }
 

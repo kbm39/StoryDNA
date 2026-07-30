@@ -221,6 +221,60 @@ function parseProviderMetadata(raw: unknown): MilitaryExpertSynthesisProviderMet
   });
 }
 
+export function diagnoseSynthesisParseFailure(raw: unknown): readonly string[] {
+  const errors: string[] = [];
+  if (!raw || typeof raw !== "object") {
+    errors.push("root_not_object");
+    return errors;
+  }
+  const obj = raw as Record<string, unknown>;
+  if (obj.contract_version !== MILITARY_EXPERT_V2_SYNTHESIS_CONTRACT_VERSION) {
+    errors.push(`contract_version:${String(obj.contract_version)}`);
+  }
+  for (const key of [
+    "synthesis_id",
+    "inventory_id",
+    "selection_snapshot_id",
+    "manuscript_id",
+    "manuscript_version_id",
+    "overall_authenticity_assessment",
+    "methodology_scope_statement",
+    "parsed_hash",
+    "created_at",
+  ]) {
+    if (!isNonEmptyString(obj[key])) errors.push(`missing_${key}`);
+  }
+  for (const key of [
+    "selected_scene_count",
+    "terminal_scene_count",
+    "complete_scene_count",
+    "insufficient_evidence_count",
+  ]) {
+    if (typeof obj[key] !== "number") errors.push(`bad_number_${key}:${typeof obj[key]}`);
+  }
+  if (!isStringArray(obj.source_scene_review_ids)) errors.push("bad_source_scene_review_ids");
+  if (!isStringArray(obj.top_priority_findings)) errors.push("bad_top_priority_findings");
+  if (!isStringArray(obj.author_review_required_items)) errors.push("bad_author_review_required_items");
+  if (!isStringArray(obj.top_revision_priorities)) errors.push("bad_top_revision_priorities");
+  if (!Array.isArray(obj.recurring_strengths)) errors.push("bad_recurring_strengths");
+  if (!Array.isArray(obj.recurring_concerns)) errors.push("bad_recurring_concerns");
+  if (!Array.isArray(obj.single_scene_findings)) errors.push("bad_single_scene_findings");
+  if (!Array.isArray(obj.cross_scene_findings)) errors.push("bad_cross_scene_findings");
+  if (!parseCoverageSummary(obj.coverage_summary)) errors.push("bad_coverage_summary");
+  if (Array.isArray(obj.single_scene_findings) && Array.isArray(obj.cross_scene_findings)) {
+    const single = obj.single_scene_findings.map(parseFinding).filter(Boolean);
+    const cross = obj.cross_scene_findings.map(parseFinding).filter(Boolean);
+    if (single.length + cross.length === 0) errors.push("no_valid_findings");
+    if (single.length !== obj.single_scene_findings.length) {
+      errors.push(`invalid_single_scene_findings:${obj.single_scene_findings.length - single.length}`);
+    }
+    if (cross.length !== obj.cross_scene_findings.length) {
+      errors.push(`invalid_cross_scene_findings:${obj.cross_scene_findings.length - cross.length}`);
+    }
+  }
+  return Object.freeze(errors);
+}
+
 export function parseMilitaryExpertV2SynthesisDocument(
   raw: unknown,
 ): MilitaryExpertV2SynthesisDocument | null {
@@ -260,22 +314,20 @@ export function parseMilitaryExpertV2SynthesisDocument(
   const recurringStrengths = obj.recurring_strengths
     .map(parseRecurringItem)
     .filter((item): item is MilitaryExpertSynthesisRecurringItem => item !== null);
-  if (recurringStrengths.length !== obj.recurring_strengths.length) return null;
 
   const recurringConcerns = obj.recurring_concerns
     .map(parseRecurringItem)
     .filter((item): item is MilitaryExpertSynthesisRecurringItem => item !== null);
-  if (recurringConcerns.length !== obj.recurring_concerns.length) return null;
 
   const singleScene = obj.single_scene_findings
     .map(parseFinding)
     .filter((item): item is MilitaryExpertSynthesisFinding => item !== null);
-  if (singleScene.length !== obj.single_scene_findings.length) return null;
 
   const crossScene = obj.cross_scene_findings
     .map(parseFinding)
     .filter((item): item is MilitaryExpertSynthesisFinding => item !== null);
-  if (crossScene.length !== obj.cross_scene_findings.length) return null;
+
+  if (singleScene.length + crossScene.length === 0) return null;
 
   return Object.freeze({
     contract_version: MILITARY_EXPERT_V2_SYNTHESIS_CONTRACT_VERSION,

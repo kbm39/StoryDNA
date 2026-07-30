@@ -8,12 +8,12 @@ import {
   type MilitaryExpertV2SynthesisDocument,
 } from "./synthesis-contract.ts";
 import {
+  parseSynthesisProviderResponse,
+  mergeProviderOutputIntoSynthesisDocument,
   validateSynthesisDocument,
   type SynthesisValidationContext,
 } from "./synthesis-validation.ts";
-import { extractStrictModelJsonObject } from "@/experts/military-expert/model-json-extraction.ts";
 import { normalizeSynthesisProviderOutput } from "./synthesis-provider-output.ts";
-import { mergeProviderOutputIntoSynthesisDocument } from "./synthesis-validation.ts";
 import type { MilitaryExpertV2SynthesisInput } from "./synthesis-input.ts";
 
 export const MILITARY_EXPERT_V2_SYNTHESIS_REPAIR_VERSION =
@@ -84,14 +84,8 @@ export function processSynthesisRepairResponse(
     sceneReviewIdBySceneId: ReadonlyMap<string, string>;
   },
 ): SynthesisRepairResult {
-  let json: unknown;
-  try {
-    const extraction = extractStrictModelJsonObject(rawText);
-    json = normalizeSynthesisProviderOutput(
-      JSON.parse(extraction.jsonText),
-      ctx.sceneReviewIdBySceneId,
-    );
-  } catch {
+  const parsed = parseSynthesisProviderResponse(rawText);
+  if (!parsed.ok) {
     return {
       ok: false,
       document: null,
@@ -105,6 +99,7 @@ export function processSynthesisRepairResponse(
       errors: Object.freeze(["Repair JSON extraction failed."]),
     };
   }
+  const json = normalizeSynthesisProviderOutput(parsed.json, ctx.sceneReviewIdBySceneId);
 
   const patched = applyDeterministicSynthesisPatches(json, ctx);
   if (!patched) {

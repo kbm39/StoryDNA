@@ -65,4 +65,25 @@ describe("military expert v2 discovery", () => {
       assert.equal(scene.locator.page_is_approximate, false);
     }
   });
+
+  it("requires tactical anchor signals and filters weak prologue-only matches", () => {
+    const prologueOnly = `
+${"Domestic setup and character backstory without combat. ".repeat(400)}
+Chapter 2
+The convoy halted when ambush contact erupted. Gunner returned fire from the turret.
+${"Aftermath and debrief. ".repeat(200)}
+`;
+    const doc = discoverMilitaryScenes({
+      inventoryId: "inv_anchor",
+      manuscriptId: "ms_test",
+      manuscriptVersionId: "mv_test",
+      workflowId: null,
+      text: prologueOnly,
+      contentHash: "hash_anchor_1234567890",
+    });
+    assert.ok(doc.scene_count >= 1);
+    assert.ok(doc.scenes.every((s) => s.action_categories.some((c) => c !== "intelligence_or_planning")));
+    const validation = validateMilitaryExpertInventory(doc, prologueOnly.length);
+    assert.equal(validation.ok, true);
+  });
 });

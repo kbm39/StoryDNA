@@ -18,6 +18,8 @@ import {
   saveStudioExpertNotes,
 } from "@/app/studio/actions/expert-execution.ts";
 import { STUDIO_MILITARY_EXPERT_LAUNCH_ACK } from "@/lib/studio/military-expert-local-policy.ts";
+import { isMilitaryExpertV2AvailableInStudio } from "@/lib/studio/military-expert-v2-feature-flag.ts";
+import { launchMilitaryExpertV2Inventory } from "@/app/studio/actions/military-expert-v2-selection.ts";
 import {
   computeLaunchWizardCanLaunch,
   launchWizardNeedsPrivateUseAck,
@@ -438,7 +440,9 @@ function TeamMemberCard({
   const [pending, start] = useTransition();
   const [notes, setNotes] = useState(member.ownerNotes ?? "");
   const [showLaunch, setShowLaunch] = useState(false);
+  const [v2Pending, startV2] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const v2Enabled = isMilitaryExpertMember(member) && isMilitaryExpertV2AvailableInStudio();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -446,6 +450,18 @@ function TeamMemberCard({
       const result = await action();
       if (!result.ok) setError(result.error ?? "Action failed.");
       else onMutate();
+    });
+  }
+
+  function launchV2Inventory() {
+    setError(null);
+    startV2(async () => {
+      const result = await launchMilitaryExpertV2Inventory({ manuscriptId: bookId });
+      if (!result.ok) {
+        setError(result.error ?? "Unable to start V2 inventory.");
+        return;
+      }
+      onMutate();
     });
   }
 
@@ -541,6 +557,16 @@ function TeamMemberCard({
                 className="rounded-lg bg-accent px-3 py-2 text-sm text-white disabled:opacity-50"
               >
                 Run Review
+              </button>
+            ) : null}
+            {v2Enabled ? (
+              <button
+                type="button"
+                disabled={v2Pending}
+                onClick={launchV2Inventory}
+                className="rounded-lg border border-accent px-3 py-2 text-sm text-accent disabled:opacity-50"
+              >
+                Discover Scenes (V2)
               </button>
             ) : null}
             {member.latestReviewId ? (

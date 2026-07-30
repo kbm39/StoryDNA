@@ -1,6 +1,10 @@
 /** Editorial Workflow Engine — shared types (Publishing Workflow product surface). */
 
-export const WORKFLOW_TYPES = ["literary_agent_review", "military_expert_review"] as const;
+export const WORKFLOW_TYPES = [
+  "literary_agent_review",
+  "military_expert_review",
+  "military_expert_v2_inventory",
+] as const;
 export type WorkflowType = (typeof WORKFLOW_TYPES)[number];
 
 export const WORKFLOW_STATUSES = [
@@ -129,6 +133,8 @@ export class WorkflowCancelledError extends Error {
 
 export const LITERARY_AGENT_DEFINITION_VERSION = "literary_agent_review@v1";
 export const MILITARY_EXPERT_STUDIO_DEFINITION_VERSION = "military_expert_review@v1-draft";
+export const MILITARY_EXPERT_V2_INVENTORY_DEFINITION_VERSION =
+  "military_expert_v2_inventory@v1";
 
 export function isTerminalWorkflowStatus(status: WorkflowStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";

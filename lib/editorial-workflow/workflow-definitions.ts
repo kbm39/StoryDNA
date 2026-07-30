@@ -32,6 +32,16 @@ export function workflowMetadataForType(workflowType: WorkflowType): WorkflowRow
         participating_experts: ["Military Expert"],
         next_best_action: null,
       };
+    case "military_expert_v2_inventory":
+      return {
+        department: "Research",
+        owner_type: "studio_owner",
+        owner_label: "Kevin Studio",
+        purpose:
+          "Discover military/tactical scenes and prepare author selection scope for Military Expert V2.",
+        participating_experts: ["Military Expert"],
+        next_best_action: null,
+      };
     default:
       return {
         department: null,
@@ -50,6 +60,8 @@ export function nextBestActionForCompletedWorkflow(workflowType: WorkflowType): 
       return "View your Literary Agent review in the Reviews section below.";
     case "military_expert_review":
       return "View your Military Expert local test summary in Studio.";
+    case "military_expert_v2_inventory":
+      return "Choose scenes for Military Expert review in Studio.";
     default:
       return "Review your Publishing Workflow results.";
   }

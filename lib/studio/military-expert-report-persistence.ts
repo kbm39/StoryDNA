@@ -9,6 +9,7 @@ import type {
 import {
   serializeMilitaryExpertFindingContent,
   type PersistedMilitaryExpertFindingContent,
+  type PersistedMilitaryExpertV2FindingProvenance,
 } from "@/lib/studio/military-expert-finding-content.ts";
 
 export interface SavedMilitaryExpertFindingRecord {
@@ -22,6 +23,7 @@ export interface SavedMilitaryExpertFindingRecord {
   readonly confidence: string;
   readonly missingConfidenceFields: readonly ("contrary_evidence" | "uncertainty_note")[];
   readonly findingContent: PersistedMilitaryExpertFindingContent;
+  readonly v2Provenance?: PersistedMilitaryExpertV2FindingProvenance;
 }
 
 export interface SavedMilitaryExpertReport {
@@ -37,9 +39,15 @@ export function prepareSavedMilitaryExpertReport(args: {
   review: MilitaryExpertReview;
   parsedReviewHash: string;
   unresolvedMissingFieldsByIndex?: ReadonlyMap<number, readonly ("contrary_evidence" | "uncertainty_note")[]>;
+  v2ProvenanceByFindingId?: ReadonlyMap<string, PersistedMilitaryExpertV2FindingProvenance>;
 }): SavedMilitaryExpertReport {
   const findings = args.review.findings.map((finding, index) =>
-    toSavedFinding(finding, index, args.unresolvedMissingFieldsByIndex?.get(index) ?? []),
+    toSavedFinding(
+      finding,
+      index,
+      args.unresolvedMissingFieldsByIndex?.get(index) ?? [],
+      args.v2ProvenanceByFindingId?.get(finding.finding_id),
+    ),
   );
 
   const authorReviewRequiredCount = findings.filter(
@@ -60,6 +68,7 @@ function toSavedFinding(
   finding: MilitaryExpertFinding,
   index: number,
   missingConfidenceFields: readonly ("contrary_evidence" | "uncertainty_note")[],
+  v2Provenance?: PersistedMilitaryExpertV2FindingProvenance,
 ): SavedMilitaryExpertFindingRecord {
   const findingStatus =
     finding.finding_status === "author_review_required" ? "author_review_required" : "validated";
@@ -74,6 +83,7 @@ function toSavedFinding(
     severity: finding.severity,
     confidence: finding.confidence,
     missingConfidenceFields,
-    findingContent: serializeMilitaryExpertFindingContent(finding, missingConfidenceFields),
+    findingContent: serializeMilitaryExpertFindingContent(finding, missingConfidenceFields, v2Provenance),
+    v2Provenance,
   });
 }

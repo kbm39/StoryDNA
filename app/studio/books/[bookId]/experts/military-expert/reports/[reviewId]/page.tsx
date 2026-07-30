@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MilitaryExpertAuthorReviewPanel } from "@/app/studio/books/[bookId]/experts/MilitaryExpertAuthorReviewPanel.tsx";
 import { MilitaryExpertConfirmedFindingCard } from "@/app/studio/books/[bookId]/experts/MilitaryExpertFindingCard.tsx";
+import { MilitaryExpertReportExportLinks } from "@/app/studio/books/[bookId]/experts/MilitaryExpertReportExportLinks.tsx";
 import { StudioNav } from "@/app/studio/components/StudioShell.tsx";
 import { getStudioBookWorkspace } from "@/lib/studio/book-workspace.ts";
 import {
@@ -57,17 +58,20 @@ export default async function MilitaryExpertReportPage({
   return (
     <section className="space-y-6">
       <StudioNav bookId={bookId} />
-      <div>
-        <Link
-          href={`/studio/books/${bookId}/experts`}
-          className="text-sm text-accent hover:underline"
-        >
-          ← Back to Expert Desk
-        </Link>
-        <h2 className="mt-3 font-serif text-2xl font-semibold">Military Expert Report</h2>
-        <p className="mt-1 text-sm text-black/55 dark:text-white/55">
-          {workspace.title} — {report.completedReportStatusLabel}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link
+            href={`/studio/books/${bookId}/experts`}
+            className="text-sm text-accent hover:underline"
+          >
+            ← Back to Expert Desk
+          </Link>
+          <h2 className="mt-3 font-serif text-2xl font-semibold">Military Expert Report</h2>
+          <p className="mt-1 text-sm text-black/55 dark:text-white/55">
+            {workspace.title} — {report.completedReportStatusLabel}
+          </p>
+        </div>
+        <MilitaryExpertReportExportLinks bookId={bookId} reviewId={reviewId} />
       </div>
 
       {report.isProvisional ? (
@@ -82,6 +86,34 @@ export default async function MilitaryExpertReportPage({
             treated as confirmed until you review them.
           </p>
         </div>
+      ) : null}
+
+      {report.v2Report ? (
+        <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
+          <h3 className="font-serif text-lg font-semibold">Review Scope</h3>
+          <p className="mt-2 text-sm text-black/70 dark:text-white/70">{report.v2Report.scopeBlock}</p>
+          <p className="mt-3 text-sm">{report.v2Report.overallAssessment}</p>
+          {report.v2Report.recurringStrengths.length > 0 ? (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium">What the manuscript does well</h4>
+              <ul className="mt-2 list-disc pl-5 text-sm">
+                {report.v2Report.recurringStrengths.map((s) => (
+                  <li key={s.title}>{s.title}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {report.v2Report.topRevisionPriorities.length > 0 ? (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium">Top revision priorities</h4>
+              <ol className="mt-2 list-decimal pl-5 text-sm">
+                {report.v2Report.topRevisionPriorities.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {report.legacyContentOnly ? (
@@ -163,6 +195,46 @@ export default async function MilitaryExpertReportPage({
         description="Validated findings that may warrant manuscript revision. Shown here for reference only."
         candidates={report.revisionCandidates}
       />
+
+      {report.v2Report ? (
+        <>
+          <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
+            <h3 className="font-serif text-lg font-semibold">Complete Scene Inventory</h3>
+            <ul className="mt-3 space-y-1 text-sm">
+              {report.v2Report.sceneInventory.map((entry) => (
+                <li key={entry.sceneId} className="flex justify-between gap-2">
+                  <span>{entry.sceneId}</span>
+                  <span className="text-black/55 dark:text-white/55">
+                    {entry.status.replace(/_/g, " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="rounded-xl border border-black/10 bg-paper p-5 dark:border-white/10">
+            <h3 className="font-serif text-lg font-semibold">Scene-by-Scene Appendix</h3>
+            <div className="mt-4 space-y-4">
+              {report.v2Report.sceneAppendix.map((scene) => (
+                <article
+                  key={scene.sceneId}
+                  className="rounded-lg border border-black/10 p-4 dark:border-white/10"
+                >
+                  <h4 className="font-medium">
+                    {scene.sceneId} · {scene.locator}
+                  </h4>
+                  <p className="text-xs text-black/55 dark:text-white/55">
+                    {scene.sceneTypes.join(", ")} · {scene.status}
+                  </p>
+                  {scene.realismSummary ? (
+                    <p className="mt-2 text-sm">{scene.realismSummary}</p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
     </section>
   );
 }

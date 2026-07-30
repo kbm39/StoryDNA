@@ -52,6 +52,16 @@ export function workflowMetadataForType(workflowType: WorkflowType): WorkflowRow
         participating_experts: ["Military Expert"],
         next_best_action: null,
       };
+    case "military_expert_v2_synthesis":
+      return {
+        department: "Research",
+        owner_type: "studio_owner",
+        owner_label: "Kevin Studio",
+        purpose:
+          "Synthesize completed V2 scene reviews into an author-facing Military Expert report.",
+        participating_experts: ["Military Expert"],
+        next_best_action: null,
+      };
     default:
       return {
         department: null,
@@ -74,6 +84,8 @@ export function nextBestActionForCompletedWorkflow(workflowType: WorkflowType): 
       return "Choose scenes for Military Expert review in Studio.";
     case "military_expert_v2_scene_review":
       return "View per-scene Military Expert reviews in Studio calibration screen.";
+    case "military_expert_v2_synthesis":
+      return "View your Military Expert V2 synthesis report in Studio.";
     default:
       return "Review your Publishing Workflow results.";
   }

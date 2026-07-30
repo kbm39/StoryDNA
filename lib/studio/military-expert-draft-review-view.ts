@@ -26,6 +26,15 @@ import {
   type MilitaryExpertScoreSummary,
 } from "@/lib/studio/military-expert-scoring.ts";
 import type { StudioExpertRunStatus } from "@/lib/studio/types.ts";
+import type { MilitaryExpertV2SynthesisReport } from "@/lib/studio/military-expert-v2/synthesis-report.ts";
+import { loadSynthesisForSnapshot } from "@/lib/studio/military-expert-v2/synthesis-persistence.ts";
+import { loadInventoryById } from "@/lib/studio/military-expert-v2/persistence.ts";
+import { loadSceneReviewsForSnapshot } from "@/lib/studio/military-expert-v2/scene-review-persistence.ts";
+import {
+  buildMilitaryExpertV2SynthesisReport,
+} from "@/lib/studio/military-expert-v2/synthesis-report.ts";
+import { assembleMilitaryExpertV2SynthesisInput } from "@/lib/studio/military-expert-v2/synthesis-input.ts";
+import { computeSceneReviewCoverage } from "@/lib/studio/military-expert-v2/scene-review-coverage.ts";
 
 export const DISPLAYABLE_MILITARY_EXPERT_REVIEW_STATUSES = [
   "complete",
@@ -77,6 +86,8 @@ export interface MilitaryExpertReportDisplayModel {
   readonly revisionBoardIntegrationAvailable: false;
   readonly isProvisional: boolean;
   readonly legacyContentOnly: boolean;
+  readonly v2Report: MilitaryExpertV2SynthesisReport | null;
+  readonly isV2SceneCentricReport: boolean;
 }
 
 export interface MilitaryExpertTeamRunStatus {
@@ -213,8 +224,10 @@ function scoringReviewFromRows(
 export function buildMilitaryExpertReportDisplayModel(args: {
   review: MilitaryExpertDraftReviewRow;
   findings: readonly MilitaryExpertDraftFindingRow[];
+  evidenceItemLimit?: number;
+  v2Report?: MilitaryExpertV2SynthesisReport | null;
 }): MilitaryExpertReportDisplayModel {
-  const { review, findings } = args;
+  const { review, findings, evidenceItemLimit, v2Report = null } = args;
   const scoringReview = scoringReviewFromRows(review, findings);
   const scoreSummary = computeMilitaryExpertScoreSummary(scoringReview);
   const boardCandidates = buildMilitaryExpertBoardCandidates(scoringReview);
@@ -235,7 +248,9 @@ export function buildMilitaryExpertReportDisplayModel(args: {
     confidence: row.confidence,
     findingContent: row.finding_content,
   }));
-  const displayItems = buildMilitaryExpertFindingDisplayItems(displayInputs);
+  const displayItems = buildMilitaryExpertFindingDisplayItems(displayInputs, {
+    evidenceItemLimit,
+  });
   const confirmedFindingItems = displayItems.filter((item) => item.status === "confirmed");
   const authorReviewRequiredItems = displayItems.filter(
     (item) => item.status === "author_review_required",
@@ -268,6 +283,43 @@ export function buildMilitaryExpertReportDisplayModel(args: {
       review.review_status === "completed_with_author_review_required" ||
       review.provisional_release_used,
     legacyContentOnly: displayItems.some((item) => !item.contentPersisted),
+    v2Report,
+    isV2SceneCentricReport: v2Report !== null,
+  });
+}
+
+async function loadV2ReportForReview(
+  review: MilitaryExpertDraftReviewRow,
+  deps: MilitaryExpertDraftReviewViewDeps,
+): Promise<MilitaryExpertV2SynthesisReport | null> {
+  const getWorkflow = deps.getWorkflow ?? getWorkflowById;
+  const workflow = await getWorkflow(review.workflow_id);
+  if (!workflow || workflow.workflow_type !== "military_expert_v2_synthesis") return null;
+
+  const phase2b = workflow.input_snapshot.phase2b;
+  if (!phase2b?.selectionSnapshotId) return null;
+
+  const synthesisRow = await loadSynthesisForSnapshot(phase2b.selectionSnapshotId);
+  if (!synthesisRow?.document) return null;
+
+  const inventory = await loadInventoryById(synthesisRow.inventoryId);
+  if (!inventory) return null;
+
+  const reviews = await loadSceneReviewsForSnapshot(phase2b.selectionSnapshotId);
+  const coverage = computeSceneReviewCoverage(phase2b.selectedSceneIds, reviews);
+  const input = assembleMilitaryExpertV2SynthesisInput({
+    inventory,
+    selectedSceneIds: phase2b.selectedSceneIds,
+    reviews,
+    coverage,
+  });
+
+  return buildMilitaryExpertV2SynthesisReport({
+    synthesis: synthesisRow.document,
+    inventory,
+    selectedSceneIds: phase2b.selectedSceneIds,
+    reviews,
+    input,
   });
 }
 
@@ -377,7 +429,25 @@ export async function loadMilitaryExpertReportDisplayModel(
   const review = await getMilitaryExpertDraftReviewById(reviewId, expectedManuscriptId, deps);
   if (!review) return null;
   const findings = await loadFindingsForReview(deps.supabase, review.id);
-  return buildMilitaryExpertReportDisplayModel({ review, findings });
+  const v2Report = await loadV2ReportForReview(review, deps);
+  return buildMilitaryExpertReportDisplayModel({ review, findings, v2Report });
+}
+
+export async function loadMilitaryExpertReportDisplayModelForExport(
+  reviewId: string,
+  expectedManuscriptId: string,
+  deps: MilitaryExpertDraftReviewViewDeps = defaultDeps(),
+): Promise<MilitaryExpertReportDisplayModel | null> {
+  const review = await getMilitaryExpertDraftReviewById(reviewId, expectedManuscriptId, deps);
+  if (!review) return null;
+  const findings = await loadFindingsForReview(deps.supabase, review.id);
+  const v2Report = await loadV2ReportForReview(review, deps);
+  return buildMilitaryExpertReportDisplayModel({
+    review,
+    findings,
+    evidenceItemLimit: Number.POSITIVE_INFINITY,
+    v2Report,
+  });
 }
 
 export async function resolveMilitaryExpertTeamRunStatus(

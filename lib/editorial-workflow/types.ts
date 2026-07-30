@@ -5,6 +5,7 @@ export const WORKFLOW_TYPES = [
   "military_expert_review",
   "military_expert_v2_inventory",
   "military_expert_v2_scene_review",
+  "military_expert_v2_synthesis",
 ] as const;
 export type WorkflowType = (typeof WORKFLOW_TYPES)[number];
 
@@ -83,6 +84,15 @@ export interface WorkflowInputSnapshot {
     manuscriptVersionId: string;
     selectedSceneIds: string[];
   };
+  /** Phase 2B synthesis handoff — present for military_expert_v2_synthesis workflows. */
+  phase2b?: {
+    selectionSnapshotId: string;
+    inventoryId: string;
+    manuscriptId: string;
+    manuscriptVersionId: string;
+    selectedSceneIds: string[];
+    phase2aWorkflowId: string;
+  };
 }
 
 export interface EditorialWorkflowRow {
@@ -149,6 +159,8 @@ export const MILITARY_EXPERT_V2_INVENTORY_DEFINITION_VERSION =
   "military_expert_v2_inventory@v1";
 export const MILITARY_EXPERT_V2_SCENE_REVIEW_DEFINITION_VERSION =
   "military_expert_v2_scene_review@v1";
+export const MILITARY_EXPERT_V2_SYNTHESIS_DEFINITION_VERSION =
+  "military_expert_v2_synthesis@v1";
 
 export function isTerminalWorkflowStatus(status: WorkflowStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";

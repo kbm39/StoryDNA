@@ -8,6 +8,7 @@ import type { MilitaryDepthScorecard } from "@/lib/studio/military-expert-v2/sce
 import type { PersistedSceneReviewRow } from "@/lib/studio/military-expert-v2/scene-review-persistence.ts";
 import { formatAuthorLocator } from "@/lib/studio/military-expert-v2/locator.ts";
 import { launchMilitaryExpertV2SceneReview } from "@/app/studio/actions/military-expert-v2-scene-review.ts";
+import { launchMilitaryExpertV2Synthesis } from "@/app/studio/actions/military-expert-v2-synthesis.ts";
 
 interface SceneReviewInspectionData {
   readonly bookId: string;
@@ -152,6 +153,25 @@ export function MilitaryExpertSceneReviewsClient({ data }: { data: SceneReviewIn
     }
   }
 
+  async function handleLaunchSynthesis() {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await launchMilitaryExpertV2Synthesis({
+        manuscriptId: data.bookId,
+        selectionSnapshotId: data.snapshotId,
+        phase2aWorkflowId: data.workflowId ?? undefined,
+      });
+      if (!result.ok) setError(result.error ?? "Synthesis launch failed.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Synthesis launch failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const coveragePass = data.coverage?.pass === true;
+
   return (
     <div className="space-y-6">
       <header className="rounded-lg border border-black/10 p-4 dark:border-white/10">
@@ -192,6 +212,16 @@ export function MilitaryExpertSceneReviewsClient({ data }: { data: SceneReviewIn
             className="mt-4 rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
           >
             {pending ? "Launching…" : "Launch Phase 2A Scene Review"}
+          </button>
+        )}
+        {coveragePass && data.workflowStatus === "completed" && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={handleLaunchSynthesis}
+            className="mt-4 ml-2 rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {pending ? "Launching…" : "Launch Phase 2B Synthesis Report"}
           </button>
         )}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}

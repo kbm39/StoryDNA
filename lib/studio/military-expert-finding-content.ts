@@ -8,6 +8,14 @@ import type {
   MilitaryExpertUnresolvedConfidenceField,
 } from "@/experts/military-expert/contracts.ts";
 
+export interface PersistedMilitaryExpertV2FindingProvenance {
+  readonly source_scene_ids: readonly string[];
+  readonly source_scene_review_ids: readonly string[];
+  readonly synthesis_kind: string;
+  readonly primary_locator: string | null;
+  readonly coverage_scope: string;
+}
+
 export interface PersistedMilitaryExpertFindingContent {
   readonly title: string;
   readonly observation: string;
@@ -20,11 +28,13 @@ export interface PersistedMilitaryExpertFindingContent {
   readonly contrary_evidence?: readonly MilitaryExpertEvidenceRecord[];
   readonly uncertainty_note?: string;
   readonly missing_confidence_fields: readonly MilitaryExpertUnresolvedConfidenceField[];
+  readonly v2_provenance?: PersistedMilitaryExpertV2FindingProvenance;
 }
 
 export function serializeMilitaryExpertFindingContent(
   finding: MilitaryExpertFinding,
   missingConfidenceFields: readonly MilitaryExpertUnresolvedConfidenceField[] = [],
+  v2Provenance?: PersistedMilitaryExpertV2FindingProvenance,
 ): PersistedMilitaryExpertFindingContent {
   return Object.freeze({
     title: finding.title,
@@ -38,6 +48,7 @@ export function serializeMilitaryExpertFindingContent(
     contrary_evidence: finding.contrary_evidence,
     uncertainty_note: finding.uncertainty_note,
     missing_confidence_fields: missingConfidenceFields,
+    v2_provenance: v2Provenance,
   });
 }
 
@@ -61,6 +72,25 @@ export function parsePersistedMilitaryExpertFindingContent(
     uncertainty_note:
       typeof record.uncertainty_note === "string" ? record.uncertainty_note : undefined,
     missing_confidence_fields: parseMissingFields(record.missing_confidence_fields),
+    v2_provenance: parseV2Provenance(record.v2_provenance),
+  });
+}
+
+function parseV2Provenance(raw: unknown): PersistedMilitaryExpertV2FindingProvenance | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const record = raw as Record<string, unknown>;
+  if (!Array.isArray(record.source_scene_ids) || !Array.isArray(record.source_scene_review_ids)) {
+    return undefined;
+  }
+  return Object.freeze({
+    source_scene_ids: record.source_scene_ids.filter((id): id is string => typeof id === "string"),
+    source_scene_review_ids: record.source_scene_review_ids.filter(
+      (id): id is string => typeof id === "string",
+    ),
+    synthesis_kind: String(record.synthesis_kind ?? ""),
+    primary_locator:
+      typeof record.primary_locator === "string" ? record.primary_locator : null,
+    coverage_scope: String(record.coverage_scope ?? ""),
   });
 }
 

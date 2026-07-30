@@ -43,6 +43,8 @@ export interface MilitaryExpertFindingDisplayItem {
   readonly recommendedAction: string;
   readonly revisionGuidance: string;
   readonly contentPersisted: boolean;
+  readonly sourceSceneIds?: readonly string[];
+  readonly synthesisKind?: string;
 }
 
 export interface MilitaryExpertFindingDisplayInput {
@@ -57,13 +59,21 @@ export interface MilitaryExpertFindingDisplayInput {
 
 const MAX_VISIBLE_EVIDENCE_ITEMS = 2;
 
+export interface MilitaryExpertFindingDisplayOptions {
+  /** Default caps evidence at 2 for on-screen cards; exports should pass Infinity. */
+  readonly evidenceItemLimit?: number;
+}
+
 export function buildMilitaryExpertFindingDisplayItem(
   input: MilitaryExpertFindingDisplayInput,
+  options: MilitaryExpertFindingDisplayOptions = {},
 ): MilitaryExpertFindingDisplayItem {
   const status: MilitaryExpertFindingAuthorStatus =
     input.findingStatus === "author_review_required" ? "author_review_required" : "confirmed";
   const parsed = parsePersistedMilitaryExpertFindingContent(input.findingContent);
   const structuralTitle = `${input.category.replace(/_/g, " ")} (${input.severity})`;
+
+  const evidenceItemLimit = options.evidenceItemLimit ?? MAX_VISIBLE_EVIDENCE_ITEMS;
 
   if (!parsed) {
     return buildLegacyFindingDisplayItem({
@@ -77,6 +87,7 @@ export function buildMilitaryExpertFindingDisplayItem(
     ...input,
     status,
     content: parsed,
+    evidenceItemLimit,
   });
 }
 
@@ -87,19 +98,21 @@ function buildPersistedFindingDisplayItem(args: {
   severity: string;
   confidence: string;
   content: PersistedMilitaryExpertFindingContent;
+  evidenceItemLimit: number;
 }): MilitaryExpertFindingDisplayItem {
   const supportingEvidence = buildEvidenceDisplay(
     "Supporting evidence",
     args.content.manuscript_evidence,
+    args.evidenceItemLimit,
   );
   const contraryEvidence =
     args.content.contrary_evidence && args.content.contrary_evidence.length > 0
-      ? buildEvidenceDisplay("Contrary evidence", args.content.contrary_evidence)
+      ? buildEvidenceDisplay("Contrary evidence", args.content.contrary_evidence, args.evidenceItemLimit)
       : args.status === "author_review_required" &&
           args.content.missing_confidence_fields.includes("contrary_evidence")
         ? null
         : args.content.contrary_evidence
-          ? buildEvidenceDisplay("Contrary evidence", args.content.contrary_evidence)
+          ? buildEvidenceDisplay("Contrary evidence", args.content.contrary_evidence, args.evidenceItemLimit)
           : null;
 
   const whyItMatters = combineWhyItMatters(
@@ -134,6 +147,8 @@ function buildPersistedFindingDisplayItem(args: {
         : nonEmptyOr(args.content.recommendation, MILITARY_EXPERT_NOT_PROVIDED),
     revisionGuidance: nonEmptyOr(args.content.preservation_note, MILITARY_EXPERT_NOT_PROVIDED),
     contentPersisted: true,
+    sourceSceneIds: args.content.v2_provenance?.source_scene_ids,
+    synthesisKind: args.content.v2_provenance?.synthesis_kind,
   });
 }
 
@@ -145,7 +160,7 @@ function buildLegacyFindingDisplayItem(args: {
   severity: string;
   confidence: string;
 }): MilitaryExpertFindingDisplayItem {
-  const emptyEvidence = buildEvidenceDisplay("Supporting evidence", []);
+  const emptyEvidence = buildEvidenceDisplay("Supporting evidence", [], MAX_VISIBLE_EVIDENCE_ITEMS);
   return Object.freeze({
     findingId: args.findingId,
     findingIndex: args.findingIndex,
@@ -183,6 +198,7 @@ function combineWhyItMatters(operationalImpact: string, storyImpact: string): st
 function buildEvidenceDisplay(
   heading: MilitaryExpertEvidenceDisplay["heading"],
   records: readonly { excerpt: string; locator?: string }[],
+  evidenceItemLimit: number,
 ): MilitaryExpertEvidenceDisplay {
   const items = records
     .map((record) =>
@@ -201,7 +217,11 @@ function buildEvidenceDisplay(
     });
   }
 
-  const visibleItems = items.slice(0, MAX_VISIBLE_EVIDENCE_ITEMS);
+  const limit =
+    Number.isFinite(evidenceItemLimit) && evidenceItemLimit > 0
+      ? evidenceItemLimit
+      : MAX_VISIBLE_EVIDENCE_ITEMS;
+  const visibleItems = items.slice(0, limit);
   const summary =
     items.length === 1
       ? formatEvidenceItemSummary(visibleItems[0]!)
@@ -232,6 +252,7 @@ function nonEmptyOr(value: string | undefined, fallback: string): string {
 
 export function buildMilitaryExpertFindingDisplayItems(
   findings: readonly MilitaryExpertFindingDisplayInput[],
+  options: MilitaryExpertFindingDisplayOptions = {},
 ): readonly MilitaryExpertFindingDisplayItem[] {
-  return findings.map(buildMilitaryExpertFindingDisplayItem);
+  return findings.map((finding) => buildMilitaryExpertFindingDisplayItem(finding, options));
 }

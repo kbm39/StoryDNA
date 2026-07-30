@@ -14,6 +14,15 @@ import { estimateSelectionTotals } from "./estimator.ts";
 import {
   estimatePhase2ASceneReviewBudget,
 } from "./scene-review-budget.ts";
+import { estimatePhase2BSynthesisBudget } from "./synthesis-budget.ts";
+import {
+  computeSceneReviewCoverage,
+} from "./scene-review-coverage.ts";
+import {
+  hasCompleteSynthesisForSnapshot,
+  loadSynthesisForSnapshot,
+} from "./synthesis-persistence.ts";
+import { loadSceneReviewsForSnapshot } from "./scene-review-persistence.ts";
 import { isMilitaryExpertV2AvailableInStudio } from "@/lib/studio/military-expert-v2-feature-flag.ts";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -247,6 +256,146 @@ export async function validatePhase2AHandoff(input: {
     selectedSceneIds: Object.freeze([...selectedSceneIds]),
     estimatedBudgetUsd: phase2Budget.totalReservationUsd,
   });
+}
+
+export interface Phase2BHandoffValidationResult {
+  readonly ok: boolean;
+  readonly errorCode?: string;
+  readonly errorMessage?: string;
+  readonly inventory?: MilitaryExpertSceneInventoryDocument;
+  readonly selectionSnapshotId?: string;
+  readonly selectedSceneIds?: readonly string[];
+  readonly phase2aWorkflowId?: string;
+  readonly estimatedBudgetUsd?: number;
+  readonly coveragePass?: boolean;
+}
+
+export async function validatePhase2BHandoff(input: {
+  selectionSnapshotId: string;
+  phase2aWorkflowId?: string;
+  requirePinnedSnapshot?: boolean;
+  allowExistingSynthesis?: boolean;
+}): Promise<Phase2BHandoffValidationResult> {
+  if (!isMilitaryExpertV2AvailableInStudio()) {
+    return {
+      ok: false,
+      errorCode: "FEATURE_DISABLED",
+      errorMessage: "Military Expert V2 synthesis is not enabled.",
+    };
+  }
+
+  const phase2a = await validatePhase2AHandoff({
+    selectionSnapshotId: input.selectionSnapshotId,
+    requirePinnedSnapshot: input.requirePinnedSnapshot ?? false,
+  });
+  if (!phase2a.ok || !phase2a.inventory || !phase2a.selectedSceneIds) {
+    return {
+      ok: false,
+      errorCode: phase2a.errorCode ?? "PHASE2A_HANDOFF_FAILED",
+      errorMessage: phase2a.errorMessage ?? "Phase 2A handoff validation failed.",
+    };
+  }
+
+  const reviews = await loadSceneReviewsForSnapshot(input.selectionSnapshotId);
+  const coverage = computeSceneReviewCoverage(phase2a.selectedSceneIds, reviews);
+  if (!coverage.pass) {
+    return {
+      ok: false,
+      errorCode: "COVERAGE_INCOMPLETE",
+      errorMessage: `Scene review coverage is ${coverage.coveragePercentage}%, expected 100%.`,
+      coveragePass: false,
+    };
+  }
+
+  if (!input.allowExistingSynthesis) {
+    const existing = await hasCompleteSynthesisForSnapshot(input.selectionSnapshotId);
+    if (existing) {
+      return {
+        ok: false,
+        errorCode: "SYNTHESIS_ALREADY_EXISTS",
+        errorMessage: "A completed synthesis already exists for this snapshot.",
+      };
+    }
+  }
+
+  let phase2aWorkflowId = input.phase2aWorkflowId;
+  if (!phase2aWorkflowId) {
+    const supabase = getSupabaseAdmin();
+    const { data: wf } = await supabase
+      .from("editorial_workflows")
+      .select("id, status")
+      .eq("workflow_type", "military_expert_v2_scene_review")
+      .contains("input_snapshot", { phase2a: { selectionSnapshotId: input.selectionSnapshotId } })
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    phase2aWorkflowId = wf?.id;
+  }
+
+  if (!phase2aWorkflowId) {
+    return {
+      ok: false,
+      errorCode: "PHASE2A_WORKFLOW_MISSING",
+      errorMessage: "No completed Phase 2A scene review workflow found.",
+    };
+  }
+
+  const budget = estimatePhase2BSynthesisBudget();
+  if (budget.exceedsBudget) {
+    return {
+      ok: false,
+      errorCode: "BUDGET_EXCEEDED",
+      errorMessage: "Estimated synthesis cost exceeds Studio budget.",
+    };
+  }
+
+  return Object.freeze({
+    ok: true,
+    inventory: phase2a.inventory,
+    selectionSnapshotId: input.selectionSnapshotId,
+    selectedSceneIds: phase2a.selectedSceneIds,
+    phase2aWorkflowId,
+    estimatedBudgetUsd: budget.totalReservationUsd,
+    coveragePass: true,
+  });
+}
+
+export function buildPhase2BWorkflowInputSnapshot(args: {
+  selectionSnapshotId: string;
+  inventoryId: string;
+  manuscriptId: string;
+  manuscriptVersionId: string;
+  selectedSceneIds: readonly string[];
+  phase2aWorkflowId: string;
+  title: string;
+  wordCount: number | null;
+  characterCount: number | null;
+}) {
+  return {
+    manuscriptTitle: args.title,
+    wordCount: args.wordCount,
+    characterCount: args.characterCount,
+    workflowOwner: "StoryDNA" as const,
+    workflowPurpose: "military_expert_v2_synthesis" as const,
+    participatingExperts: ["Military Expert"],
+    reviewerDefinitionId: "military_expert",
+    editorialDecisionLogEnabled: false,
+    authorGuidancePauseSupported: false,
+    nextBestActionOnCompletion: true,
+    phase2b: {
+      selectionSnapshotId: args.selectionSnapshotId,
+      inventoryId: args.inventoryId,
+      manuscriptId: args.manuscriptId,
+      manuscriptVersionId: args.manuscriptVersionId,
+      selectedSceneIds: [...args.selectedSceneIds],
+      phase2aWorkflowId: args.phase2aWorkflowId,
+    },
+  };
+}
+
+export async function loadPhase2BSynthesisForSnapshot(snapshotId: string) {
+  return loadSynthesisForSnapshot(snapshotId);
 }
 
 export function buildPhase2AWorkflowInputSnapshot(args: {

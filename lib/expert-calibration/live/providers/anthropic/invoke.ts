@@ -16,6 +16,27 @@ import {
 } from "./metadata.ts";
 import { getModelLifecycleRecord } from "../../model-lifecycle.ts";
 import { validateAnthropicTextContent, type AnthropicContentBlock } from "./response-shape.ts";
+import { ANTHROPIC_OPUS_48_MODEL_ID } from "../../model-lifecycle.ts";
+
+function anthropicMessagesCreateBody(args: {
+  modelId: string;
+  maxTokens: number;
+  temperature: number;
+  system: string;
+  userContent: string;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: args.modelId,
+    max_tokens: args.maxTokens,
+    system: args.system,
+    messages: [{ role: "user", content: args.userContent }],
+  };
+  if (args.modelId !== ANTHROPIC_OPUS_48_MODEL_ID) {
+    body.temperature = args.temperature;
+  }
+  return body;
+}
+
 
 export interface AnthropicMessagesCreateClient {
   messages: {
@@ -59,13 +80,13 @@ export function createAnthropicProviderInvokerFromClient(
 
     try {
       const response = await client.messages.create(
-        {
-          model: input.modelId,
-          max_tokens: request.maxOutputTokens,
+        anthropicMessagesCreateBody({
+          modelId: input.modelId,
+          maxTokens: request.maxOutputTokens,
           temperature: request.temperature,
           system: request.systemPrompt,
-          messages: [{ role: "user", content: request.reviewPrompt }],
-        },
+          userContent: request.reviewPrompt,
+        }),
         {
           signal: input.signal,
           timeout: input.timeoutMs,

@@ -23,6 +23,9 @@ export const ANTHROPIC_HAIKU_45_MODEL_ID = "claude-haiku-4-5-20251001" as const;
 export const ANTHROPIC_HAIKU_45_ALIAS = "haiku-4-5-v1" as const;
 export const ANTHROPIC_HAIKU_45_CONVENIENCE_ALIAS = "claude-haiku-4-5" as const;
 
+export const ANTHROPIC_OPUS_48_MODEL_ID = "claude-opus-4-8" as const;
+export const ANTHROPIC_OPUS_48_ALIAS = "opus-4-8-v1" as const;
+
 /** Primary active exports for live calibration. */
 export const ANTHROPIC_HAIKU_MODEL_ID = ANTHROPIC_HAIKU_45_MODEL_ID;
 export const ANTHROPIC_HAIKU_MODEL_ALIAS = ANTHROPIC_HAIKU_45_ALIAS;
@@ -53,11 +56,24 @@ const MODEL_LIFECYCLE_BY_ID: Readonly<Record<string, LiveCalibrationModelLifecyc
       verifiedDate: "2026-07-25",
       sourceLabel: "anthropic-model-deprecations",
     }),
+    [ANTHROPIC_OPUS_48_MODEL_ID]: Object.freeze({
+      provider: "anthropic",
+      modelId: ANTHROPIC_OPUS_48_MODEL_ID,
+      modelAlias: ANTHROPIC_OPUS_48_ALIAS,
+      status: "active",
+      announcedDeprecationDate: null,
+      retirementDate: null,
+      recommendedReplacement: null,
+      pricingProfileId: "calibration_anthropic_opus_4_8_v1",
+      verifiedDate: "2026-07-30",
+      sourceLabel: "anthropic-provider-policy",
+    }),
   });
 
 const ALIAS_TO_MODEL_ID: Readonly<Record<string, string>> = Object.freeze({
   [ANTHROPIC_HAIKU_35_ALIAS]: ANTHROPIC_HAIKU_35_MODEL_ID,
   [ANTHROPIC_HAIKU_45_ALIAS]: ANTHROPIC_HAIKU_45_MODEL_ID,
+  [ANTHROPIC_OPUS_48_ALIAS]: ANTHROPIC_OPUS_48_MODEL_ID,
 });
 
 export function getModelLifecycleRecord(modelId: string): LiveCalibrationModelLifecycleRecord | null {

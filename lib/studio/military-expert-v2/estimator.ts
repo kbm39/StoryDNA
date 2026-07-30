@@ -39,6 +39,7 @@ function excerptLength(entry: MilitaryExpertSceneInventoryEntry): number {
 
 export function estimateSceneReviewCost(
   entry: MilitaryExpertSceneInventoryEntry,
+  pricingProfileId: string = CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE,
 ): SceneCostEstimate {
   const chars = excerptLength(entry);
   const inputTokens = SCENE_BASE_INPUT_TOKENS + Math.ceil((chars / 1000) * TOKENS_PER_1000_CHARS);
@@ -49,7 +50,7 @@ export function estimateSceneReviewCost(
   const costUsd = estimateTokenCost(
     inputTokens,
     outputTokens,
-    CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE,
+    pricingProfileId,
   );
   const runtimeSeconds =
     entry.priority_tier === "major"

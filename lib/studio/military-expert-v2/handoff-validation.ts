@@ -13,7 +13,6 @@ import {
 import { estimateSelectionTotals } from "./estimator.ts";
 import {
   estimatePhase2ASceneReviewBudget,
-  STUDIO_MILITARY_V2_SCENE_REVIEW_BUDGET_USD,
 } from "./scene-review-budget.ts";
 import { isMilitaryExpertV2AvailableInStudio } from "@/lib/studio/military-expert-v2-feature-flag.ts";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -209,7 +208,7 @@ export async function validatePhase2AHandoff(input: {
 
   const totals = estimateSelectionTotals(inventory.scenes, new Set(selectedSceneIds));
   const phase2Budget = estimatePhase2ASceneReviewBudget(selectedSceneIds.length);
-  if (phase2Budget.totalReservationUsd > STUDIO_MILITARY_V2_SCENE_REVIEW_BUDGET_USD) {
+  if (phase2Budget.exceedsBudget) {
     return {
       ok: false,
       errorCode: "BUDGET_EXCEEDED",

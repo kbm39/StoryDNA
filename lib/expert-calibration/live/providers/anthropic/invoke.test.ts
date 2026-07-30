@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { MILITARY_EXPERT_OUTPUT_SCHEMA_VERSION } from "@/experts/military-expert/output-schema.ts";
 import { buildMilitaryExpertGenerationRequest } from "@/experts/military-expert/generation-contract.ts";
 import { ANTHROPIC_SDK_DEFAULT_API_VERSION } from "./metadata.ts";
+import { ANTHROPIC_OPUS_48_MODEL_ID } from "../../model-lifecycle.ts";
 import {
   createAnthropicProviderInvokerFromClient,
   type AnthropicMessagesCreateClient,
@@ -129,4 +130,26 @@ describe("Anthropic provider invoke metadata", () => {
 
     assert.equal(createCalls, 1);
   });
+  it("20 omits temperature for opus 4.8 requests", async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    const invoker = createAnthropicProviderInvokerFromClient(
+      createMockClient(async (body: unknown) => {
+        capturedBody = body as Record<string, unknown>;
+        return {
+          content: [{ type: "text", text: '{"findings":[]}' }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 20 },
+          model: ANTHROPIC_OPUS_48_MODEL_ID,
+        };
+      }),
+      MOCK_SDK_VERSION,
+    );
+    const input = { ...buildInvokeInput(), modelId: ANTHROPIC_OPUS_48_MODEL_ID };
+    const result = await invoker(input);
+
+    assert.equal(result.ok, true);
+    assert.ok(capturedBody);
+    assert.equal("temperature" in capturedBody!, false);
+  });
+
 });

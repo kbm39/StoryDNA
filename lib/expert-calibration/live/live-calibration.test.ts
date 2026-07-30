@@ -271,10 +271,14 @@ describe("Expert Calibration Live PR 3B-1", () => {
       assert.throws(() => resolveProviderSpec("openai", "gpt-4"), LiveCalibrationError);
     });
     it("36 rejects unknown model", () => {
-      assert.throws(() => resolveProviderSpec("anthropic", "claude-opus-4"), LiveCalibrationError);
+      assert.throws(() => resolveProviderSpec("anthropic", "claude-opus-3"), LiveCalibrationError);
     });
-    it("37 only one allowed spec", () => {
-      assert.equal(listAllowedProviderSpecs().length, 1);
+    it("37 allows haiku and opus specs", () => {
+      assert.equal(listAllowedProviderSpecs().length, 2);
+    });
+    it("38 resolves opus alias", () => {
+      const spec = resolveProviderSpec("anthropic", "opus-4-8-v1");
+      assert.equal(spec.modelId, "claude-opus-4-8");
     });
   });
 

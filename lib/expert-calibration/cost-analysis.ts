@@ -13,14 +13,20 @@ export const CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE =
 export const CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE =
   "calibration_anthropic_haiku_4_5_v1" as const;
 
+/** Active Opus 4.8 pricing — $15/M input, $75/M output. */
+export const CALIBRATION_ANTHROPIC_OPUS_48_V1_PRICING_PROFILE =
+  "calibration_anthropic_opus_4_8_v1" as const;
+
 const PRICING: Record<string, { inputPer1k: number; outputPer1k: number }> = {
   [CALIBRATION_SYNTHETIC_PRICING_PROFILE]: { inputPer1k: 0, outputPer1k: 0 },
   [CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE]: { inputPer1k: 0.00025, outputPer1k: 0.00125 },
   [CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE]: { inputPer1k: 0.001, outputPer1k: 0.005 },
+  [CALIBRATION_ANTHROPIC_OPUS_48_V1_PRICING_PROFILE]: { inputPer1k: 0.015, outputPer1k: 0.075 },
 };
 
 const LIVE_ELIGIBLE_PRICING_PROFILES = new Set<string>([
   CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE,
+  CALIBRATION_ANTHROPIC_OPUS_48_V1_PRICING_PROFILE,
 ]);
 
 export function isHistoricalPricingProfile(pricingProfileId: string): boolean {

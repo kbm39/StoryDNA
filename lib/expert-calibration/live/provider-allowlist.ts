@@ -8,6 +8,8 @@ import {
   ANTHROPIC_HAIKU_45_MODEL_ID,
   ANTHROPIC_HAIKU_MODEL_ALIAS,
   ANTHROPIC_HAIKU_MODEL_ID,
+  ANTHROPIC_OPUS_48_ALIAS,
+  ANTHROPIC_OPUS_48_MODEL_ID,
   getModelLifecycleRecord,
   resolveModelIdFromAliasOrId,
   validateModelLifecycleForLivePlan,
@@ -15,6 +17,7 @@ import {
 import {
   CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE,
   CALIBRATION_ANTHROPIC_HAIKU_V1_PRICING_PROFILE,
+  CALIBRATION_ANTHROPIC_OPUS_48_V1_PRICING_PROFILE,
 } from "../cost-analysis.ts";
 
 export {
@@ -24,6 +27,8 @@ export {
   ANTHROPIC_HAIKU_45_MODEL_ID,
   ANTHROPIC_HAIKU_MODEL_ALIAS,
   ANTHROPIC_HAIKU_MODEL_ID,
+  ANTHROPIC_OPUS_48_ALIAS,
+  ANTHROPIC_OPUS_48_MODEL_ID,
 };
 
 /** @deprecated Historical replay only — not eligible for new live plans. */
@@ -31,14 +36,27 @@ export const ANTHROPIC_HAIKU_PRICING_PROFILE = CALIBRATION_ANTHROPIC_HAIKU_V1_PR
 
 export const ANTHROPIC_HAIKU_45_PRICING_PROFILE = CALIBRATION_ANTHROPIC_HAIKU_45_V1_PRICING_PROFILE;
 
-const ACTIVE_SPEC: LiveCalibrationProviderSpec = Object.freeze({
+const HAIKU_ACTIVE_SPEC: LiveCalibrationProviderSpec = Object.freeze({
   provider: "anthropic",
   modelId: ANTHROPIC_HAIKU_45_MODEL_ID,
   modelAlias: ANTHROPIC_HAIKU_45_ALIAS,
   pricingProfileId: ANTHROPIC_HAIKU_45_PRICING_PROFILE,
 });
 
-const ALLOWED_ACTIVE_SPECS: readonly LiveCalibrationProviderSpec[] = Object.freeze([ACTIVE_SPEC]);
+const OPUS_ACTIVE_SPEC: LiveCalibrationProviderSpec = Object.freeze({
+  provider: "anthropic",
+  modelId: ANTHROPIC_OPUS_48_MODEL_ID,
+  modelAlias: ANTHROPIC_OPUS_48_ALIAS,
+  pricingProfileId: CALIBRATION_ANTHROPIC_OPUS_48_V1_PRICING_PROFILE,
+});
+
+/** @deprecated Use HAIKU_ACTIVE_SPEC */
+export const ACTIVE_SPEC = HAIKU_ACTIVE_SPEC;
+
+const ALLOWED_ACTIVE_SPECS: readonly LiveCalibrationProviderSpec[] = Object.freeze([
+  HAIKU_ACTIVE_SPEC,
+  OPUS_ACTIVE_SPEC,
+]);
 
 function rejectRetiredOrAmbiguousModel(model: string): void {
   if (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { studioExpertRecruitmentHref } from "@/lib/author-intent/entry-gate.ts";
 import { listStudioLibraryBooks } from "@/lib/studio/library.ts";
 
 function formatDate(iso: string | null): string {
@@ -70,7 +71,7 @@ export default async function StudioLibraryPage() {
                         Open Book
                       </Link>
                       <Link
-                        href={`/studio/books/${book.id}/experts`}
+                        href={studioExpertRecruitmentHref(book.id)}
                         className="text-accent hover:underline"
                       >
                         Run Expert

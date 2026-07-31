@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { studioExpertRecruitmentHref } from "@/lib/author-intent/entry-gate.ts";
 import { getStudioBookWorkspace } from "@/lib/studio/book-workspace.ts";
 import { StudioNav } from "../../components/StudioShell.tsx";
 
@@ -64,7 +65,7 @@ export default async function StudioBookWorkspacePage({
             Upload New Revision
           </Link>
           <Link
-            href={`/studio/books/${bookId}/experts`}
+            href={studioExpertRecruitmentHref(bookId)}
             className="rounded-lg border border-black/10 px-4 py-2 text-sm hover:border-accent dark:border-white/10"
           >
             Editorial Team

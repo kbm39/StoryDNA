@@ -1,4 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import {
+  isAuthorIntentEntryGateActive,
+  shouldRedirectExpertDeskToAuthorIntent,
+} from "@/lib/author-intent/entry-gate.ts";
+import { getActiveAuthorIntent } from "@/lib/author-intent/service.ts";
 import { getExpertCatalogEntry, type ExpertCatalogKey } from "@/lib/expert-catalog.ts";
 import { getStudioBookWorkspace } from "@/lib/studio/book-workspace.ts";
 import { listStudioExpertDeskEntries } from "@/lib/studio/expert-desk.ts";
@@ -60,6 +65,25 @@ export default async function StudioExpertDeskPage({
   const { bookId } = await params;
   const workspace = await getStudioBookWorkspace(bookId);
   if (!workspace) notFound();
+
+  const gateActive = isAuthorIntentEntryGateActive();
+  const activeIntent =
+    gateActive && workspace.activeVersionId
+      ? await getActiveAuthorIntent({
+          manuscriptId: bookId,
+          manuscriptVersionId: workspace.activeVersionId,
+        })
+      : null;
+
+  if (
+    shouldRedirectExpertDeskToAuthorIntent({
+      gateActive,
+      manuscriptVersionId: workspace.activeVersionId,
+      hasActiveIntent: activeIntent !== null,
+    })
+  ) {
+    redirect(`/studio/books/${bookId}/intent`);
+  }
 
   const [context] = await Promise.all([
     getStudioExpertDeskContext(bookId),

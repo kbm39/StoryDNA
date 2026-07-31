@@ -293,13 +293,24 @@
     {
       "capability_id": "cap.author_intent",
       "name": "Author Intent",
-      "first_implementation": "constitutional",
+      "first_implementation": "eic_phase_1a",
       "current_classification": "platform_wide",
       "experts_using": [],
       "experts_evaluated_excluded": [],
-      "constitutional_review_status": "pending_retrospective",
+      "constitutional_review_status": "implemented",
       "certification_status": "planned",
-      "source_documentation": "docs/governance/STORYDNA_EDITORIAL_CONSTITUTION_V1.0.md"
+      "source_documentation": "docs/governance/implementation/EIC_PHASE_1A_AUTHOR_INTENT_PRD.md"
+    },
+    {
+      "capability_id": "cap.eic_plan_gate",
+      "name": "EIC editorial plan gate",
+      "first_implementation": "eic_phase_1a",
+      "current_classification": "editor_in_chief_owned",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "implemented",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/EIC_PHASE_1A_AUTHOR_INTENT_PRD.md"
     },
     {
       "capability_id": "cap.certification_benchmark",

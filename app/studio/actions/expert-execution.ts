@@ -31,6 +31,9 @@ import {
 } from "@/lib/studio/expert-classification.ts";
 import { validateMilitaryExpertLaunchAckToken } from "@/lib/studio/military-expert-local-policy.ts";
 import { startMilitaryExpertStudioWorkflow } from "@/lib/editorial-workflow/start-military-expert-studio-workflow.ts";
+import { isEicPlanGateActive } from "@/lib/eic/feature-flag.ts";
+import { gateBlocksLaunch } from "@/lib/eic/gate.ts";
+import { evaluatePlanGateForLaunch } from "@/lib/eic/service.ts";
 import type { StudioLaunchScope } from "@/lib/studio/types.ts";
 
 function revalidateStudioExpertRoutes(manuscriptId: string) {
@@ -91,6 +94,24 @@ export async function launchStudioExpertReview(input: {
   militaryLaunchAckToken?: string;
 }): Promise<{ ok: boolean; workflowId?: string; existing?: boolean; error?: string }> {
   return guarded(input.manuscriptId, async () => {
+    if (isEicPlanGateActive()) {
+      const gateCtx = await getManuscriptReviewContext(input.manuscriptId);
+      if (!gateCtx?.manuscriptVersionId) {
+        return { ok: false, error: "No active manuscript version for EIC plan gate." };
+      }
+      const gateResult = await evaluatePlanGateForLaunch({
+        manuscriptId: input.manuscriptId,
+        manuscriptVersionId: gateCtx.manuscriptVersionId,
+        expertKeyToLaunch: input.expertKey,
+      });
+      if (gateBlocksLaunch(gateResult)) {
+        return {
+          ok: false,
+          error: gateResult.allowed ? "EIC plan gate blocked launch." : gateResult.message,
+        };
+      }
+    }
+
     if (input.expertKey === "military_expert") {
       if (
         !isMilitaryExpertLaunchableInStudio({

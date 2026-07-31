@@ -1,0 +1,75 @@
+import type { CrossExpertAuditReport } from "./types.ts";
+
+export function renderCrossExpertAuditMarkdown(report: CrossExpertAuditReport): string {
+  const lines: string[] = [];
+  lines.push("# Cross-Expert Adjudication Audit");
+  lines.push("");
+  lines.push(`Generated: ${report.generatedAt}`);
+  lines.push(`Audit version: ${report.auditVersion}`);
+  lines.push(`Read-only: ${report.readOnly}`);
+  lines.push("");
+  lines.push("## 1. Review metadata");
+  lines.push(JSON.stringify(report.sections.reviewMetadata, null, 2));
+  lines.push("");
+  lines.push("## 2. Expert-overlap matrix");
+  lines.push(JSON.stringify(report.sections.expertOverlapMatrix, null, 2));
+  lines.push("");
+  lines.push("## 3. Direct contradiction matrix");
+  lines.push(JSON.stringify(report.sections.directContradictionMatrix, null, 2));
+  lines.push("");
+  lines.push("## 4. Per-finding manuscript verification");
+  lines.push(JSON.stringify(report.sections.perFindingManuscriptVerification, null, 2));
+  lines.push("");
+  lines.push("## 5. Contrary-evidence scorecard");
+  lines.push(JSON.stringify(report.sections.contraryEvidenceScorecard, null, 2));
+  lines.push("");
+  lines.push("## 6. Domain-assignment scorecard");
+  lines.push(JSON.stringify(report.sections.domainAssignmentScorecard, null, 2));
+  lines.push("");
+  lines.push("## 7. Duplicate-finding list");
+  lines.push(JSON.stringify(report.sections.duplicateFindingList, null, 2));
+  lines.push("");
+  lines.push("## 8. False-positive list");
+  lines.push(JSON.stringify(report.sections.falsePositiveList, null, 2));
+  lines.push("");
+  lines.push("## 9. Missed-issue list");
+  lines.push(JSON.stringify(report.sections.missedIssueList, null, 2));
+  lines.push("");
+  lines.push("## 10. Consolidated authoritative revision recommendations");
+  lines.push(JSON.stringify(report.sections.consolidatedRevisionRecommendations, null, 2));
+  lines.push("");
+  lines.push("## 11. Literary Agent quality grade");
+  lines.push(JSON.stringify(report.sections.literaryAgentQualityGrade, null, 2));
+  lines.push("");
+  lines.push("## 12. Military Expert quality grade");
+  lines.push(JSON.stringify(report.sections.militaryExpertQualityGrade, null, 2));
+  lines.push("");
+  lines.push("## 13. Combined team quality grade");
+  lines.push(JSON.stringify(report.sections.combinedTeamQualityGrade, null, 2));
+  lines.push("");
+  lines.push("## 14. Certification recommendation");
+  lines.push(report.sections.certificationRecommendation);
+  lines.push("");
+  lines.push("## Mandatory cases");
+  lines.push("### A. Pamela foreshadowing");
+  lines.push(JSON.stringify(report.mandatoryCases.pamelaForeshadowing, null, 2));
+  lines.push("### B. Field transfusion");
+  lines.push(JSON.stringify(report.mandatoryCases.fieldTransfusion, null, 2));
+  lines.push("### C. Contrary-evidence quality");
+  lines.push(JSON.stringify(report.mandatoryCases.contraryEvidenceQuality, null, 2));
+  lines.push("### D. Domain assignment");
+  lines.push(JSON.stringify(report.mandatoryCases.domainAssignment, null, 2));
+  lines.push("### E. Tactical-coverage gaps");
+  lines.push(JSON.stringify(report.mandatoryCases.tacticalCoverageGaps, null, 2));
+  lines.push("");
+  lines.push("## Adjudications");
+  lines.push(JSON.stringify(report.adjudications, null, 2));
+  lines.push("");
+  lines.push("## Summary");
+  lines.push(JSON.stringify(report.summary, null, 2));
+  return lines.join("\n");
+}
+
+export function renderCrossExpertAuditJson(report: CrossExpertAuditReport): string {
+  return JSON.stringify(report, null, 2);
+}

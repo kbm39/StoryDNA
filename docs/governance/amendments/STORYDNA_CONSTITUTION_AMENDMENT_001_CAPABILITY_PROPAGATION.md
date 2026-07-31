@@ -9,8 +9,8 @@ rationale: Constitutional amendment document establishing governance process; do
 
 **Amendment ID:** `STORYDNA_CONSTITUTION_AMENDMENT_001`  
 **Constitutional version:** 1.1.0 amendment (supplements v1.0)  
-**Status:** PROPOSED FOR RATIFICATION  
-**Proposed date:** 2026-07-31  
+**Status:** RATIFIED  
+**Effective date:** 2026-07-31  
 **Supplements:** [StoryDNA Editorial Constitution v1.0](../STORYDNA_EDITORIAL_CONSTITUTION_V1.0.md)
 
 ## Constitution Compliance
@@ -134,18 +134,27 @@ See [classification definitions](../../../lib/governance/capability-propagation/
 
 This amendment **supplements** the ratified Constitution v1.0. It does not replace or rewrite v1.0.
 
-When ratified, future capability work must satisfy:
+Future capability work must satisfy:
 
 - Constitution v1.0 principles; and
 - Amendment 001 propagation review requirements.
 
+Effective governance is **v1.0 + Amendment 001 (ratified 2026-07-31)**.
+
 ---
 
-## Ratification (pending)
+## Ratification
 
 | Field | Value |
 |-------|-------|
-| **Amendment** | 001 — Capability Propagation Principle |
-| **Status** | PROPOSED FOR RATIFICATION |
-| **Ratified by** | *(pending founder ratification)* |
-| **Ratification date** | *(pending)* |
+| **Title** | Capability Propagation Principle |
+| **Amendment** | 001 |
+| **Constitutional Version** | 1.1.0 amendment supplementing Constitution v1.0 |
+| **Status** | RATIFIED |
+| **Ratified by** | Kevin Martin, Founder |
+| **Ratification Date** | 2026-07-31 |
+| **Effective Date** | 2026-07-31 |
+| **Authority** | This amendment supplements and carries the same governing authority as the ratified StoryDNA Editorial Constitution Version 1.0. |
+| **Core Rule** | No new capability may be implemented for a single expert until StoryDNA has explicitly evaluated whether the capability belongs to that expert alone, an expert family, the Editorial Board, the Editor-in-Chief, or the platform as a whole. |
+| **Retrospective Rule** | Existing capabilities must also be reviewed to determine whether they should be propagated to current or future experts. |
+| **Supersedes** | No prior constitutional amendment |

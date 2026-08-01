@@ -54,6 +54,26 @@ rationale: Prioritized propagation backlog; items require separate implementatio
 
 ---
 
+## Amendment 002 — Progressive Editorial Understanding (PROPOSED)
+
+**Authority:** Amendment 002 (PROPOSED FOR RATIFICATION)  
+**Status:** Planning only — **blocked until Amendment 002 ratified**
+
+| ID | Capability | Recommended classification | Notes |
+|----|------------|---------------------------|-------|
+| B-014 | Progressive Editorial Understanding | `platform_wide` | Constitutional quality bar for all author dialogue |
+| B-015 | Understanding-confidence model | `platform_wide` | Seven dimensions; five levels; no fake precision |
+| B-016 | Conversational advancement quality gate | `platform_wide` | INSUFFICIENT_EDITORIAL_ADVANCEMENT enforcement |
+| B-017 | Grounded synthesis | `platform_wide` | Level 3 synthesis with grounding validator |
+| B-018 | EIC understanding summary | `editor_in_chief_owned` | Pre-independent-read confirmation composition |
+| B-019 | Editorial understanding confirmation | `platform_wide` | Versioned author confirmation gate |
+| B-020 | Adaptive clarification | `platform_wide` | Material-clarification rules; max one per stage |
+| B-021 | Encouraging-but-honest standard | `editorial_board_shared` | Voice standard for EIC and expert interviews |
+
+**Implementation spec:** [PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md](../implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md)
+
+---
+
 ## P1 — Needed before another expert launches
 
 | ID | Capability | Recommended classification | Notes |

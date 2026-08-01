@@ -1,8 +1,8 @@
 {
   "registry_version": "storydna_capability_registry@v1",
   "constitution_version": "1.0",
-  "amendment_version": "1.1.0",
-  "updated_at": "2026-07-31T00:00:00Z",
+  "amendment_version": "1.2.0",
+  "updated_at": "2026-08-01T00:00:00Z",
   "capabilities": [
     {
       "capability_id": "cap.manuscript_evidence",
@@ -399,6 +399,94 @@
       "constitutional_review_status": "pending_retrospective",
       "certification_status": "experimental",
       "source_documentation": "lib/studio/military-expert-export.ts"
+    },
+    {
+      "capability_id": "cap.progressive_editorial_understanding",
+      "name": "Progressive Editorial Understanding",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/amendments/STORYDNA_CONSTITUTION_AMENDMENT_002_PROGRESSIVE_EDITORIAL_UNDERSTANDING.md"
+    },
+    {
+      "capability_id": "cap.understanding_confidence_model",
+      "name": "Understanding-confidence model",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md"
+    },
+    {
+      "capability_id": "cap.conversational_advancement_quality_gate",
+      "name": "Conversational advancement quality gate",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md"
+    },
+    {
+      "capability_id": "cap.grounded_synthesis",
+      "name": "Grounded synthesis",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md"
+    },
+    {
+      "capability_id": "cap.eic_understanding_summary",
+      "name": "EIC understanding summary",
+      "first_implementation": "amendment_002",
+      "current_classification": "editor_in_chief_owned",
+      "experts_using": [],
+      "experts_evaluated_excluded": ["literary_agent", "military_expert", "developmental_editor"],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/amendments/STORYDNA_CONSTITUTION_AMENDMENT_002_PROGRESSIVE_EDITORIAL_UNDERSTANDING.md"
+    },
+    {
+      "capability_id": "cap.editorial_understanding_confirmation",
+      "name": "Editorial understanding confirmation",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/capabilities/AMENDMENT_002_CAPABILITY_PROPAGATION_REVIEW.md"
+    },
+    {
+      "capability_id": "cap.adaptive_clarification",
+      "name": "Adaptive clarification",
+      "first_implementation": "amendment_002",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/capabilities/AMENDMENT_002_CAPABILITY_PROPAGATION_REVIEW.md"
+    },
+    {
+      "capability_id": "cap.encouraging_honest_conversational_standard",
+      "name": "Encouraging-but-honest conversational standard",
+      "first_implementation": "amendment_002",
+      "current_classification": "editorial_board_shared",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "proposed_amendment_002",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/capabilities/AMENDMENT_002_CAPABILITY_PROPAGATION_REVIEW.md"
     }
   ]
 }

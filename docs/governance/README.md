@@ -25,8 +25,9 @@ This directory holds the highest-level architectural authority for StoryDNA edit
 |----------|---------|--------|
 | [StoryDNA Editorial Constitution v1.0](./STORYDNA_EDITORIAL_CONSTITUTION_V1.0.md) | 1.0 | **RATIFIED** (2026-07-31) |
 | [Amendment 001 — Capability Propagation Principle](./amendments/STORYDNA_CONSTITUTION_AMENDMENT_001_CAPABILITY_PROPAGATION.md) | 1.1.0 amendment | **RATIFIED** (effective 2026-07-31) |
+| [Amendment 002 — Progressive Editorial Understanding](./amendments/STORYDNA_CONSTITUTION_AMENDMENT_002_PROGRESSIVE_EDITORIAL_UNDERSTANDING.md) | 1.2.0 amendment | **PROPOSED FOR RATIFICATION** (2026-08-01) |
 
-**Version relationship:** Constitution v1.0 remains the ratified base document. Amendment 001 **supplements** v1.0 and does not replace it. Effective governance is **v1.0 + Amendment 001**.
+**Version relationship:** Constitution v1.0 remains the ratified base document. Amendment 001 **supplements** v1.0 and does not replace it. Amendment 002 **supplements** v1.0 + Amendment 001 and is not yet ratified. Effective governance is **v1.0 + Amendment 001**; after ratification, **v1.0 + Amendment 001 + Amendment 002**.
 
 **Permanent tag (Constitution v1.0 only):** `storydna-editorial-constitution-v1.0` → ratification commit `c24851c518e2d06e8288c3ecc4e67157b512895e`
 
@@ -48,6 +49,16 @@ Amendment 001 is **mandatory** for all future capability proposals. Before any n
 - a dedicated implementation task;
 - focused tests;
 - certification impact review.
+
+## Proposed constitutional requirement — Amendment 002
+
+Amendment 002 (PROPOSED) establishes the **Progressive Editorial Understanding Principle**: every StoryDNA author interaction must leave the editorial relationship with meaningfully deeper, evidence-grounded understanding. Merely collecting, repeating, or lightly paraphrasing an answer is not sufficient.
+
+- Amendment document: [STORYDNA_CONSTITUTION_AMENDMENT_002_PROGRESSIVE_EDITORIAL_UNDERSTANDING.md](./amendments/STORYDNA_CONSTITUTION_AMENDMENT_002_PROGRESSIVE_EDITORIAL_UNDERSTANDING.md)
+- Implementation spec: [PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md](./implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md)
+- Capability review: [AMENDMENT_002_CAPABILITY_PROPAGATION_REVIEW.md](./capabilities/AMENDMENT_002_CAPABILITY_PROPAGATION_REVIEW.md)
+
+**Runtime implementation is blocked until founder ratification.**
 
 ## Approved governance mechanism
 

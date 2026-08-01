@@ -8,7 +8,7 @@
 ```json
 {
   "applicable_sections": ["§0", "§1", "§6", "§8", "§10", "§12", "§13", "§14", "Amendment 001", "Amendment 002"],
-  "compliance_explanation": "EP-1 foundation, EP-2 synthesis, and EP-3 confirmation gate implement EIC-owned editorial profile contract, deterministic candidate creation, and structured activation without enabling experts, granting manuscript access, or substituting author intent for manuscript evidence.",
+  "compliance_explanation": "EP-1 foundation, EP-2 synthesis, EP-3 confirmation gate, and EP-5 author-facing read model implement EIC-owned editorial profile contract, deterministic candidate creation, structured activation, and safe author presentation without enabling experts, granting manuscript access, or substituting author intent for manuscript evidence.",
   "amendment_required": "No",
   "backward_compatibility_impact": "Additive lib modules; flags default off.",
   "certification_impact": "No commercial enablement. Profile synthesis and activation remain EIC orchestration only."
@@ -19,13 +19,13 @@
 
 ```json
 {
-  "new_capability_introduced": "Editorial Profile EIC confirmation and activation gate (EP-3)",
-  "existing_capability_modified": "cap.editorial_profile — candidate synthesis (EP-2) now wired to activation gate",
+  "new_capability_introduced": "Editorial Profile author-facing read model (EP-5)",
+  "existing_capability_modified": "cap.editorial_profile — active profile now transforms to validated author-facing presentation model",
   "classification": "editor_in_chief_owned",
   "existing_experts_evaluated": ["literary_agent", "military_expert", "developmental_editor", "editor_in_chief"],
   "future_experts_affected": ["line_editor", "character_expert", "continuity_expert", "timeline_expert"],
   "editor_in_chief_impact": "Primary owner. EIC confirms and activates profile as authoritative version; no specialist access at activation.",
-  "platform_impact": "lib/editorial-profile/confirm-and-activate.ts",
+  "platform_impact": "lib/editorial-profile/author-facing-read-model.ts",
   "certification_impact": "No commercial enablement change.",
   "propagation_decision": "move_to_editor_in_chief",
   "review_artifact_path": "docs/governance/implementation/EDITORIAL_PROFILE_RUNTIME_IMPLEMENTATION.md"
@@ -56,11 +56,11 @@
 | All 10 profile sections mapped from read observations | Expert context injection (EP-6) |
 | Non-active terminal statuses only | Profile activation |
 
-### EP-3 (this slice — confirmation and activation gate)
+### EP-3 (confirmation and activation gate)
 
 | Delivered | Deferred |
 |-----------|----------|
-| `confirmAndActivateEditorialProfile()` orchestration | Author-facing confirmation UI (EP-5) |
+| `confirmAndActivateEditorialProfile()` orchestration | Author-facing Studio UI (EP-5 UI) |
 | `submitEditorialProfileForEicConfirmation()` draft → awaiting | Persistence + migration |
 | Structured `EditorialProfileEicConfirmationRecord` | Roadmap Stage 1 wiring (EP-4) |
 | Activation-readiness via existing `validateForActivation` | Expert context injection (EP-6) |
@@ -68,6 +68,21 @@
 | Safe supersession for same manuscript version | |
 | Version-history preservation via `linkSupersededProfile` | |
 | Author-control boundaries (activation ≠ consent) | |
+
+### EP-5 (this slice — author-facing read model)
+
+| Delivered | Deferred |
+|-----------|----------|
+| `AuthorFacingEditorialProfileReadModel` typed presentation contract | Full Studio rendering UI |
+| `createAuthorFacingEditorialProfileReadModel()` transformation | Author dispute UI |
+| Positive-first 10-section presentation order | Manuscript-sharing consent workflow |
+| `validateAuthorFacingEditorialProfileReadModel()` presentation validator | Database persistence |
+| Internal vs author-facing field classification | Roadmap Stage 1 wiring (EP-4) |
+| Confidence / uncertainty / conflict author-facing representation | Expert context injection (EP-6) |
+| Specialist recommendation boundaries (no activation, no consent) | |
+| Roadmap preparation boundaries (not generated, no NBA) | |
+| Author-control and capability-status statements | |
+| Derived from active profile — no migration | |
 
 ## Orchestration entry points
 
@@ -97,6 +112,45 @@ Resolves to `awaiting_eic_confirmation`, `incomplete_evidence`, or `failed` — 
 6. On success: transition to `active`, set `activated_at`, supersede prior active for same version
 7. On failure: preserve violations; return `awaiting_eic_confirmation`, `failed`, or terminal status
 8. Never grant specialist access, generate roadmap, or imply author consent
+
+### EP-5 — Author-facing read model
+
+**File:** `lib/editorial-profile/author-facing-read-model.ts`  
+**Function:** `createAuthorFacingEditorialProfileReadModel(input)`
+
+**Transformation flow:**
+
+1. Gate on `STUDIO_EDITORIAL_PROFILE_ENABLED`
+2. Require active authoritative profile (`active` or `updated`)
+3. Validate manuscript / version identity and provenance
+4. Deterministically transform profile sections to author-facing presentation model
+5. Apply positive-first section order (10 sections)
+6. Validate presentation model (separate from authoritative profile validator)
+7. Return frozen read model — never mutate source profile
+8. Never execute specialists, grant sharing consent, generate roadmap, or add grade
+
+**Required presentation order:**
+
+1. Editorial Understanding
+2. What Is Working
+3. Protected Assets
+4. Improvement Opportunities
+5. Editorial Risks
+6. Manuscript Characteristics
+7. Recommended Specialist Support
+8. Roadmap Preparation
+9. Confidence and Uncertainty
+10. What Happens Next
+
+**Confidence representation:** `high` → "High confidence", `medium` → "Moderate confidence", `low` → "Limited confidence", no evidence → "Insufficient evidence". Raw decimals not exposed.
+
+**Conflict visibility:** Conflicting evidence polarity preserved in risk/identity sections and surfaced in `confidence_and_uncertainty.unresolved_conflicts`.
+
+**Internal field exclusion:** Raw schema keys, expert keys, provider metadata, lifecycle `status`, trigger events, and validation diagnostics excluded. Domain keys transformed to publishing-house language via `DOMAIN_KEY_AUTHOR_LABELS`.
+
+**Specialist recommendation boundaries:** Each recommendation includes `specialist_not_activated: true` and `manuscript_sharing_not_authorized: true`. Professional framing copy; no expert keys.
+
+**Roadmap preparation boundaries:** `roadmap_generated: false`, `no_final_next_best_action: true`, explicit "not yet generated" copy.
 
 ## EIC confirmation record
 
@@ -182,11 +236,11 @@ No manuscript text in error messages or confirmation summaries.
 
 ## Model calls
 
-None. EP-3 uses deterministic evaluation from structured candidate evidence.
+None. EP-3 and EP-5 use deterministic evaluation from structured profile evidence.
 
 ## Persistence
 
-No migration in EP-3. Confirmation and activation are runtime-only (in-memory). Persistence deferred to a future slice.
+No migration in EP-3 or EP-5. Confirmation, activation, and author-facing read model are runtime-derived from the active authoritative profile. Persistence deferred to a future slice.
 
 ## Module map
 
@@ -200,6 +254,10 @@ No migration in EP-3. Confirmation and activation are runtime-only (in-memory). 
 | `lib/editorial-profile/feature-flag.ts` | `STUDIO_EDITORIAL_PROFILE_ENABLED` gate |
 | `lib/editorial-profile/candidate-from-independent-read.ts` | EP-2 synthesis orchestration |
 | `lib/editorial-profile/confirm-and-activate.ts` | EP-3 confirmation and activation gate |
+| `lib/editorial-profile/author-facing-contract.ts` | EP-5 section order, confidence labels, field classification |
+| `lib/editorial-profile/author-facing-types.ts` | EP-5 presentation model types |
+| `lib/editorial-profile/author-facing-read-model.ts` | EP-5 transformation entry point |
+| `lib/editorial-profile/author-facing-validation.ts` | EP-5 presentation validator |
 | `lib/eic-independent-read/contract.ts` | Independent read contract version + statuses |
 | `lib/eic-independent-read/types.ts` | `EicIndependentReadV1` input artifact |
 
@@ -215,20 +273,38 @@ node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test li
 # EP-3 confirmation and activation (41 tests)
 node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/editorial-profile/confirm-and-activate.test.ts
 
-# All editorial profile tests
+# EP-5 author-facing read model (45 tests)
+node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/editorial-profile/author-facing-read-model.test.ts
+
+# All editorial profile tests (142 tests)
 node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/editorial-profile/*.test.ts
 ```
 
 ## Deferred
 
-- Author-facing EIC confirmation screen (EP-5)
-- Database persistence for confirmation records
+- Author-facing Studio rendering UI
+- Author dispute UI + revision flow
+- Database persistence for confirmation records and read models
 - Roadmap Stage 1 wiring (EP-4)
 - Expert context injection (EP-6)
+- Manuscript-sharing consent workflow
 - Provider-assisted confirmation synthesis
 
 ## Governance traceability
 
 - Framework: [STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md](./STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md)
-- PRD: [STORYDNA_EDITORIAL_PROFILE_PRD.md](./STORYDNA_EDITORIAL_PROFILE_PRD.md) — FR-07, §19, §28, §29
+- PRD: [STORYDNA_EDITORIAL_PROFILE_PRD.md](./STORYDNA_EDITORIAL_PROFILE_PRD.md) — FR-07, FR-17, §23, §25, §28, §29
 - Registry: `cap.editorial_profile` in [CAPABILITY_REGISTRY.json](../capabilities/CAPABILITY_REGISTRY.json)
+
+## EP-5 requirement trace
+
+| Requirement | Implementation |
+|-------------|----------------|
+| FR-17 Author UI framing/evidence labels | `AUTHOR_FACING_EVIDENCE_BASIS_LABELS`, section titles, opening copy |
+| PRD §23 positive-first order | `AUTHOR_FACING_SECTION_ORDER` (10 sections) |
+| PRD §23 no grade / no expert keys | Presentation validator rejects grade-first, expert keys, implied consent |
+| PRD §25 explainability | Evidence references, confidence labels, alignment notes, uncertainty explanations |
+| PRD §26 prohibited behaviors | No specialist execution, no roadmap, no grade, no consent creation |
+| NFR-01 deterministic | `transformActiveProfileToAuthorFacingReadModel` — no provider calls |
+| NFR-08 backward compatible | Feature flag off returns disabled result; no profile mutation |
+| Field classification | `AUTHOR_FACING_FIELD_CLASSIFICATION` in `author-facing-contract.ts` |

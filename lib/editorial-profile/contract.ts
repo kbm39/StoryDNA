@@ -327,3 +327,33 @@ export const EDITORIAL_PROFILE_AUTHOR_CONTROL = {
   profile_is_not_manuscript_access_grant: true,
   specialist_manuscript_access_at_activation: 0,
 } as const;
+
+/**
+ * Activation boundaries — authoritative profile only; no implied author consent.
+ * @see docs/governance/implementation/STORYDNA_EDITORIAL_PROFILE_PRD.md §19
+ */
+export const EDITORIAL_PROFILE_ACTIVATION_BOUNDARIES = {
+  activation_is_authoritative_profile_only: true,
+  activation_grants_specialist_manuscript_access: false,
+  activation_implies_author_consent_to_specialists: false,
+  activation_implies_manuscript_sharing_consent: false,
+  activation_implies_recommendation_acceptance: false,
+  activation_implies_manuscript_change_approval: false,
+  activation_implies_grade_approval: false,
+  activation_implies_roadmap_approval: false,
+  activation_implies_authority_surrender: false,
+} as const;
+
+/** Positive-first EIC confirmation evaluation order — PRD §24. */
+export const EIC_CONFIRMATION_SECTION_ORDER = [
+  "manuscript_understanding",
+  "what_is_working",
+  "protected_assets",
+  "improvement_opportunities",
+  "editorial_risks",
+  "specialist_requirements",
+  "roadmap_inputs",
+  "activation_readiness",
+] as const;
+
+export type EicConfirmationSectionKey = (typeof EIC_CONFIRMATION_SECTION_ORDER)[number];

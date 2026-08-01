@@ -309,3 +309,50 @@ export type ProfileVersionChainEntry = {
   readonly superseded_by_profile_id: string | null;
   readonly generated_at: string;
 };
+
+export type EditorialProfileSectionConfirmation = {
+  readonly section_key: string;
+  readonly display_order: number;
+  readonly confirmed: boolean;
+  readonly summary: string;
+  readonly findings: readonly string[];
+  readonly uncertainty_notes: readonly string[];
+  readonly conflicts: readonly string[];
+};
+
+export type EditorialProfileEicConfirmationRecord = {
+  readonly confirmation_id: string;
+  readonly contract_version: typeof EDITORIAL_PROFILE_CONTRACT_VERSION;
+  readonly profile_id: string;
+  readonly manuscript_id: string;
+  readonly manuscript_version_id: string;
+  readonly candidate_status_before: EditorialProfileStatus;
+  readonly resulting_status: EditorialProfileStatus;
+  readonly eic_identity: string;
+  readonly confirmed_at: string;
+  readonly readiness: {
+    readonly ready: boolean;
+    readonly activation_validation_passed: boolean;
+  };
+  readonly validation_findings: readonly EditorialProfileValidationError[];
+  readonly unresolved_uncertainty: readonly string[];
+  readonly unresolved_conflicts: readonly string[];
+  readonly section_confirmations: readonly EditorialProfileSectionConfirmation[];
+  readonly evidence_sufficiency: {
+    readonly sufficient: boolean;
+    readonly gaps: readonly string[];
+  };
+  readonly provenance_sufficiency: {
+    readonly sufficient: boolean;
+    readonly gaps: readonly string[];
+  };
+  readonly reason: string;
+  readonly failure: {
+    readonly code: string;
+    readonly message: string;
+  } | null;
+  readonly author_control: Readonly<Record<string, boolean>>;
+  readonly specialist_manuscript_access_granted: false;
+  readonly roadmap_generated: false;
+  readonly superseded_profile_id: string | null;
+};

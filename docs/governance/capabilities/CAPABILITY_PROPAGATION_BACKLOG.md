@@ -54,10 +54,10 @@ rationale: Prioritized propagation backlog; items require separate implementatio
 
 ---
 
-## Amendment 002 — Progressive Editorial Understanding (PROPOSED)
+## Amendment 002 — Progressive Editorial Understanding (RATIFIED)
 
-**Authority:** Amendment 002 (PROPOSED FOR RATIFICATION)  
-**Status:** Planning only — **blocked until Amendment 002 ratified**
+**Authority:** Amendment 002 (RATIFIED, effective 2026-08-01)  
+**Status:** Planning only — constitutional rule ratified; runtime enforcement pending per [implementation spec](../implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md). **Not auto-approved.**
 
 | ID | Capability | Recommended classification | Notes |
 |----|------------|---------------------------|-------|

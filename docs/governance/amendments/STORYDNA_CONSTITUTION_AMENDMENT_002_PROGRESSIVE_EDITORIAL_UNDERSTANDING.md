@@ -4,8 +4,8 @@
 
 **Amendment ID:** `STORYDNA_CONSTITUTION_AMENDMENT_002`  
 **Constitutional version:** 1.2.0 amendment (supplements v1.0 + Amendment 001)  
-**Status:** PROPOSED FOR RATIFICATION  
-**Proposed date:** 2026-08-01  
+**Status:** RATIFIED  
+**Effective date:** 2026-08-01  
 **Supplements:** [StoryDNA Editorial Constitution v1.0](../STORYDNA_EDITORIAL_CONSTITUTION_V1.0.md), [Amendment 001 — Capability Propagation Principle](./STORYDNA_CONSTITUTION_AMENDMENT_001_CAPABILITY_PROPAGATION.md)
 
 ## Constitution Compliance
@@ -15,7 +15,7 @@
   "applicable_sections": ["§0", "§1", "§10", "§12", "§13", "§14", "§15", "Amendment 001"],
   "compliance_explanation": "Amendment 002 strengthens §0 Editorial Mission and §1 Author Intent by requiring that conversational interactions build genuine editorial understanding rather than merely collecting or echoing author text. §10 EIC governance: understanding synthesis is orchestration, not expert judgment. §12 author rights: confirmation gate and versioned understanding preserve author control. §13 burden of proof: author answers remain framing, not manuscript evidence. §14 conformance tests extended. Amendment 001: all eight sub-capabilities require propagation review before runtime reuse.",
   "amendment_required": "Yes",
-  "backward_compatibility_impact": "Additive governance only until ratified runtime ships. Existing Conversational Intelligence Framework (CI) remains valid; Amendment 002 tightens response-quality requirements and adds advancement quality gate. Phase 1B-a brief intake and CI stage machine require conformance update after ratification.",
+  "backward_compatibility_impact": "Additive governance only until runtime ships. Existing Conversational Intelligence Framework (CI) remains valid; Amendment 002 tightens response-quality requirements and adds advancement quality gate. Phase 1B-a brief intake and CI stage machine require conformance update per implementation spec.",
   "certification_impact": "New calibration benchmark fixture set required before model-assisted conversational responses may ship. No expert commercially enabled by this amendment."
 }
 ```
@@ -313,7 +313,7 @@ Amendment 002 **supplements** the [Conversational Intelligence Framework](../imp
 | Editorial understanding contract | Adds `understanding_quality` metadata and versioned confirmation |
 | Author confirmation gate | Unchanged requirement; summary must reflect Level 3 synthesis |
 
-Effective conversational governance after ratification: **CI framework + Amendment 002 quality bar**.
+Effective conversational governance: **CI framework + Amendment 002 quality bar**.
 
 ---
 
@@ -325,9 +325,9 @@ Future conversational work must satisfy:
 
 - Constitution v1.0 principles;
 - Amendment 001 propagation review requirements; and
-- Amendment 002 progressive understanding requirements (once ratified).
+- Amendment 002 progressive understanding requirements.
 
-Effective governance after ratification: **v1.0 + Amendment 001 + Amendment 002**.
+Effective governance: **v1.0 + Amendment 001 + Amendment 002**.
 
 ---
 
@@ -350,14 +350,10 @@ Effective governance after ratification: **v1.0 + Amendment 001 + Amendment 002*
 | **Title** | Progressive Editorial Understanding Principle |
 | **Amendment** | 002 |
 | **Constitutional Version** | 1.2.0 amendment supplementing Constitution v1.0 + Amendment 001 |
-| **Status** | PROPOSED FOR RATIFICATION |
-| **Proposed by** | StoryDNA Governance (Kevin Track) |
-| **Proposed Date** | 2026-08-01 |
-| **Ratified by** | *(pending)* |
-| **Ratification Date** | *(pending)* |
-| **Effective Date** | *(pending ratification)* |
-| **Authority** | Upon ratification, supplements and carries governing authority equal to Constitution v1.0 and Amendment 001. |
+| **Status** | RATIFIED |
+| **Ratified by** | Kevin Martin, Founder |
+| **Ratification Date** | 2026-08-01 |
+| **Effective Date** | 2026-08-01 |
+| **Authority** | This amendment supplements and carries governing authority equal to the ratified StoryDNA Editorial Constitution Version 1.0 and ratified Amendment 001. |
 | **Core Rule** | Every interaction between StoryDNA and an author must leave the editorial relationship with a meaningfully deeper, evidence-grounded understanding of the author's goals, the intended reader experience, or the work under discussion. Merely collecting, repeating, or lightly paraphrasing an answer is not sufficient. |
 | **Supersedes** | No prior amendment text |
-
-**This amendment is NOT RATIFIED.** Implementation of runtime requirements is blocked until founder ratification.

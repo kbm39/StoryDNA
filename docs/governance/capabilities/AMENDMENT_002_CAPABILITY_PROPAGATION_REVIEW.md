@@ -322,5 +322,5 @@ Authors must be informed when provider-assisted synthesis is enabled (cost, conf
 |-------|-------|
 | Reviewed by | StoryDNA Governance |
 | Review date | 2026-08-01 |
-| Amendment status | PROPOSED FOR RATIFICATION |
-| Runtime implementation | Blocked until Amendment 002 ratified |
+| Amendment status | RATIFIED (effective 2026-08-01) |
+| Runtime implementation | Pending per [implementation spec](../implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md) — not auto-approved |

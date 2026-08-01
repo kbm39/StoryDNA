@@ -16,7 +16,7 @@ rationale: Consolidated propagation review for eight capabilities declared in Am
 {
   "applicable_sections": ["Amendment 001", "§14", "Amendment 002"],
   "compliance_explanation": "Per-capability propagation reviews for eight capabilities introduced by Amendment 002. Each evaluated against seven propagation questions. No auto-approval without documented reasoning.",
-  "amendment_required": "No — supports proposed Amendment 002",
+  "amendment_required": "No",
   "backward_compatibility_impact": "None until individual capabilities ship under feature flags.",
   "certification_impact": "Calibration benchmark required for provider-assisted synthesis; expert reuse requires per-expert certification review."
 }

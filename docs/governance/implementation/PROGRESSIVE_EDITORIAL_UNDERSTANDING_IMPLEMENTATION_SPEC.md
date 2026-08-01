@@ -20,7 +20,7 @@ rationale: Runtime implementation specification for Amendment 002 capabilities a
 {
   "applicable_sections": ["§0", "§1", "§10", "§12", "§13", "§14", "Amendment 001", "Amendment 002"],
   "compliance_explanation": "This spec defines runtime work to implement Amendment 002 progressive understanding requirements within the existing Conversational Intelligence platform layer. No expert findings produced. Author framing preserved. Confirmation gate enforced before independent read.",
-  "amendment_required": "No — implements proposed Amendment 002 pending ratification",
+  "amendment_required": "No",
   "backward_compatibility_impact": "Additive when feature flags off. Existing CI stage machine and brief intake remain. Quality gate tightens response emission when STUDIO_PROGRESSIVE_EDITORIAL_UNDERSTANDING enabled.",
   "certification_impact": "Calibration benchmark required before provider-assisted synthesis ships. Expert conversational reuse deferred pending per-expert Amendment 001 reviews."
 }

@@ -26,12 +26,42 @@ export type ConversationTurn = {
     | "question"
     | "acknowledgment"
     | "reflection"
+    | "type_b_synthesis"
     | "clarification"
     | "author_answer"
     | "confirmation_summary"
     | "author_confirmation";
   readonly content: string;
   readonly timestamp: string;
+  readonly gate_result?: string | null;
+  readonly quality_level?: number | null;
+};
+
+export type UnderstandingQualityDimensions = {
+  readonly story_understanding: string;
+  readonly author_goal_understanding: string;
+  readonly reader_experience_understanding: string;
+  readonly market_position_understanding: string;
+  readonly success_definition_understanding: string;
+  readonly unresolved_ambiguity: string;
+  readonly grounding_confidence: string;
+};
+
+export type UnderstandingQualityRecord = {
+  readonly dimensions: UnderstandingQualityDimensions;
+  readonly aggregate_level: string;
+  readonly last_response_quality_level: number | null;
+  readonly last_gate_result: string;
+  readonly last_repair_attempted?: boolean;
+  readonly provider_model?: string | null;
+};
+
+export type SynthesisArtifact = {
+  readonly stage_id: string;
+  readonly quality_level: 2 | 3;
+  readonly synthesis_text: string;
+  readonly grounded_in: readonly string[];
+  readonly created_at: string;
 };
 
 export type FieldConfidenceMap = {
@@ -55,13 +85,20 @@ export type StageTurnRecord = {
   readonly understanding_field: UnderstandingFieldKey | null;
   readonly author_answer: string | null;
   readonly skipped: boolean;
-  readonly eic_response_type: "acknowledgment" | "reflection" | "clarification" | null;
+  readonly eic_response_type:
+    | "acknowledgment"
+    | "reflection"
+    | "type_b_synthesis"
+    | "clarification"
+    | null;
   readonly eic_response_content: string | null;
   readonly clarification_question: string | null;
   readonly clarification_answer: string | null;
   readonly clarification_used: boolean;
   readonly decision_outcome: string | null;
   readonly confidence_score: number | null;
+  readonly gate_result?: string | null;
+  readonly quality_level?: number | null;
   readonly recorded_at: string;
 };
 
@@ -100,6 +137,8 @@ export type EditorialUnderstandingRecord = {
   readonly superseded_at: string | null;
   readonly provider_model: string | null;
   readonly provider_cost_usd: number | null;
+  readonly understanding_quality: UnderstandingQualityRecord | null;
+  readonly synthesis_artifacts: readonly SynthesisArtifact[];
 };
 
 export type EditorialUnderstandingDraftInput = {

@@ -6,6 +6,7 @@ export const CONVERSATIONAL_RESPONSE_CONTRACT_VERSION =
 export const CONVERSATIONAL_RESPONSE_TYPES = [
   "acknowledgment",
   "reflection",
+  "type_b_synthesis",
   "clarification",
 ] as const;
 

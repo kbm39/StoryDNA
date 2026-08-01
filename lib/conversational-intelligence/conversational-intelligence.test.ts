@@ -18,10 +18,11 @@ describe("storydna_conversational_response@v1 contract", () => {
     assert.equal(CONVERSATIONAL_RESPONSE_CONTRACT_VERSION, "storydna_conversational_response@v1");
   });
 
-  it("2. exactly three response types exist", () => {
+  it("2. four response types exist including type_b_synthesis", () => {
     assert.deepEqual([...CONVERSATIONAL_RESPONSE_TYPES], [
       "acknowledgment",
       "reflection",
+      "type_b_synthesis",
       "clarification",
     ]);
   });

@@ -57,6 +57,21 @@ export function validateConversationalResponse(
       }
       break;
     }
+    case "type_b_synthesis": {
+      if (content.length > MAX_REFLECTION_LENGTH) {
+        return { ok: false, error: "Synthesis exceeds maximum length." };
+      }
+      if (content.includes(QUESTION_MARK)) {
+        return { ok: false, error: "Synthesis must not contain questions." };
+      }
+      if (response.asks_question) {
+        return { ok: false, error: "Synthesis must not ask questions." };
+      }
+      if (!response.grounded_in_author_text) {
+        return { ok: false, error: "Synthesis must be grounded in author text." };
+      }
+      break;
+    }
     case "clarification": {
       if (content.length > MAX_CLARIFICATION_LENGTH) {
         return { ok: false, error: "Clarification exceeds maximum length." };

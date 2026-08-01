@@ -107,6 +107,8 @@ describe("storydna_editorial_understanding@v1 contract", () => {
       superseded_at: null,
       provider_model: "deterministic@v1",
       provider_cost_usd: 0,
+      understanding_quality: null,
+      synthesis_artifacts: [],
     });
     assert.match(summary, /Did I understand you correctly\?/);
     assert.match(summary, /Your story: A war story/);

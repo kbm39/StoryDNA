@@ -4,6 +4,17 @@ import { getSupabaseAdmin } from "@/lib/supabase/server.ts";
 import { evaluateFollowUpDecision } from "@/lib/conversational-intelligence/decision.ts";
 import { emitConversationalResponse } from "@/lib/conversational-intelligence/response-emitter.ts";
 import { CONVERSATIONAL_INTELLIGENCE_PROVIDER_MODEL } from "@/lib/conversational-intelligence/contract.ts";
+import { isStudioProgressiveEditorialUnderstandingEnabled } from "@/lib/conversational-intelligence/peu/feature-flag.ts";
+import {
+  buildConfirmationSummary,
+  buildSynthesisArtifact,
+  validateConfirmationGate,
+} from "@/lib/conversational-intelligence/peu/confirmation.ts";
+import { hashCandidate, logPeuEvent } from "@/lib/conversational-intelligence/peu/observability.ts";
+import {
+  boostDimensionOnGatePass,
+  computeUnderstandingQuality,
+} from "@/lib/conversational-intelligence/peu/understanding-confidence.ts";
 import { stageByPromptKey } from "@/lib/conversational-intelligence/stages.ts";
 import {
   EDITORIAL_UNDERSTANDING_CONTRACT_VERSION,
@@ -18,6 +29,8 @@ import type {
   OpenQuestion,
   ResolvedClarification,
   StageTurnRecord,
+  SynthesisArtifact,
+  UnderstandingQualityRecord,
 } from "./types.ts";
 import {
   buildUnderstandingConfidence,
@@ -56,6 +69,8 @@ type DbRow = {
   superseded_at: string | null;
   provider_model: string | null;
   provider_cost_usd: number | null;
+  understanding_quality: UnderstandingQualityRecord | null;
+  synthesis_artifacts: SynthesisArtifact[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -100,6 +115,8 @@ function mapRow(row: DbRow): EditorialUnderstandingRecord {
     superseded_at: row.superseded_at,
     provider_model: row.provider_model,
     provider_cost_usd: row.provider_cost_usd,
+    understanding_quality: row.understanding_quality ?? null,
+    synthesis_artifacts: Object.freeze(row.synthesis_artifacts ?? []),
   });
 }
 
@@ -203,6 +220,8 @@ export async function createEditorialUnderstandingDraft(
       conversation_history: [],
       provider_model: CONVERSATIONAL_INTELLIGENCE_PROVIDER_MODEL,
       provider_cost_usd: 0,
+      understanding_quality: {},
+      synthesis_artifacts: [],
     })
     .select("*")
     .single();
@@ -353,20 +372,55 @@ export async function processStageAnswer(input: {
   let awaitingClarification = false;
 
   if (decision.response_type) {
+    const priorAuthorTurns = record.stage_turns
+      .map((t) => t.author_answer)
+      .filter((a): a is string => Boolean(a?.trim()));
+
     const emitted = emitConversationalResponse({
       stage_id: stage.stage_id,
       response_type: decision.response_type,
       author_answer: input.authorAnswer,
+      prior_author_turns: priorAuthorTurns,
     });
     eicResponseContent = emitted.content;
-    eicResponseType = emitted.response_type;
+    eicResponseType = emitted.response_type as StageTurnRecord["eic_response_type"];
+
+    if (isStudioProgressiveEditorialUnderstandingEnabled()) {
+      baseTurn.gate_result = emitted.gate_result ?? "pass";
+      baseTurn.quality_level = emitted.quality_level ?? null;
+
+      if (emitted.gate_result === "pass") {
+        logPeuEvent("peu.gate_pass", {
+          stage_id: stage.stage_id,
+          quality_level: emitted.quality_level,
+        });
+      } else if (emitted.fail_reason) {
+        logPeuEvent("peu.gate_fail", {
+          stage_id: stage.stage_id,
+          fail_reason: emitted.fail_reason,
+          candidate_hash: hashCandidate(emitted.content),
+        });
+      }
+      if (emitted.fallback_used) {
+        logPeuEvent("peu.fallback_used", {
+          stage_id: stage.stage_id,
+          reason: emitted.fail_reason ?? "gate_repair",
+        });
+      }
+    }
 
     if (decision.outcome === "clarify_once") {
       baseTurn.clarification_used = true;
       baseTurn.clarification_question = emitted.content;
       awaitingClarification = true;
+      if (isStudioProgressiveEditorialUnderstandingEnabled()) {
+        logPeuEvent("peu.clarification_emitted", {
+          stage_id: stage.stage_id,
+          materiality_reason: stage.stage_id,
+        });
+      }
     } else {
-      baseTurn.eic_response_type = emitted.response_type;
+      baseTurn.eic_response_type = eicResponseType;
       baseTurn.eic_response_content = emitted.content;
     }
   }
@@ -394,9 +448,10 @@ export async function processStageAnswer(input: {
   }
 
   const conversationHistory = [...record.conversation_history];
+  const authorTurnId = crypto.randomUUID();
   if (!input.isClarificationFollowUp && !input.skipped) {
     conversationHistory.push({
-      turn_id: crypto.randomUUID(),
+      turn_id: authorTurnId,
       stage_id: stage.stage_id,
       role: "author",
       response_type: "author_answer",
@@ -406,7 +461,7 @@ export async function processStageAnswer(input: {
   }
   if (input.isClarificationFollowUp) {
     conversationHistory.push({
-      turn_id: crypto.randomUUID(),
+      turn_id: authorTurnId,
       stage_id: stage.stage_id,
       role: "author",
       response_type: "author_answer",
@@ -422,6 +477,8 @@ export async function processStageAnswer(input: {
       response_type: eicResponseType ?? "acknowledgment",
       content: eicResponseContent,
       timestamp: now,
+      gate_result: baseTurn.gate_result ?? null,
+      quality_level: baseTurn.quality_level ?? null,
     });
   }
 
@@ -430,6 +487,43 @@ export async function processStageAnswer(input: {
     : fieldValueFromPrompt(input.promptKey, input.skipped ? null : input.authorAnswer);
 
   const confidence = buildUnderstandingConfidence(stageTurns);
+
+  let understandingQuality: UnderstandingQualityRecord | null = record.understanding_quality;
+  let synthesisArtifacts: SynthesisArtifact[] = [...(record.synthesis_artifacts ?? [])];
+
+  if (isStudioProgressiveEditorialUnderstandingEnabled()) {
+    understandingQuality = computeUnderstandingQuality({
+      stageTurns,
+      lastGateResult: (baseTurn.gate_result as "pass") ?? "pass",
+      lastResponseQualityLevel: baseTurn.quality_level ?? null,
+    });
+
+    if (
+      eicResponseContent &&
+      (eicResponseType === "reflection" || eicResponseType === "type_b_synthesis") &&
+      baseTurn.gate_result === "pass"
+    ) {
+      const qualityLevel = (baseTurn.quality_level ?? 2) as 2 | 3;
+      if (qualityLevel >= 2) {
+        synthesisArtifacts = [
+          ...synthesisArtifacts,
+          buildSynthesisArtifact({
+            stageId: stage.stage_id,
+            qualityLevel: qualityLevel >= 3 ? 3 : 2,
+            synthesisText: eicResponseContent,
+            turnId: authorTurnId,
+          }),
+        ];
+      }
+
+      understandingQuality = boostDimensionOnGatePass(
+        understandingQuality,
+        eicResponseType === "type_b_synthesis" ? "editorial_synthesis" : "grounded_reflection",
+        stage.understanding_field,
+      ) as UnderstandingQualityRecord;
+    }
+  }
+
   const allStagesComplete = requiredStagesComplete(stageTurns) && !awaitingClarification;
   const nextStatus = allStagesComplete ? "awaiting_author_confirmation" : record.status;
 
@@ -440,8 +534,12 @@ export async function processStageAnswer(input: {
       ...fieldUpdates,
       stage_turns: stageTurns,
       confidence,
+      understanding_quality: understandingQuality,
+      synthesis_artifacts: synthesisArtifacts,
     };
-    understandingSummary = buildUnderstandingSummary(draftRecord);
+    understandingSummary = isStudioProgressiveEditorialUnderstandingEnabled()
+      ? buildConfirmationSummary(draftRecord)
+      : buildUnderstandingSummary(draftRecord);
     conversationHistory.push({
       turn_id: crypto.randomUUID(),
       stage_id: "eic_intake.confirmation",
@@ -462,6 +560,8 @@ export async function processStageAnswer(input: {
       conversation_history: conversationHistory,
       confidence,
       understanding_summary: understandingSummary,
+      understanding_quality: understandingQuality,
+      synthesis_artifacts: synthesisArtifacts,
       status: nextStatus,
       provider_model: CONVERSATIONAL_INTELLIGENCE_PROVIDER_MODEL,
     })
@@ -505,7 +605,10 @@ export async function confirmEditorialUnderstanding(input: {
 
   if (!row) return { ok: false, error: "Editorial understanding not found." };
   const record = mapRow(row as DbRow);
-  const eligibility = validateConfirmationEligibility(record);
+
+  const eligibility = isStudioProgressiveEditorialUnderstandingEnabled()
+    ? validateConfirmationGate(record)
+    : validateConfirmationEligibility(record);
   if (!eligibility.ok) return { ok: false, error: eligibility.error ?? "Cannot confirm." };
 
   const now = new Date().toISOString();
@@ -527,6 +630,22 @@ export async function confirmEditorialUnderstanding(input: {
     confirmed_by: input.createdBy,
   };
 
+  const understandingQuality = isStudioProgressiveEditorialUnderstandingEnabled()
+    ? computeUnderstandingQuality({
+        stageTurns: record.stage_turns,
+        lastGateResult: "pass",
+        lastResponseQualityLevel: record.understanding_quality?.last_response_quality_level ?? null,
+        confirmed: true,
+      })
+    : record.understanding_quality;
+
+  if (isStudioProgressiveEditorialUnderstandingEnabled()) {
+    logPeuEvent("peu.confirmation_completed", {
+      understanding_id: input.understandingId,
+      aggregate_level: understandingQuality?.aggregate_level,
+    });
+  }
+
   const { data: updated, error } = await supabase
     .from("editorial_understandings")
     .update({
@@ -534,6 +653,7 @@ export async function confirmEditorialUnderstanding(input: {
       confirmed_at: now,
       confirmed_by: input.createdBy,
       confidence,
+      understanding_quality: understandingQuality,
       conversation_history: conversationHistory,
     })
     .eq("id", input.understandingId)

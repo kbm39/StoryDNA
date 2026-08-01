@@ -11,6 +11,11 @@ export type ConversationalResponse = {
   readonly stage_id: string;
   readonly grounded_in_author_text: boolean;
   readonly asks_question: boolean;
+  readonly quality_level?: 1 | 2 | 3 | 4;
+  readonly gate_result?: "pass" | string;
+  readonly fail_reason?: string | null;
+  readonly fallback_used?: boolean;
+  readonly repair_attempted?: boolean;
 };
 
 export type FollowUpDecisionInput = {

@@ -456,11 +456,26 @@ export function ConversationalIntelligenceClient({
   }
 
   if (stage === "eic_response") {
+    const understandingLabel =
+      summaryRecord?.understanding_quality?.aggregate_level ??
+      understanding?.understanding_quality?.aggregate_level;
+    const phrase =
+      understandingLabel === "author_confirmed"
+        ? "Editorial Understanding is ready for your confirmation."
+        : understandingLabel && understandingLabel !== "insufficient"
+          ? "Editorial Understanding is taking shape."
+          : null;
+
     return (
       <div className="mx-auto max-w-xl space-y-6">
         <p className="text-xs font-medium uppercase tracking-widest text-black/45 dark:text-white/45">
           {progressLabel}
         </p>
+        {phrase && (
+          <p className="text-xs text-black/40 dark:text-white/40" aria-live="polite">
+            {phrase}
+          </p>
+        )}
         <EicMessage>
           <p>{eicResponse}</p>
         </EicMessage>
@@ -506,6 +521,12 @@ export function ConversationalIntelligenceClient({
           <p className="mt-1 text-sm text-black/55 dark:text-white/55">
             {versionLabel ? `Version ${versionLabel}` : "Current version"}
           </p>
+          {record?.understanding_quality?.aggregate_level &&
+            record.understanding_quality.aggregate_level !== "insufficient" && (
+              <p className="mt-2 text-xs text-black/40 dark:text-white/40">
+                Editorial Understanding is ready for your confirmation.
+              </p>
+            )}
         </div>
         <EicMessage>
           <SummarySections

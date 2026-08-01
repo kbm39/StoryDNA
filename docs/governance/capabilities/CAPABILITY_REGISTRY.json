@@ -346,6 +346,17 @@
       "source_documentation": "docs/governance/implementation/STORYDNA_EDITORIAL_ROADMAP_FRAMEWORK.md"
     },
     {
+      "capability_id": "cap.eic_initial_roadmap_creation",
+      "name": "EIC initial editorial roadmap creation",
+      "first_implementation": "eic_initial_roadmap_creation_framework",
+      "current_classification": "editor_in_chief_owned",
+      "experts_using": [],
+      "experts_evaluated_excluded": ["literary_agent", "military_expert", "developmental_editor"],
+      "constitutional_review_status": "implemented",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/EIC_INITIAL_EDITORIAL_ROADMAP_CREATION_FRAMEWORK.md"
+    },
+    {
       "capability_id": "cap.certification_benchmark",
       "name": "Certification benchmark",
       "first_implementation": "expert_calibration",

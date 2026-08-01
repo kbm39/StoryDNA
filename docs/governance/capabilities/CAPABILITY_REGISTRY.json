@@ -313,6 +313,17 @@
       "source_documentation": "docs/governance/implementation/EIC_PHASE_1A_AUTHOR_INTENT_PRD.md"
     },
     {
+      "capability_id": "cap.author_manuscript_brief",
+      "name": "Author manuscript brief intake",
+      "first_implementation": "eic_phase_1b_a",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "implemented",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/EIC_PHASE_1B_A_WELCOME_ELEVATOR_PITCH_ACKNOWLEDGMENT_PRD.md"
+    },
+    {
       "capability_id": "cap.certification_benchmark",
       "name": "Certification benchmark",
       "first_implementation": "expert_calibration",

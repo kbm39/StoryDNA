@@ -1,5 +1,7 @@
 import type { ResponseQualityLevel } from "../peu/types.ts";
 
+export const MINIMAL_ACKNOWLEDGMENT = "Thank you. I've recorded that.";
+
 function extractKeyPhrases(answer: string): string[] {
   const phrases: string[] = [];
   const trimmed = answer.trim();
@@ -48,9 +50,18 @@ export function buildGroundedReflection(stageId: string, authorAnswer: string): 
     return `For you, success at this stage means ${answer.charAt(0).toLowerCase()}${answer.slice(1).replace(/\.$/, "")}.`;
   }
 
+  if (/protagonist/i.test(answer)) {
+    return "Your description places the protagonist at the center of the story, and during the independent read I should assess whether the manuscript consistently delivers that emphasis.";
+  }
+
+  if (answer.length < 20) {
+    return MINIMAL_ACKNOWLEDGMENT;
+  }
+
   const phrases = extractKeyPhrases(answer);
   const core = phrases[0] ?? answer.slice(0, 80);
-  return `You want ${core.charAt(0).toLowerCase()}${core.slice(1).replace(/\.$/, "")} — that's a clear editorial priority.`;
+  const normalizedCore = core.charAt(0).toLowerCase() + core.slice(1).replace(/\.$/, "");
+  return `Your description emphasizes ${normalizedCore}, and during the independent read I should assess how consistently the manuscript supports that emphasis.`;
 }
 
 export function buildEditorialSynthesis(stageId: string, authorAnswer: string): string | null {
@@ -91,4 +102,3 @@ export function selectTemplateResponse(input: {
   };
 }
 
-export const MINIMAL_ACKNOWLEDGMENT = "Thank you. I've recorded that.";

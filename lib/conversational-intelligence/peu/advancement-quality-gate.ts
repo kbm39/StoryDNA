@@ -33,6 +33,33 @@ function isSubstantiveAnswer(authorTurn: string): boolean {
   return trimmed.length >= 20 || /[,;—–-]/.test(trimmed);
 }
 
+const GRAMMAR_INVALID_PATTERNS = [
+  /\byou want\b.+\bis\s+(?:the\s+)?protagonist\b/i,
+  /\byou want\s+[A-Za-z]+(?:\s+[A-Za-z]+)?\s+is\s+(?:the\s+)?(?:protagonist|antagonist|hero|villain)\b/i,
+] as const;
+
+const UNSUPPORTED_PRIORITY_PATTERNS = [
+  /that's a clear editorial priority/i,
+  /\bclear editorial priority\b/i,
+] as const;
+
+const INDEPENDENT_READ_ADVANCEMENT =
+  /\b(during the independent read|should assess|should inform|should guide|should become|independent read focus)\b/i;
+
+function detectGrammarInvalid(response: string): boolean {
+  return GRAMMAR_INVALID_PATTERNS.some((pattern) => pattern.test(response));
+}
+
+function detectUnsupportedEditorialPriority(response: string): GateFailReason | null {
+  if (!UNSUPPORTED_PRIORITY_PATTERNS.some((pattern) => pattern.test(response))) {
+    return null;
+  }
+  if (INDEPENDENT_READ_ADVANCEMENT.test(response)) {
+    return null;
+  }
+  return "UNSUPPORTED_EDITORIAL_PRIORITY";
+}
+
 export function evaluateAdvancementQualityGate(
   input: AdvancementGateInput,
 ): AdvancementGateResult {
@@ -60,6 +87,15 @@ export function evaluateAdvancementQualityGate(
 
   const therapy = detectTherapyLanguage(candidateResponse);
   if (therapy) return fail(therapy);
+
+  if (detectGrammarInvalid(candidateResponse)) {
+    return fail("RESPONSE_GRAMMAR_INVALID");
+  }
+
+  const unsupportedPriority = detectUnsupportedEditorialPriority(candidateResponse);
+  if (unsupportedPriority) {
+    return fail(unsupportedPriority);
+  }
 
   if (qualityLevel === "material_clarification") {
     if (countQuestions(candidateResponse) === 0) {

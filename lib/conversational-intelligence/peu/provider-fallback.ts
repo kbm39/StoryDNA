@@ -1,6 +1,5 @@
 import { CONVERSATIONAL_INTELLIGENCE_PROVIDER_MODEL } from "../contract.ts";
 import { evaluateAdvancementQualityGate } from "./advancement-quality-gate.ts";
-import { detectAntiEcho } from "./anti-echo.ts";
 import {
   MINIMAL_ACKNOWLEDGMENT,
   selectTemplateResponse,
@@ -136,11 +135,17 @@ export function emitWithQualityGate(input: {
       authorAnswer: input.authorAnswer,
       preferredLevel: "grounded_reflection",
     });
-    const antiEcho = detectAntiEcho(template.content, input.authorAnswer);
-    if (antiEcho.triggered) {
+    const fallbackGate = evaluateAdvancementQualityGate({
+      candidateResponse: template.content,
+      authorTurn: input.authorAnswer,
+      priorAuthorTurns: input.priorAuthorTurns,
+      stageId: input.stageId,
+      qualityLevel: template.qualityLevel,
+    });
+    if (fallbackGate.gate_result === "pass") {
       return {
-        content: MINIMAL_ACKNOWLEDGMENT,
-        qualityLevel: "acknowledgment",
+        content: template.content,
+        qualityLevel: template.qualityLevel,
         gateResult: "pass",
         failReason: null,
         fallbackUsed: true,
@@ -148,9 +153,10 @@ export function emitWithQualityGate(input: {
         providerModel,
       };
     }
+
     return {
-      content: template.content,
-      qualityLevel: template.qualityLevel,
+      content: MINIMAL_ACKNOWLEDGMENT,
+      qualityLevel: "acknowledgment",
       gateResult: "pass",
       failReason: null,
       fallbackUsed: true,

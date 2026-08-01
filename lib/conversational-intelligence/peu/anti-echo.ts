@@ -4,7 +4,6 @@ const EDITORIAL_TOKENS = [
   "respect without idealizing",
   "balance",
   "standard for independent read",
-  "editorial",
   "independent read",
   "success criteria",
   "dual success",
@@ -14,6 +13,14 @@ const EDITORIAL_TOKENS = [
   "should inform",
   "should guide",
   "should become",
+  "should assess",
+  "during the independent read",
+] as const;
+
+const SHALLOW_TEMPLATE_PATTERNS = [
+  /\byou want\b.+\bis\s+(?:the\s+)?protagonist\b/i,
+  /that's a clear editorial priority/i,
+  /clear editorial priority/i,
 ] as const;
 
 const ECHO_PATTERN = /^you described\b/i;
@@ -96,7 +103,20 @@ function isExplicitInsightEcho(response: string, authorTurn: string): boolean {
   return editorialInsight.test(authorTurn) && normalizedLevenshtein(response, authorTurn) >= 0.95;
 }
 
+function isShallowTemplateEcho(response: string): boolean {
+  return SHALLOW_TEMPLATE_PATTERNS.some((pattern) => pattern.test(response));
+}
+
 export function detectAntiEcho(response: string, authorTurn: string): AntiEchoResult {
+  if (isShallowTemplateEcho(response)) {
+    return {
+      triggered: true,
+      overlap_ratio: tokenOverlapRatio(response, authorTurn),
+      similarity: normalizedLevenshtein(response, authorTurn),
+      fail_reason: "INSUFFICIENT_EDITORIAL_ADVANCEMENT",
+    };
+  }
+
   if (isExplicitInsightEcho(response, authorTurn)) {
     return { triggered: false, overlap_ratio: 1, similarity: 1, fail_reason: null };
   }

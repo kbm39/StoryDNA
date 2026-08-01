@@ -133,12 +133,41 @@ describe("Amendment 002 progressive editorial understanding", () => {
       "UNNECESSARY_CLARIFICATION",
       "MULTIPLE_CLARIFICATIONS",
       "UNSUPPORTED_MARKET_CONCLUSION",
+      "UNSUPPORTED_EDITORIAL_PRIORITY",
       "FRAMING_EVIDENCE_BOUNDARY_VIOLATION",
       "RESPONSE_TOO_VERBOSE",
       "RESPONSE_NOT_GROUNDED",
+      "RESPONSE_GRAMMAR_INVALID",
     ]) {
       assert.ok((GATE_FAIL_REASONS as readonly string[]).includes(code));
     }
+  });
+
+  it("13. shallow protagonist echo is rejected at emission", () => {
+    const emitted = emitWithQualityGate({
+      stageId: "eic_intake.primary_vision",
+      authorAnswer: "john Nichols is the protagonist",
+      preferredLevel: "grounded_reflection",
+    });
+    assert.doesNotMatch(
+      emitted.content,
+      /you want john Nichols is the protagonist/i,
+    );
+    assert.doesNotMatch(emitted.content, /clear editorial priority/i);
+    assert.match(emitted.content, /independent read/i);
+    assert.match(emitted.content, /protagonist/i);
+    assert.equal(emitted.gateResult, "pass");
+  });
+
+  it("14. observed bad response fails Amendment 002 gate", () => {
+    const gate = evaluateAdvancementQualityGate({
+      candidateResponse:
+        "You want john Nichols is the protagonist — that's a clear editorial priority.",
+      authorTurn: "john Nichols is the protagonist",
+      stageId: "eic_intake.primary_vision",
+      qualityLevel: "grounded_reflection",
+    });
+    assert.notEqual(gate.gate_result, "pass");
   });
 
   it("11. author-facing phrases omit percentages", () => {

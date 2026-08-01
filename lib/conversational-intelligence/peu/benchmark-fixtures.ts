@@ -104,4 +104,13 @@ export const PEU_BENCHMARK_FIXTURES: readonly BenchmarkFixture[] = [
     stageId: "eic_intake.market_position",
     expected: "UNSUPPORTED_MARKET_CONCLUSION",
   },
+  {
+    id: 11,
+    name: "Shallow priority echo (observed bad response)",
+    authorInput: "john Nichols is the protagonist",
+    candidateResponse:
+      "You want john Nichols is the protagonist — that's a clear editorial priority.",
+    stageId: "eic_intake.primary_vision",
+    expected: "RESPONSE_GRAMMAR_INVALID",
+  },
 ] as const;

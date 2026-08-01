@@ -324,6 +324,17 @@
       "source_documentation": "docs/governance/implementation/EIC_PHASE_1B_A_WELCOME_ELEVATOR_PITCH_ACKNOWLEDGMENT_PRD.md"
     },
     {
+      "capability_id": "cap.conversational_intelligence",
+      "name": "Conversational Intelligence",
+      "first_implementation": "conversational_intelligence_framework",
+      "current_classification": "platform_wide",
+      "experts_using": [],
+      "experts_evaluated_excluded": [],
+      "constitutional_review_status": "implemented",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/STORYDNA_CONVERSATIONAL_INTELLIGENCE_FRAMEWORK.md"
+    },
+    {
       "capability_id": "cap.certification_benchmark",
       "name": "Certification benchmark",
       "first_implementation": "expert_calibration",

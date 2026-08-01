@@ -488,9 +488,9 @@ export function ConversationalIntelligenceClient({
     const record: EditorialUnderstandingRecord | null = summaryRecord ?? understanding;
     const display = {
       primary_vision: record?.primary_vision ?? form.elevator_pitch,
-      target_reader: record?.target_reader ?? form.market_position || "unsure",
-      desired_reader_experience: record?.desired_reader_experience ?? form.desired_reader_experience || null,
-      market_position: record?.market_position ?? form.market_position || "unsure",
+      target_reader: (record?.target_reader ?? form.market_position) || "unsure",
+      desired_reader_experience: (record?.desired_reader_experience ?? form.desired_reader_experience) || null,
+      market_position: (record?.market_position ?? form.market_position) || "unsure",
       creative_motivation: record?.creative_motivation ?? form.author_motivation,
       success_definition: record?.success_definition ?? form.success_definition,
     };

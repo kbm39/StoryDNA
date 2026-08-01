@@ -74,6 +74,22 @@ rationale: Prioritized propagation backlog; items require separate implementatio
 
 ---
 
+## Editorial Profile (design complete — EP-0)
+
+**Authority:** [STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md](../implementation/STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md)  
+**Status:** Planning only — framework design complete; runtime enforcement pending per EP-1+ phases. **Not auto-approved.**
+
+| ID | Capability | Recommended classification | Notes |
+|----|------------|---------------------------|-------|
+| B-022 | Editorial Profile | `editor_in_chief_owned` | Structured manuscript understanding after independent read |
+| B-023 | Profile evidence model | `platform_wide` | Shared locator/evidence vocabulary |
+| B-024 | Profile materiality model | `platform_wide` | Editorial significance scale |
+| B-025 | Specialist requirement levels | `editor_in_chief_owned` | Domain need assessment — not direct expert recommendation |
+
+**Framework:** [STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md](../implementation/STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md)
+
+---
+
 ## P1 — Needed before another expert launches
 
 | ID | Capability | Recommended classification | Notes |

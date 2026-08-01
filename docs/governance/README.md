@@ -60,6 +60,15 @@ Amendment 002 is **mandatory** for all future conversational features. It establ
 
 **Constitutional rule is ratified; runtime enforcement is pending.** Ratification does not authorize automatic implementation. The approved [implementation specification](./implementation/PROGRESSIVE_EDITORIAL_UNDERSTANDING_IMPLEMENTATION_SPEC.md) must be executed in dedicated implementation tasks. The [propagation backlog](./capabilities/CAPABILITY_PROPAGATION_BACKLOG.md) remains **unimplemented** and is not auto-approved.
 
+## Implementation frameworks (design)
+
+| Framework | Capability | Status |
+|-----------|------------|--------|
+| [Conversational Intelligence](./implementation/STORYDNA_CONVERSATIONAL_INTELLIGENCE_FRAMEWORK.md) | `cap.conversational_intelligence` | Design complete |
+| [Editorial Roadmap](./implementation/STORYDNA_EDITORIAL_ROADMAP_FRAMEWORK.md) | `cap.editorial_roadmap` | Design complete |
+| [EIC Initial Roadmap Creation](./implementation/EIC_INITIAL_EDITORIAL_ROADMAP_CREATION_FRAMEWORK.md) | `cap.eic_initial_roadmap_creation` | Design complete |
+| [Editorial Profile](./implementation/STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md) | `cap.editorial_profile` | Design complete (EP-0) |
+
 ## Approved governance mechanism
 
 | Mechanism | Path | Status |

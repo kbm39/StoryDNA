@@ -376,7 +376,7 @@
       "experts_evaluated_excluded": ["literary_agent", "military_expert", "developmental_editor"],
       "constitutional_review_status": "implemented",
       "certification_status": "planned",
-      "source_documentation": "docs/governance/implementation/STORYDNA_KNOWLEDGE_DOMAIN_ANALYSIS_FRAMEWORK.md"
+      "source_documentation": "docs/governance/implementation/STORYDNA_KNOWLEDGE_DOMAIN_ANALYSIS_FRAMEWORK.md, docs/governance/implementation/STORYDNA_KNOWLEDGE_DOMAIN_ANALYSIS_PRD.md"
     },
     {
       "capability_id": "cap.certification_benchmark",

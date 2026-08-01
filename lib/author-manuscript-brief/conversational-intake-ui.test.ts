@@ -22,10 +22,11 @@ describe("Phase 1B-a conversational intake UI", () => {
   );
 
   it("1. welcome screen uses EIC conversational copy", () => {
-    assert.match(
-      intakeClient,
-      /Before I read your manuscript, I&apos;d like to hear about it in your own words/,
-    );
+    assert.match(intakeClient, /Welcome to StoryDNA/);
+    assert.match(intakeClient, /Before I read a single page/);
+    assert.match(intakeClient, /Begin Conversation/);
+    assert.match(intakeClient, /Not Now/);
+    assert.match(intakeClient, /Your Editorial Journey/);
   });
 
   it("2. questions appear in PRD order", () => {
@@ -100,7 +101,7 @@ describe("Phase 1B-a conversational intake UI", () => {
   });
 
   it("12. tablet and desktop layout uses responsive max width", () => {
-    assert.match(intakeClient, /max-w-xl/);
+    assert.match(intakeClient, /max-w-3xl/);
     assert.match(intakeClient, /flex-wrap/);
   });
 });

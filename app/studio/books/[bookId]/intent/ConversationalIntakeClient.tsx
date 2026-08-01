@@ -91,15 +91,80 @@ function briefToForm(brief: ManuscriptBriefRecord | null): BriefFormState {
   };
 }
 
-function EicMessage({ children }: { children: React.ReactNode }) {
+function EicMessage({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <article
       aria-label="Editor-in-Chief"
-      className="rounded-xl border border-black/10 bg-black/[0.02] px-5 py-4 dark:border-white/10 dark:bg-white/[0.03]"
+      className={`rounded-2xl border border-black/[0.08] bg-black/[0.015] px-8 py-7 dark:border-white/[0.08] dark:bg-white/[0.02] ${className}`}
     >
-      <p className="mb-2 text-xs font-medium uppercase tracking-widest text-accent">Editor-in-Chief</p>
-      <div className="space-y-3 text-sm leading-relaxed">{children}</div>
+      <p className="mb-4 text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-accent">
+        Editor-in-Chief
+      </p>
+      <div className="space-y-5 text-[0.9375rem] leading-[1.75] text-black/80 dark:text-white/80">
+        {children}
+      </div>
     </article>
+  );
+}
+
+const EDITORIAL_JOURNEY_STEPS = [
+  "Conversation",
+  "Independent Read",
+  "Editorial Strategy",
+  "Editorial Team Recommendation",
+  "Your Approval",
+  "Expert Reviews Begin",
+] as const;
+
+function EditorialJourneyRoadmap() {
+  return (
+    <aside
+      aria-label="Your Editorial Journey"
+      className="rounded-2xl border border-black/[0.06] px-7 py-8 dark:border-white/[0.06]"
+    >
+      <h3 className="font-serif text-lg font-medium tracking-tight text-black/90 dark:text-white/90">
+        Your Editorial Journey
+      </h3>
+      <ol className="mt-8 space-y-0">
+        {EDITORIAL_JOURNEY_STEPS.map((step, index) => (
+          <li key={step} className="flex flex-col items-start">
+            <div className="flex items-baseline gap-3">
+              <span
+                aria-hidden="true"
+                className={`font-serif text-sm tabular-nums ${
+                  index === 0 ? "text-accent" : "text-black/35 dark:text-white/35"
+                }`}
+              >
+                {index + 1}.
+              </span>
+              <span
+                className={`text-sm leading-snug ${
+                  index === 0
+                    ? "font-medium text-black/85 dark:text-white/85"
+                    : "text-black/50 dark:text-white/50"
+                }`}
+              >
+                {step}
+              </span>
+            </div>
+            {index < EDITORIAL_JOURNEY_STEPS.length - 1 && (
+              <span
+                aria-hidden="true"
+                className="ml-[0.4rem] py-2 pl-3 text-xs leading-none text-black/20 dark:text-white/20"
+              >
+                ↓
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </aside>
   );
 }
 
@@ -169,39 +234,66 @@ export function ConversationalIntakeClient({
 
   if (stage === "welcome") {
     return (
-      <div className="mx-auto max-w-xl space-y-6">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Your Editor-in-Chief</h2>
-          <p className="mt-1 text-sm text-black/55 dark:text-white/55">
+      <div className="mx-auto max-w-3xl space-y-12 py-6">
+        <header className="space-y-2">
+          <p className="text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-black/40 dark:text-white/40">
+            StoryDNA Editorial
+          </p>
+          <h2 className="font-serif text-3xl font-medium tracking-tight text-black/90 dark:text-white/90">
+            Your Editor-in-Chief
+          </h2>
+          <p className="text-sm text-black/45 dark:text-white/45">
             {bookTitle}
             {versionLabel ? ` · ${versionLabel}` : ""}
           </p>
+        </header>
+
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)] lg:gap-14">
+          <EicMessage>
+            <p className="font-serif text-xl font-medium leading-snug text-black/90 dark:text-white/90">
+              Welcome to StoryDNA.
+            </p>
+            <p>
+              I&apos;ll be serving as your Editor-in-Chief throughout this manuscript.
+            </p>
+            <p>
+              Before I read a single page, I&apos;d like to hear about your story directly from
+              you.
+            </p>
+            <p>Every author begins with a vision.</p>
+            <p>My first responsibility is to understand yours.</p>
+            <p>
+              I&apos;ll keep your goals in mind while reading your manuscript, but I&apos;ll also
+              evaluate it independently.
+            </p>
+            <p>My job is not simply to confirm your expectations.</p>
+            <p>
+              It is to understand the story you&apos;re trying to tell and provide an honest
+              professional assessment of what is actually on the page.
+            </p>
+            <p>
+              Once I understand both your vision and your manuscript, I&apos;ll recommend the
+              editorial team I believe will best help you achieve your goals.
+            </p>
+            <p>No expert will receive your manuscript without your approval.</p>
+          </EicMessage>
+
+          <EditorialJourneyRoadmap />
         </div>
-        <EicMessage>
-          <p>Welcome. I&apos;m your Editor-in-Chief at StoryDNA.</p>
-          <p>
-            Before I read your manuscript, I&apos;d like to hear about it in your own words.
-          </p>
-          <p>
-            Tell me what you&apos;re trying to accomplish — not what you think an editor wants to
-            hear. I&apos;ll use your description to understand your goals, but I&apos;ll still read
-            the manuscript fresh and form my own professional view of what&apos;s on the page.
-          </p>
-          <p>When you&apos;re ready, we&apos;ll talk through your project together.</p>
-        </EicMessage>
-        <div className="flex flex-wrap gap-3">
+
+        <div className="flex flex-wrap items-center gap-4 pt-2">
           <button
             type="button"
             onClick={() => setStage("intake")}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+            className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium tracking-wide text-white"
           >
-            Continue
+            Begin Conversation
           </button>
           <Link
             href={`/studio/books/${bookId}`}
-            className="rounded-lg border border-black/10 px-4 py-2 text-sm dark:border-white/10"
+            className="px-2 py-2.5 text-sm text-black/50 underline-offset-4 hover:text-black/70 hover:underline dark:text-white/50 dark:hover:text-white/70"
           >
-            Return to Book Workspace
+            Not Now
           </Link>
         </div>
       </div>

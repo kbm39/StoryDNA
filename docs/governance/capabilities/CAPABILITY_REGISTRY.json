@@ -368,6 +368,17 @@
       "source_documentation": "docs/governance/implementation/STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md, docs/governance/implementation/STORYDNA_EDITORIAL_PROFILE_PRD.md"
     },
     {
+      "capability_id": "cap.knowledge_domain_analysis",
+      "name": "Knowledge Domain Analysis and Specialist Recommendation",
+      "first_implementation": "knowledge_domain_analysis_framework",
+      "current_classification": "editor_in_chief_owned",
+      "experts_using": [],
+      "experts_evaluated_excluded": ["literary_agent", "military_expert", "developmental_editor"],
+      "constitutional_review_status": "implemented",
+      "certification_status": "planned",
+      "source_documentation": "docs/governance/implementation/STORYDNA_KNOWLEDGE_DOMAIN_ANALYSIS_FRAMEWORK.md"
+    },
+    {
       "capability_id": "cap.certification_benchmark",
       "name": "Certification benchmark",
       "first_implementation": "expert_calibration",

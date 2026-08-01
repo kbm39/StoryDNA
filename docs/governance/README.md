@@ -68,6 +68,7 @@ Amendment 002 is **mandatory** for all future conversational features. It establ
 | [Editorial Roadmap](./implementation/STORYDNA_EDITORIAL_ROADMAP_FRAMEWORK.md) | `cap.editorial_roadmap` | Design complete |
 | [EIC Initial Roadmap Creation](./implementation/EIC_INITIAL_EDITORIAL_ROADMAP_CREATION_FRAMEWORK.md) | `cap.eic_initial_roadmap_creation` | Design complete |
 | [Editorial Profile](./implementation/STORYDNA_EDITORIAL_PROFILE_FRAMEWORK.md) | `cap.editorial_profile` | Design complete (EP-0); [PRD](./implementation/STORYDNA_EDITORIAL_PROFILE_PRD.md) |
+| [Knowledge Domain Analysis and Specialist Recommendation](./implementation/STORYDNA_KNOWLEDGE_DOMAIN_ANALYSIS_FRAMEWORK.md) | `cap.knowledge_domain_analysis` | Design complete (KDA-0) |
 
 ## Approved governance mechanism
 

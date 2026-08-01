@@ -69,20 +69,32 @@
 | Version-history preservation via `linkSupersededProfile` | |
 | Author-control boundaries (activation ≠ consent) | |
 
-### EP-5 (this slice — author-facing read model)
+### EP-5 (author-facing read model)
 
 | Delivered | Deferred |
 |-----------|----------|
-| `AuthorFacingEditorialProfileReadModel` typed presentation contract | Full Studio rendering UI |
-| `createAuthorFacingEditorialProfileReadModel()` transformation | Author dispute UI |
-| Positive-first 10-section presentation order | Manuscript-sharing consent workflow |
-| `validateAuthorFacingEditorialProfileReadModel()` presentation validator | Database persistence |
-| Internal vs author-facing field classification | Roadmap Stage 1 wiring (EP-4) |
-| Confidence / uncertainty / conflict author-facing representation | Expert context injection (EP-6) |
+| `AuthorFacingEditorialProfileReadModel` typed presentation contract | Author dispute UI |
+| `createAuthorFacingEditorialProfileReadModel()` transformation | Manuscript-sharing consent workflow |
+| Positive-first 10-section presentation order | Database persistence |
+| `validateAuthorFacingEditorialProfileReadModel()` presentation validator | Roadmap Stage 1 wiring (EP-4) |
+| Internal vs author-facing field classification | Expert context injection (EP-6) |
+| Confidence / uncertainty / conflict author-facing representation | |
 | Specialist recommendation boundaries (no activation, no consent) | |
 | Roadmap preparation boundaries (not generated, no NBA) | |
 | Author-control and capability-status statements | |
 | Derived from active profile — no migration | |
+
+### EP-6 (this slice — Studio read-only presentation)
+
+| Delivered | Deferred |
+|-----------|----------|
+| Studio route `/studio/books/[bookId]/editorial-profile` | Author dispute UI |
+| `loadEditorialProfilePresentation()` server loader boundary | Database persistence |
+| Read-only presentation components (10 sections, positive-first order) | Manuscript-sharing consent workflow |
+| Author-facing loading/failure states (10 states) | Roadmap Stage 1 wiring (EP-4) |
+| Dev fixture via `STUDIO_EDITORIAL_PROFILE_DEV_FIXTURE` | Expert context injection (EP-6) |
+| Nav placement between Author Intent and Expert Desk | Profile regeneration / mutation UI |
+| 55+ Studio presentation tests | |
 
 ## Orchestration entry points
 
@@ -151,6 +163,28 @@ Resolves to `awaiting_eic_confirmation`, `incomplete_evidence`, or `failed` — 
 **Specialist recommendation boundaries:** Each recommendation includes `specialist_not_activated: true` and `manuscript_sharing_not_authorized: true`. Professional framing copy; no expert keys.
 
 **Roadmap preparation boundaries:** `roadmap_generated: false`, `no_final_next_best_action: true`, explicit "not yet generated" copy.
+
+### EP-6 — Studio read-only presentation
+
+**Route:** `/studio/books/[bookId]/editorial-profile`  
+**Placement:** Dedicated Studio nav tab between Author Intent and Expert Desk — EIC layer, not buried in specialist reports.
+
+**Loader:** `lib/studio/editorial-profile-presentation.ts` → `loadEditorialProfilePresentation(input)`
+
+**Flow:**
+
+1. Gate on `STUDIO_EDITORIAL_PROFILE_ENABLED`
+2. Resolve active authoritative profile (dev fixture when `STUDIO_EDITORIAL_PROFILE_DEV_FIXTURE` set; otherwise null until persistence)
+3. Map non-active lifecycle to author-facing states
+4. `createAuthorFacingEditorialProfileReadModel()` on active/updated profile
+5. `toStudioEditorialProfilePresentation()` — safe client payload (no profile_id, provenance, lifecycle enums)
+6. Read-only React presentation — no mutations, no specialist launch, no roadmap controls
+
+**Presentation states:** loading (page shell), feature_disabled, no_active_profile, profile_being_prepared, incomplete_evidence, awaiting_eic_confirmation, blocked, generation_failed, read_model_validation_failed, active_profile_available.
+
+**Components:** `app/studio/books/[bookId]/editorial-profile/` — `EditorialProfileView`, `EditorialProfileHeader`, section components, `EditorialProfileStateView`.
+
+**Dev fixture:** `STUDIO_EDITORIAL_PROFILE_DEV_FIXTURE=active` (see `.env.example`). Uses `lib/editorial-profile/fixtures/active-profile-fixture.ts` — no DB writes.
 
 ## EIC confirmation record
 
@@ -258,7 +292,10 @@ No migration in EP-3 or EP-5. Confirmation, activation, and author-facing read m
 | `lib/editorial-profile/author-facing-types.ts` | EP-5 presentation model types |
 | `lib/editorial-profile/author-facing-read-model.ts` | EP-5 transformation entry point |
 | `lib/editorial-profile/author-facing-validation.ts` | EP-5 presentation validator |
-| `lib/eic-independent-read/contract.ts` | Independent read contract version + statuses |
+| `lib/editorial-profile/fixtures/active-profile-fixture.ts` | EP-6 dev active profile fixture |
+| `lib/studio/editorial-profile-presentation.ts` | EP-6 Studio loader boundary |
+| `lib/studio/editorial-profile-fixtures.ts` | EP-6 dev fixture resolver |
+| `app/studio/books/[bookId]/editorial-profile/` | EP-6 read-only UI components |
 | `lib/eic-independent-read/types.ts` | `EicIndependentReadV1` input artifact |
 
 ## Tests
@@ -276,19 +313,22 @@ node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test li
 # EP-5 author-facing read model (45 tests)
 node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/editorial-profile/author-facing-read-model.test.ts
 
+# EP-6 Studio presentation (55 tests)
+node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/studio/editorial-profile-presentation.test.ts
+
 # All editorial profile tests (142 tests)
 node --import ./scripts/test-path-alias.mjs --experimental-strip-types --test lib/editorial-profile/*.test.ts
 ```
 
 ## Deferred
 
-- Author-facing Studio rendering UI
 - Author dispute UI + revision flow
 - Database persistence for confirmation records and read models
 - Roadmap Stage 1 wiring (EP-4)
 - Expert context injection (EP-6)
 - Manuscript-sharing consent workflow
 - Provider-assisted confirmation synthesis
+- Profile regeneration / mutation UI
 
 ## Governance traceability
 

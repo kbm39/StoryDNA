@@ -9,6 +9,7 @@ export function StudioNav({ bookId }: { bookId?: string }) {
     ? [
         { href: `/studio/books/${bookId}`, label: "Book Workspace" },
         { href: `/studio/books/${bookId}/intent`, label: "Author Intent" },
+        { href: `/studio/books/${bookId}/editorial-profile`, label: "Editorial Profile" },
         { href: `/studio/books/${bookId}/experts`, label: "Expert Desk" },
         { href: `/studio/books/${bookId}/revisions`, label: "Revision Board" },
         { href: `/studio/books/${bookId}/exports`, label: "Exports" },

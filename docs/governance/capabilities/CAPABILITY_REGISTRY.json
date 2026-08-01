@@ -326,7 +326,7 @@
     {
       "capability_id": "cap.conversational_intelligence",
       "name": "Conversational Intelligence",
-      "first_implementation": "conversational_intelligence_framework",
+      "first_implementation": "eic_phase_1b_ab",
       "current_classification": "platform_wide",
       "experts_using": [],
       "experts_evaluated_excluded": [],

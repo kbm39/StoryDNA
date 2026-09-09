@@ -5,8 +5,15 @@ import {
   SEMANTIC_ASSESSOR_JSON_CONTRACT,
 } from "./semantic-schema.ts";
 import type { SemanticAssessor, SemanticAssessorInput, SemanticAssessmentResult } from "./types.ts";
+import type { ProviderCallHooks } from "@/lib/ai/provider-call-hooks";
+import type { ProviderTokenUsage } from "@/lib/editorial-generation/literary-agent-cost";
+import { usageFromAnthropicMessage } from "@/lib/editorial-generation/literary-agent-cost";
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+
+export interface SemanticAssessorCallHooks extends ProviderCallHooks {
+  onUsage?: (usage: ProviderTokenUsage & { model: string }) => void;
+}
 
 function formatSnippets(
   label: string,
@@ -46,7 +53,9 @@ ${input.version_diff_evidence.removals.slice(0, 4).map((r) => `- ${r.slice(0, 16
 }
 
 /** AI-backed semantic assessor using the Anthropic provider. Falls back to deterministic rules on failure. */
-export function createAiSemanticAssessor(): SemanticAssessor {
+export function createAiSemanticAssessor(
+  callHooks?: SemanticAssessorCallHooks,
+): SemanticAssessor {
   return {
     async assess(input: SemanticAssessorInput): Promise<SemanticAssessmentResult> {
       if (!process.env.ANTHROPIC_API_KEY) {
@@ -55,6 +64,7 @@ export function createAiSemanticAssessor(): SemanticAssessor {
 
       try {
         const client = new Anthropic();
+        await callHooks?.onBeforeProviderCall?.();
         const response = await client.messages.create({
           model: MODEL,
           max_tokens: 1024,
@@ -62,6 +72,9 @@ export function createAiSemanticAssessor(): SemanticAssessor {
             "You assess revision impact on prior editorial criticisms. Output ONLY valid JSON. Never assign manuscript letter grades or overall scores.",
           messages: [{ role: "user", content: buildAssessorPrompt(input) }],
         });
+
+        const usage = usageFromAnthropicMessage(response.usage);
+        callHooks?.onUsage?.({ ...usage, model: response.model || MODEL });
 
         const text = response.content
           .filter((b) => b.type === "text")
@@ -78,7 +91,8 @@ export function createAiSemanticAssessor(): SemanticAssessor {
         const parsed = parseSemanticAssessmentJson(JSON.parse(text.slice(jsonStart, jsonEnd + 1)));
         if (!parsed) return assessConcernDeterministic(input);
         return parsed;
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.name === "WorkflowCancelledError") throw e;
         return assessConcernDeterministic(input);
       }
     },
@@ -91,9 +105,11 @@ export function createDeterministicSemanticAssessor(): SemanticAssessor {
 }
 
 /** Production default unless overridden. */
-export function defaultSemanticAssessor(): SemanticAssessor {
+export function defaultSemanticAssessor(
+  callHooks?: SemanticAssessorCallHooks,
+): SemanticAssessor {
   if (process.env.CONTRARY_EVIDENCE_DETERMINISTIC === "1") {
     return createDeterministicSemanticAssessor();
   }
-  return createAiSemanticAssessor();
+  return createAiSemanticAssessor(callHooks);
 }

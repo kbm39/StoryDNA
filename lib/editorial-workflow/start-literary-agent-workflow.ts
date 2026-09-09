@@ -240,6 +240,9 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         errorCode: code,
         safeErrorMessage: safeErrorForCode(code, result.error),
         diagnosticsStorageKey: result.diagnosticsStorageKey ?? null,
+        resultSummary: result.costAccounting
+          ? { costAccounting: result.costAccounting }
+          : null,
       });
       return { ok: false };
     }
@@ -249,6 +252,9 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         workflowId,
         errorCode: "PIPELINE_FAILED",
         safeErrorMessage: safeErrorForCode("PIPELINE_FAILED", "Publish did not return a review id."),
+        resultSummary: result.costAccounting
+          ? { costAccounting: result.costAccounting }
+          : null,
       });
       return { ok: false };
     }
@@ -263,13 +269,17 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         candidateCount: result.candidateCount ?? 0,
         oldReviewId: result.oldReviewId ?? null,
         warnings: result.warnings ?? [],
+        costAccounting: result.costAccounting ?? null,
       },
       nextBestAction: nextBestActionForCompletedWorkflow("literary_agent_review"),
     });
     return { ok: true };
   } catch (e) {
     if (e instanceof WorkflowCancelledError) {
-      await markWorkflowCancelled(workflowId);
+      await markWorkflowCancelled(
+        workflowId,
+        e.costAccounting ? { resultSummary: { costAccounting: e.costAccounting } } : undefined,
+      );
       return { ok: true, cancelled: true };
     }
     const msg = e instanceof Error ? e.message : String(e);

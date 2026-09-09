@@ -35,6 +35,7 @@ export interface GateRunInput {
   current_version_id?: string | null;
   prior_content_hash?: string | null;
   current_content_hash?: string | null;
+  onBeforeSemanticAssess?: () => Promise<void>;
 }
 
 export interface GateRunResult {
@@ -77,6 +78,7 @@ export async function runContraryEvidenceGate(input: GateRunInput): Promise<Gate
       const sameVersion = assessSameVersionConcern(semanticInput);
       assessments.push(composeSameVersionAssessment(concern, search, sameVersion));
     } else {
+      await input.onBeforeSemanticAssess?.();
       const semantic = await Promise.resolve(assessor.assess(semanticInput));
       assessments.push(composeConcernAssessment(concern, search, semantic));
     }

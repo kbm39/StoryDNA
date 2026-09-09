@@ -121,6 +121,7 @@ export interface EditorialWorkflowHooks {
 }
 
 export class WorkflowCancelledError extends Error {
+  costAccounting?: unknown;
   constructor() {
     super("WORKFLOW_CANCELLED");
     this.name = "WorkflowCancelledError";

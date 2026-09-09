@@ -54,6 +54,7 @@ import {
   buildBrainstormPrompt,
   type ReviewResult,
   type ExtractedIssue,
+  type GenerationMeta,
   type SuggestionResult,
   type RecheckIssueInput,
   type RecheckParsed,
@@ -69,8 +70,9 @@ import {
   buildCommercialRubricGenerationPrompt,
   COMMERCIAL_RUBRIC_MAX_TOKENS,
 } from "@/lib/commercial-fiction-rubric";
-import type { GenerationMeta } from "@/lib/ai/shared";
 import type { ProseGradeMatch } from "@/lib/prose-grade-validation";
+import type { ProviderCallHooks } from "@/lib/ai/provider-call-hooks";
+import { usageFromAnthropicMessage } from "@/lib/editorial-generation/literary-agent-cost";
 import type { WordCountContradiction } from "@/lib/word-count-validation";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
@@ -165,6 +167,7 @@ export async function generateReview(
   text: string,
   intent: AuthorIntent | null,
   statistics?: ReviewStatistics | null,
+  callHooks?: ProviderCallHooks,
 ): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
@@ -180,6 +183,7 @@ export async function generateReview(
       storedWordCount: wordCountTotal,
     });
 
+  await callHooks?.onBeforeProviderCall?.();
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: def.maxTokens,
@@ -220,8 +224,9 @@ export function generateAgentReview(
   text: string,
   intent: AuthorIntent | null,
   statistics?: ReviewStatistics | null,
+  callHooks?: ProviderCallHooks,
 ): Promise<ReviewResult> {
-  return generateReview(LITERARY_AGENT, text, intent, statistics);
+  return generateReview(LITERARY_AGENT, text, intent, statistics, callHooks);
 }
 
 /** Literary Agent — Call B: structured rubric JSON only (separate from memo). */
@@ -236,6 +241,7 @@ export async function generateAgentRubric(args: {
     parseError: string;
     malformedRaw: string;
   };
+  onBeforeProviderCall?: () => Promise<void>;
 }): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
@@ -251,6 +257,7 @@ export async function generateAgentRubric(args: {
     repairContext: args.repairContext,
   });
 
+  await args.onBeforeProviderCall?.();
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: COMMERCIAL_RUBRIC_MAX_TOKENS,
@@ -343,6 +350,7 @@ export async function repairCommercialMemoValidation(args: {
   wordCountContradictions?: WordCountContradiction[];
   wordCountErrors?: string[];
   proseGradeConflict?: ProseGradeMatch;
+  onBeforeProviderCall?: () => Promise<void>;
 }): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
@@ -357,6 +365,7 @@ export async function repairCommercialMemoValidation(args: {
     manuscriptScore: args.manuscriptScore,
   });
 
+  await args.onBeforeProviderCall?.();
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: LITERARY_AGENT.maxTokens,
@@ -424,7 +433,13 @@ export async function generateRevisionCandidates(
   text: string,
   intent: AuthorIntent | null,
   statistics?: ReviewStatistics | null,
-): Promise<{ issues: ParsedIssue[]; model: string; warnings: string[] }> {
+  callHooks?: ProviderCallHooks,
+): Promise<{
+  issues: ParsedIssue[];
+  model: string;
+  warnings: string[];
+  generationMeta: GenerationMeta;
+}> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped } = clampManuscript(text, MAX_INPUT_CHARS);
@@ -438,6 +453,7 @@ export async function generateRevisionCandidates(
       storedWordCount: wordCountTotal,
     });
 
+  await callHooks?.onBeforeProviderCall?.();
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: 16000,
@@ -455,7 +471,12 @@ export async function generateRevisionCandidates(
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty response.");
   const { issues, warnings } = parseRevisionCandidates(content);
-  return { issues, model: response.model || MODEL, warnings };
+  return {
+    issues,
+    model: response.model || MODEL,
+    warnings,
+    generationMeta: generationMetaFromResponse(response, 16000),
+  };
 }
 
 /** Write a personalized query letter to an agent. */
@@ -807,12 +828,15 @@ function generationMetaFromResponse(
   maxTokens: number,
 ): GenerationMeta {
   const finishReason = response.stop_reason ?? null;
+  const usage = usageFromAnthropicMessage(response.usage);
   return {
     finishReason,
-    inputTokens: response.usage?.input_tokens ?? null,
-    outputTokens: response.usage?.output_tokens ?? null,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
     maxTokens,
     outputTruncated: finishReason === "max_tokens",
+    cachedTokens: usage.cachedTokens,
+    cacheCreationTokens: usage.cacheCreationTokens,
   };
 }
 

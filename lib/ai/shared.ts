@@ -24,6 +24,10 @@ export interface GenerationMeta {
   maxTokens: number;
   /** True when the provider stopped because the output token budget was exhausted. */
   outputTruncated: boolean;
+  /** Anthropic `cache_read_input_tokens` when the provider reports it. */
+  cachedTokens?: number | null;
+  /** Anthropic `cache_creation_input_tokens` when the provider reports it. */
+  cacheCreationTokens?: number | null;
 }
 
 export interface ReviewResult {

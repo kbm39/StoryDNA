@@ -229,6 +229,7 @@ export async function markWorkflowFailed(args: {
   errorCode: string;
   safeErrorMessage: string;
   diagnosticsStorageKey?: string | null;
+  resultSummary?: Record<string, unknown> | null;
 }): Promise<void> {
   const now = new Date().toISOString();
   await updateWorkflowRow(args.workflowId, {
@@ -236,6 +237,7 @@ export async function markWorkflowFailed(args: {
     error_code: args.errorCode,
     safe_error_message: args.safeErrorMessage,
     diagnostics_storage_key: args.diagnosticsStorageKey ?? null,
+    ...(args.resultSummary ? { result_summary: args.resultSummary } : {}),
     failed_at: now,
     heartbeat_at: now,
   });
@@ -262,7 +264,10 @@ export async function requestWorkflowCancellation(
   return row;
 }
 
-export async function markWorkflowCancelled(workflowId: string): Promise<void> {
+export async function markWorkflowCancelled(
+  workflowId: string,
+  extras?: { resultSummary?: Record<string, unknown> },
+): Promise<void> {
   const now = new Date().toISOString();
   await updateWorkflowRow(workflowId, {
     status: "cancelled",
@@ -270,6 +275,7 @@ export async function markWorkflowCancelled(workflowId: string): Promise<void> {
     heartbeat_at: now,
     safe_error_message: "This Publishing Workflow was cancelled before your results were prepared.",
     error_code: "WORKFLOW_CANCELLED",
+    ...(extras?.resultSummary ? { result_summary: extras.resultSummary } : {}),
   });
   await insertWorkflowEvent({ workflowId, eventType: "cancelled" });
 }

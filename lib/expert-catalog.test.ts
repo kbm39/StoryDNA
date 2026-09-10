@@ -31,11 +31,11 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RUNTIME_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
 const CONSTITUTION_HASH =
-  "8f8b56a9de6c7d68f96fd7913645905ee2afb8ce7d0c066faba2c28106fe94f5";
+  "3c6f5df3f7dbef286f2f36aab82c807b66615005acd3153227287f33b4ee6ac2";
 const REGISTRY_SEED_HASH =
-  "f6b79bc07d7ba9630fb532c67c31c4b80bac2886002696e25290d163e4b44671";
+  "beb0c2966feb87fd003dbf174b3ace22eb9a586ac92c8e1eddbcd19ffecaa64e";
 
 function read(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");

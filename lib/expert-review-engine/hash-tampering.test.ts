@@ -17,7 +17,7 @@ const PREVIOUS_RUNTIME_DEFINITION_HASH =
   "d24ed5215515233b4e2819c0ea527dd8d843b7f2e949587380ca63c38c4c2588";
 
 const EXPECTED_RUNTIME_DEFINITION_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
 
 describe("runtime definition hash tampering guards", () => {
   it("valid Literary Agent definition with correct definition_hash passes", () => {

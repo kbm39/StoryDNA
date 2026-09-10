@@ -51,9 +51,9 @@ Attempting a second version of the same expert fails at the **`expert_key` uniqu
 - **`constitution_definition_hash`**: SHA-256 of `ExpertDefinitionV1` produced by `reviewerDefinitionToExpertDefinition` adapter. Independent string in `ReviewRuntimeVersionSet`; changing constitution adapter output does not auto-update runtime hash.
 - **`workflow_definition_version`**: Stable identifier (e.g. `literary_agent_review@v1`), validated against `VERSION_IDENTIFIER_PATTERN`.
 - **Certified Literary Agent hashes (must remain unchanged):**
-  - Runtime: `f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b`
-  - Constitution adapter: `8f8b56a9de6c7d68f96fd7913645905ee2afb8ce7d0c066faba2c28106fe94f5`
-  - Registry seed: `f6b79bc07d7ba9630fb532c67c31c4b80bac2886002696e25290d163e4b44671`
+  - Runtime: `bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b`
+  - Constitution adapter: `3c6f5df3f7dbef286f2f36aab82c807b66615005acd3153227287f33b4ee6ac2`
+  - Registry seed: `beb0c2966feb87fd003dbf174b3ace22eb9a586ac92c8e1eddbcd19ffecaa64e`
 
 ### DB registry (`lib/expert-registry/`, migration `0024_expert_registry.sql`)
 
@@ -481,9 +481,9 @@ interface ExpertReviewExecutionAuditRecord {
 
 Before declaring multi-version registry **implemented** (future P2-12+):
 
-- [ ] Literary Agent runtime hash unchanged: `f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b`
-- [ ] Constitution adapter hash unchanged: `8f8b56a9de6c7d68f96fd7913645905ee2afb8ce7d0c066faba2c28106fe94f5`
-- [ ] Registry seed hash unchanged: `f6b79bc07d7ba9630fb532c67c31c4b80bac2886002696e25290d163e4b44671`
+- [ ] Literary Agent runtime hash unchanged: `bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b`
+- [ ] Constitution adapter hash unchanged: `3c6f5df3f7dbef286f2f36aab82c807b66615005acd3153227287f33b4ee6ac2`
+- [ ] Registry seed hash unchanged: `beb0c2966feb87fd003dbf174b3ace22eb9a586ac92c8e1eddbcd19ffecaa64e`
 - [ ] Two versions of same expert can register without `Duplicate expert_key` error
 - [ ] `getExpertRuntimeDefinition("literary_agent")` returns active version (backward compat)
 - [ ] `getExpertRuntimeByKeyAndVersion("literary_agent", "v1.0.0-certified")` returns certified entry

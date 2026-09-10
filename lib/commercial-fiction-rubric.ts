@@ -3,7 +3,10 @@
  * Letter grades are NEVER chosen by the model; application code derives them from totals.
  */
 
-import { STORYDNA_COUNT_METHOD } from "./word-count-reporting.ts";
+import {
+  STORYDNA_COUNT_METHOD,
+  canonicalManuscriptLengthSentence,
+} from "./word-count-reporting.ts";
 
 export const GRADING_FORMULA_VERSION = "STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1";
 
@@ -129,7 +132,15 @@ export function attachRubricToMemo(
 }
 
 /** Memo-only output contract — no rubric JSON, no model-assigned grade or overall score. */
-export function commercialMemoOutputContract(): string {
+export function commercialMemoOutputContract(canonicalWordCount?: number): string {
+  const canonicalSentence =
+    canonicalWordCount != null && canonicalWordCount > 0
+      ? canonicalManuscriptLengthSentence(canonicalWordCount)
+      : null;
+  const sentenceInstruction = canonicalSentence
+    ? `"${canonicalSentence}"`
+    : `"The manuscript is N,NNN words." using the comma-formatted canonical_word_count from MANUSCRIPT STATISTICS`;
+
   return `
 
 MEMO-ONLY OUTPUT (mandatory):
@@ -137,9 +148,10 @@ MEMO-ONLY OUTPUT (mandatory):
 - Do NOT append STORYDNA_RUBRIC_JSON, any JSON block, or structured rubric scores — a separate grading call handles rubric JSON.
 - Do NOT write **Grade: X**, Overall score, Final grade, or any letter grade or /100 numerical score — the application calculates grading after rubric validation.
 - Do NOT embed rubric-style category-by-category scoring or point breakdowns in the memo — reserve numerical scoring for the separate rubric call.
+- Begin with the required canonical manuscript-length sentence, then start the memo at Executive Recommendation.
 - The memo MUST include exactly one current-total sentence:
-  "The manuscript is [EXACT CANONICAL COUNT FROM MANUSCRIPT STATISTICS] words."
-  Use the comma-formatted canonical_word_count from MANUSCRIPT STATISTICS — do not round to shorthand (150k) or ranges.
+  ${sentenceInstruction}
+  Do not round to shorthand (150k) or ranges.
   Do not claim totals such as 130k, 150k, "well past 150k", or other unsupported round figures.
 - Do not state any competing current total elsewhere in the memo.
 - Percentage-cut recommendations must show current count, cut percentage, cut amount, and resulting count derived from the authoritative total.

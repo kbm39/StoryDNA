@@ -2,7 +2,10 @@ import "server-only";
 
 import { getManuscriptReviewContext, getManuscriptMeta } from "@/lib/reviews";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { runFreshEditorialGeneration } from "@/lib/editorial-generation/run-fresh-editorial-generation";
+import {
+  runFreshEditorialGeneration,
+  type FreshEditorialGenerationResult,
+} from "@/lib/editorial-generation/run-fresh-editorial-generation";
 import {
   createWorkflowRow,
   getActiveWorkflowForManuscript,
@@ -38,6 +41,17 @@ export interface StartLiteraryAgentWorkflowResult {
   workflowId?: string;
   existing?: boolean;
   error?: string;
+}
+
+function workflowAuditSummary(
+  result: FreshEditorialGenerationResult,
+): Record<string, unknown> | null {
+  const summary: Record<string, unknown> = {};
+  if (result.costAccounting) summary.costAccounting = result.costAccounting;
+  if (result.memoValidationDiagnostics) {
+    summary.memoValidation = result.memoValidationDiagnostics;
+  }
+  return Object.keys(summary).length > 0 ? summary : null;
 }
 
 function buildInputSnapshot(args: {
@@ -240,9 +254,7 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         errorCode: code,
         safeErrorMessage: safeErrorForCode(code, result.error),
         diagnosticsStorageKey: result.diagnosticsStorageKey ?? null,
-        resultSummary: result.costAccounting
-          ? { costAccounting: result.costAccounting }
-          : null,
+        resultSummary: workflowAuditSummary(result),
       });
       return { ok: false };
     }
@@ -252,9 +264,7 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         workflowId,
         errorCode: "PIPELINE_FAILED",
         safeErrorMessage: safeErrorForCode("PIPELINE_FAILED", "Publish did not return a review id."),
-        resultSummary: result.costAccounting
-          ? { costAccounting: result.costAccounting }
-          : null,
+        resultSummary: workflowAuditSummary(result),
       });
       return { ok: false };
     }
@@ -270,6 +280,7 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         oldReviewId: result.oldReviewId ?? null,
         warnings: result.warnings ?? [],
         costAccounting: result.costAccounting ?? null,
+        memoValidation: result.memoValidationDiagnostics ?? null,
       },
       nextBestAction: nextBestActionForCompletedWorkflow("literary_agent_review"),
     });

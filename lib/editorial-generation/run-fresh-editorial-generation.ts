@@ -26,6 +26,12 @@ import {
   type CommercialReviewFailureDiagnostics,
 } from "@/lib/commercial-review-diagnostics";
 import { normalizeCommercialMemoStatistics } from "@/lib/commercial-review-repair";
+import {
+  markModelRepairInvoked,
+  resolvePreRepairMemoValidation,
+  serializeMemoValidationDiagnostics,
+  type MemoFirstPassValidationDiagnostics,
+} from "@/lib/commercial-memo-opener-normalization";
 import { buildReviewGradingRecord } from "@/lib/commercial-review-pipeline";
 import {
   assessRubricGenerationResult,
@@ -102,6 +108,7 @@ export interface FreshEditorialGenerationResult {
   diagnostics?: CommercialReviewFailureDiagnostics;
   diagnosticsStorageKey?: string | null;
   costAccounting?: LiteraryAgentCostRecord;
+  memoValidationDiagnostics?: Record<string, unknown>;
 }
 
 function intentFromDna(
@@ -161,12 +168,16 @@ export async function runFreshEditorialGeneration(
 
   const startedAt = Date.now();
   const ledger = createLiteraryAgentCostLedger();
+  let memoValidationDiagnostics: MemoFirstPassValidationDiagnostics | null = null;
   const beforeProvider = () => assertProviderCallAllowed(hooks?.shouldCancel);
   const withCost = (
     result: FreshEditorialGenerationResult,
   ): FreshEditorialGenerationResult => ({
     ...result,
     costAccounting: ledger.finalize(Date.now() - startedAt),
+    memoValidationDiagnostics: memoValidationDiagnostics
+      ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
+      : result.memoValidationDiagnostics,
   });
   const rethrowIfCancelled = (e: unknown): never => {
     if (e instanceof WorkflowCancelledError) {
@@ -328,13 +339,24 @@ export async function runFreshEditorialGeneration(
   let memoRepairAttempted = false;
   const originalMemoContent = memoContent;
 
-  let memoValidation = validateMemoBeforeRubric({
+  const resolvedMemo = resolvePreRepairMemoValidation({
     memoContent,
     canonicalWordCount: statistics.canonical_word_count,
   });
+  memoContent = resolvedMemo.memoContent;
+  let memoValidation = resolvedMemo.validation;
+  memoValidationDiagnostics = resolvedMemo.diagnostics;
 
-  if (!memoValidation.ok && memoValidation.repairable && !memoRepairAttempted) {
+  if (
+    !memoValidation.ok &&
+    memoValidation.repairable &&
+    resolvedMemo.modelRepairRequired &&
+    !memoRepairAttempted
+  ) {
     memoRepairAttempted = true;
+    memoValidationDiagnostics = markModelRepairInvoked(
+      memoValidationDiagnostics ?? resolvedMemo.diagnostics,
+    );
     let repairedMemoContent: string | undefined;
     let normalizedMemoContent: string | undefined;
     let normalizationError: string | undefined;
@@ -671,6 +693,9 @@ export async function runFreshEditorialGeneration(
 
   if (!validation.ok && validation.repairable && validation.repairKind === "prose_grade") {
     memoRepairAttempted = true;
+    if (memoValidationDiagnostics) {
+      memoValidationDiagnostics = markModelRepairInvoked(memoValidationDiagnostics);
+    }
     try {
       await workflowPhase(hooks, "memo_repair");
       await workflowGuard(hooks);
@@ -813,6 +838,9 @@ export async function runFreshEditorialGeneration(
         rubric_generation: rubricResult.generationMeta ?? null,
         rubric_retry_attempted: rubricRetryAttempted,
         memo_repair_attempted: memoRepairAttempted,
+        memo_validation: memoValidationDiagnostics
+          ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
+          : null,
         contrary_evidence_gate: gateMeta,
         cost_accounting: costAccounting,
       },
@@ -847,5 +875,8 @@ export async function runFreshEditorialGeneration(
     issueCount: result?.issue_count ?? 0,
     candidateCount: result?.candidate_count ?? 0,
     costAccounting,
+    memoValidationDiagnostics: memoValidationDiagnostics
+      ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
+      : undefined,
   };
 }

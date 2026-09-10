@@ -20,7 +20,7 @@ export const SUPPORTED_REPLAY_ARTIFACT_SCHEMA_VERSIONS = new Set<string>([
 export const LITERARY_AGENT_REPLAY_EXPERT_KEY = "literary_agent" as const;
 
 export const LITERARY_AGENT_REPLAY_DEFINITION_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b" as const;
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b" as const;
 
 export type LiteraryAgentReplaySourceType =
   | "synthetic"

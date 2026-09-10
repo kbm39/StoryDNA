@@ -173,6 +173,11 @@ describe("literary-agent cost wiring in generation pipeline", () => {
     assert.doesNotMatch(src, /p_provider: "openai"/);
   });
 
+  it("persists first-pass memo validation diagnostics on publish", () => {
+    assert.match(src, /memo_validation: memoValidationDiagnostics/);
+    assert.match(src, /resolvePreRepairMemoValidation/);
+  });
+
   it("records repair, contrary-evidence, rubric retry, and revision-candidate calls", () => {
     assert.match(src, /role: "memo_repair"/);
     assert.match(src, /role: "contrary_evidence"/);

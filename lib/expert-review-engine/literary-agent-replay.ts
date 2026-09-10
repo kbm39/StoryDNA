@@ -14,8 +14,8 @@ import {
   evaluateCallAGeneration,
   shouldRetryRubricGeneration,
   validateCombinedCommercialReview,
-  validateMemoBeforeRubric,
 } from "@/lib/commercial-review-generation.ts";
+import { resolvePreRepairMemoValidation } from "@/lib/commercial-memo-opener-normalization.ts";
 import { buildReviewGradingRecord } from "@/lib/commercial-review-pipeline.ts";
 import { GRADING_FORMULA_VERSION, type RubricCategoryScore } from "@/lib/commercial-fiction-rubric.ts";
 import { normalizeCommercialMemoStatistics } from "@/lib/commercial-review-repair.ts";
@@ -477,12 +477,6 @@ function checkAbort(
   return null;
 }
 
-function wouldRequireMemoRepair(
-  outcome: ReturnType<typeof validateMemoBeforeRubric>,
-): boolean {
-  return !outcome.ok && Boolean(outcome.repairable);
-}
-
 function wouldRequireCombinedRepair(
   outcome: ReturnType<typeof validateCombinedCommercialReview>,
 ): boolean {
@@ -667,11 +661,13 @@ async function executeReplayPipeline(
           break;
         }
         case "pre_rubric_validation": {
-          const memoValidation = validateMemoBeforeRubric({
+          const resolvedMemo = resolvePreRepairMemoValidation({
             memoContent,
             canonicalWordCount: statistics!.canonical_word_count,
           });
-          if (wouldRequireMemoRepair(memoValidation)) {
+          memoContent = resolvedMemo.memoContent;
+          const memoValidation = resolvedMemo.validation;
+          if (resolvedMemo.modelRepairRequired) {
             deps.guards?.onRepairCall?.();
             stageResults.push({
               stageId: stage.stageId,

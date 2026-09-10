@@ -110,7 +110,7 @@ export function authoritativeStatisticsBlock(stats: ReviewStatistics): string {
 ═══════════════════════════════════════════════════════════════
 CANONICAL MANUSCRIPT LENGTH
 ═══════════════════════════════════════════════════════════════
-The manuscript is exactly ${stats.canonical_word_count.toLocaleString()} words by StoryDNA's analytical counter.
+Authoritative length (StoryDNA analytical counter): ${stats.canonical_word_count.toLocaleString()} words.
 Do not estimate, round, infer, or replace this number.
 Any length recommendation must use this exact count as its starting point.
 

@@ -18,7 +18,7 @@ import {
 } from "./registry/in-code.ts";
 
 const EXPECTED_LA_DEFINITION_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
 
 function validScoringWeights(
   overrides: Partial<ExpertScoringWeights> = {},

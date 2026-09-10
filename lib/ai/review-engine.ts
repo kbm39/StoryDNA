@@ -392,7 +392,10 @@ export function buildReviewPrompt(
   const wordCountBlock = options?.statistics
     ? authoritativeStatisticsBlock(options.statistics)
     : authoritativeWordCountBlock(options?.wordCount);
-  const rubricBlock = def.id === "literary_agent" ? commercialMemoOutputContract() : "";
+  const rubricBlock =
+    def.id === "literary_agent"
+      ? commercialMemoOutputContract(options?.statistics?.canonical_word_count)
+      : "";
 
   return `${mission}\n\n${expertise}${knowledge}\n\n${framework}\n\n${def.intro}\n\nOUTPUT CONTRACT — produce exactly this ${def.outputContract.format} structure, with these sections in this order:\n\n${sections}${fields}${evidence}${rules}\n\n${def.tone}${wordCountBlock}${intentBlock}${grounding}${rubricBlock}`;
 }
@@ -709,7 +712,7 @@ export const LITERARY_AGENT: ReviewerDefinition = {
       "Do NOT repeat the same strength or weakness in multiple sections — state each finding once in its primary section, then reference briefly elsewhere.",
       "Do NOT restate the full synopsis in Story, Commercial, and Final Recommendation — premise belongs in one place.",
       "Keep examples concise; Evidence-Backed Findings is the home for verbatim quotes — avoid duplicating them in other sections.",
-      "Do NOT write a transparency/scope/coverage header — the system discloses scope separately; begin at Executive Recommendation.",
+      "Do NOT write a transparency/scope/coverage header — the system discloses scope separately. Begin with the required canonical manuscript-length sentence. After that sentence, start with Executive Recommendation.",
       "Every major claim must cite a verbatim manuscript passage in Evidence-Backed Findings, or be flagged as unverified — never invent a quote.",
       "Stay within your expertise; defer out-of-scope issues to the relevant specialist rather than assessing them yourself.",
     ],

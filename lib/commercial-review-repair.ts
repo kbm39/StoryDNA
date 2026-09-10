@@ -142,6 +142,14 @@ function enforceSingleCanonicalOpening(memo: string, canonicalWordCount: number)
   return `${exactOpen}\n\n${body}`.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** Public wrapper for the existing deterministic canonical-opening normalizer. */
+export function applyCanonicalCurrentTotalOpener(
+  memo: string,
+  canonicalWordCount: number,
+): string {
+  return enforceSingleCanonicalOpening(memo, canonicalWordCount);
+}
+
 function countCanonicalOpeningSentences(memo: string, canonicalWordCount: number): number {
   const exactOpen = canonicalManuscriptLengthSentence(canonicalWordCount);
   const escaped = exactOpen.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

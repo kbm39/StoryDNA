@@ -13,7 +13,7 @@ import {
 } from "./shared-identity.ts";
 
 const EXPECTED_RUNTIME_DEFINITION_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
 
 describe("shared reviewer identity projection", () => {
   it("includes only approved common identity fields", () => {

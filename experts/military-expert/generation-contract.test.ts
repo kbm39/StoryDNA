@@ -75,9 +75,9 @@ const EXPECTED_ME_CONSTITUTION_HASH =
 const EXPECTED_ME_RUNTIME_HASH =
   "4c7c1312769325e2a2600c682cf9fd42ac73ab3332f72b3bdd3634aff4a7a3f9";
 const EXPECTED_LA_RUNTIME_HASH =
-  "f4006eaa497dd1d821f30fdac33dcb4869eff68d1af46b1f7401a972020ca50b";
+  "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
 const EXPECTED_LA_CONSTITUTION_HASH =
-  "8f8b56a9de6c7d68f96fd7913645905ee2afb8ce7d0c066faba2c28106fe94f5";
+  "3c6f5df3f7dbef286f2f36aab82c807b66615005acd3153227287f33b4ee6ac2";
 
 function read(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");

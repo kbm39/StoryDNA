@@ -40,9 +40,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENGINE_DIR = join(dirname(fileURLToPath(import.meta.url)));
 
 const EXPECTED_CONSTITUTION_HASH =
-  "8f8b56a9de6c7d68f96fd7913645905ee2afb8ce7d0c066faba2c28106fe94f5";
+  "3c6f5df3f7dbef286f2f36aab82c807b66615005acd3153227287f33b4ee6ac2";
 const EXPECTED_REGISTRY_SEED_HASH =
-  "f6b79bc07d7ba9630fb532c67c31c4b80bac2886002696e25290d163e4b44671";
+  "beb0c2966feb87fd003dbf174b3ace22eb9a586ac92c8e1eddbcd19ffecaa64e";
 
 const SYNTHETIC_MANUSCRIPT = [
   "Chapter One",

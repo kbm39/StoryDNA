@@ -34,10 +34,14 @@ describe("npm test discovery", () => {
 
   it("discovers every current lib/**/*.test.ts file recursively", () => {
     const discovered = globSync(LIB_TEST_GLOB, { cwd: ROOT }).sort();
-    assert.equal(discovered.length, 81, "expected exactly 81 lib test files");
+    assert.equal(discovered.length, 82, "expected exactly 82 lib test files");
     assert.ok(
       discovered.includes("lib/word-count.test.ts"),
       "missing root-level lib test",
+    );
+    assert.ok(
+      discovered.includes("lib/commercial-memo-opener-normalization.test.ts"),
+      "missing canonical-opener normalization test",
     );
     assert.ok(
       discovered.includes("lib/expert-review-engine/registry/in-code.test.ts"),

@@ -90,23 +90,31 @@ describe("pipeline source contracts for cancel-before-provider", () => {
   const gate = readFileSync(join(ROOT, "lib/contrary-evidence/gate.ts"), "utf8");
 
   it("passes onBeforeProviderCall into every Literary Agent provider function", () => {
-    assert.match(generation, /generateAgentReview\([\s\S]*onBeforeProviderCall: beforeProvider/);
-    assert.match(generation, /repairCommercialMemoValidation\(\{[\s\S]*onBeforeProviderCall: beforeProvider/);
-    assert.match(generation, /generateAgentRubric\(\{[\s\S]*onBeforeProviderCall: beforeProvider/);
-    assert.match(generation, /generateRevisionCandidates\([\s\S]*onBeforeProviderCall: beforeProvider/);
+    assert.match(generation, /generateAgentReview\([\s\S]*providerHooks/);
+    assert.match(generation, /repairCommercialMemoValidation\(\{[\s\S]*\.\.\.providerHooks/);
+    assert.match(generation, /generateAgentRubric\(\{[\s\S]*\.\.\.providerHooks/);
+    assert.match(generation, /generateRevisionCandidatesRaw\([\s\S]*providerHooks/);
+    assert.match(generation, /repairRevisionCandidatesJson\(\{[\s\S]*\.\.\.providerHooks/);
     assert.match(generation, /assertPublishAllowed\(hooks\?\.shouldCancel\)/);
+    assert.match(generation, /onExecutionHeartbeat: hooks\?\.onExecutionHeartbeat/);
+    assert.match(generation, /abortSignal: hooks\?\.abortSignal/);
   });
 
   it("Literary Agent Anthropic helpers await the guard immediately before the SDK call", () => {
-    assert.match(anthropic, /await callHooks\?\.onBeforeProviderCall\?\.\(\);\s*\n\s*const stream = client\.messages\.stream/);
-    assert.match(anthropic, /await args\.onBeforeProviderCall\?\.\(\);\s*\n\s*const response = await client\.messages\.create/);
-    assert.match(anthropic, /await args\.onBeforeProviderCall\?\.\(\);\s*\n\s*const stream = client\.messages\.stream/);
+    assert.match(
+      anthropic,
+      /await callHooks\?\.onBeforeProviderCall\?\.\(\);\s*\n\s*return runWithProviderExecutionKeepAlive/,
+    );
+    assert.match(anthropic, /client\.messages\.stream\(body, \{ signal \}\)/);
+    assert.match(anthropic, /client\.messages\.create\(body, \{ signal \}\)/);
   });
 
   it("contrary-evidence re-checks cancellation before each assessor call and before the SDK request", () => {
     assert.match(gate, /await input\.onBeforeSemanticAssess\?\.\(\);/);
-    assert.match(assessor, /await callHooks\?\.onBeforeProviderCall\?\.\(\);\s*\n\s*const response = await client\.messages\.create/);
+    assert.match(assessor, /await callHooks\?\.onBeforeProviderCall\?\.\(\);/);
+    assert.match(assessor, /runWithProviderExecutionKeepAlive/);
     assert.match(assessor, /WorkflowCancelledError/);
+    assert.match(assessor, /ProviderExecutionAbortedError/);
   });
 
   it("executor skips cancelled workflows before any provider retry", () => {
@@ -116,5 +124,7 @@ describe("pipeline source contracts for cancel-before-provider", () => {
     );
     assert.match(src, /workflow\.status === "cancelled" \|\| workflow\.cancelled_at/);
     assert.match(src, /shouldCancel: async \(\) => isCancellationRequested\(workflowId\)/);
+    assert.match(src, /ProviderExecutionAbortedError/);
+    assert.match(src, /failureKind: "provider_execution_aborted"/);
   });
 });

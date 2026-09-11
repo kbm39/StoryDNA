@@ -1,4 +1,4 @@
-import { task } from "@trigger.dev/sdk/v3";
+import { task, heartbeats, timeout } from "@trigger.dev/sdk/v3";
 import { executeLiteraryAgentWorkflow } from "@/lib/editorial-workflow/start-literary-agent-workflow";
 
 export const literaryAgentReviewTask = task({
@@ -10,6 +10,9 @@ export const literaryAgentReviewTask = task({
   },
   maxDuration: 3600,
   run: async (payload: { workflowId: string }) => {
-    return executeLiteraryAgentWorkflow(payload.workflowId);
+    return executeLiteraryAgentWorkflow(payload.workflowId, {
+      onExecutionHeartbeat: () => heartbeats.yield(),
+      abortSignal: timeout.signal,
+    });
   },
 });

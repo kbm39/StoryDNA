@@ -7,11 +7,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getManuscriptReviewContext } from "@/lib/reviews";
 import { getStoryDna } from "@/lib/storydna";
 import {
-  generateRevisionCandidates,
+  generateRevisionCandidatesRaw,
   generateAgentReview,
   generateAgentRubric,
   repairCommercialMemoValidation,
+  repairRevisionCandidatesJson,
 } from "@/lib/ai/anthropic";
+import { completeRevisionCandidatesStage } from "@/lib/editorial-generation/revision-candidate-stage";
 import { LITERARY_AGENT, type ParsedIssue } from "@/lib/ai/review-engine";
 import type { AuthorIntent } from "@/lib/types";
 import { buildReviewStatistics } from "@/lib/review-statistics";
@@ -74,6 +76,8 @@ import {
   assertPublishAllowed,
 } from "@/lib/editorial-workflow/provider-call-guard";
 import type { GenerationMeta } from "@/lib/ai/shared";
+import type { ProviderCallHooks } from "@/lib/ai/provider-call-hooks";
+import { ProviderExecutionAbortedError } from "@/lib/ai/provider-execution";
 
 export const EDITORIAL_GENERATION_ENTRY = "lib/editorial-generation/run-fresh-editorial-generation.ts";
 
@@ -109,6 +113,7 @@ export interface FreshEditorialGenerationResult {
   diagnosticsStorageKey?: string | null;
   costAccounting?: LiteraryAgentCostRecord;
   memoValidationDiagnostics?: Record<string, unknown>;
+  revisionCandidateDiagnostics?: Record<string, unknown>;
 }
 
 function intentFromDna(
@@ -169,7 +174,20 @@ export async function runFreshEditorialGeneration(
   const startedAt = Date.now();
   const ledger = createLiteraryAgentCostLedger();
   let memoValidationDiagnostics: MemoFirstPassValidationDiagnostics | null = null;
+  let revisionCandidateDiagnostics: Record<string, unknown> | null = null;
   const beforeProvider = () => assertProviderCallAllowed(hooks?.shouldCancel);
+  const providerHooks: ProviderCallHooks = {
+    onBeforeProviderCall: beforeProvider,
+    shouldCancel: hooks?.shouldCancel,
+    onExecutionHeartbeat: hooks?.onExecutionHeartbeat,
+    abortSignal: hooks?.abortSignal,
+  };
+  const unknownUsage = (): ProviderTokenUsage => ({
+    inputTokens: null,
+    outputTokens: null,
+    cachedTokens: null,
+    cacheCreationTokens: null,
+  });
   const withCost = (
     result: FreshEditorialGenerationResult,
   ): FreshEditorialGenerationResult => ({
@@ -178,12 +196,29 @@ export async function runFreshEditorialGeneration(
     memoValidationDiagnostics: memoValidationDiagnostics
       ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
       : result.memoValidationDiagnostics,
+    revisionCandidateDiagnostics:
+      revisionCandidateDiagnostics ?? result.revisionCandidateDiagnostics,
   });
   const rethrowIfCancelled = (e: unknown): never => {
-    if (e instanceof WorkflowCancelledError) {
+    if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
       e.costAccounting = ledger.finalize(Date.now() - startedAt);
     }
     throw e;
+  };
+  const rethrowIfInterrupted = (
+    e: unknown,
+    role: Parameters<typeof ledger.record>[0]["role"],
+    t0: number,
+  ): never => {
+    if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+      ledger.record({
+        role,
+        model: process.env.ANTHROPIC_MODEL || "claude-opus-4-8",
+        usage: unknownUsage(),
+        durationMs: Date.now() - t0,
+      });
+    }
+    return rethrowIfCancelled(e);
   };
 
   await workflowPhase(hooks, "validating");
@@ -291,21 +326,21 @@ export async function runFreshEditorialGeneration(
   });
 
   let reviewResult;
+  const memoStartedAt = Date.now();
   try {
     await workflowPhase(hooks, "memo_generation");
     await workflowGuard(hooks);
-    const t0 = Date.now();
-    reviewResult = await generateAgentReview(text, intent, statistics, {
-      onBeforeProviderCall: beforeProvider,
-    });
+    reviewResult = await generateAgentReview(text, intent, statistics, providerHooks);
     ledger.record({
       role: "memo_generation",
       model: reviewResult.model,
       usage: usageFromMeta(reviewResult.generationMeta),
-      durationMs: Date.now() - t0,
+      durationMs: Date.now() - memoStartedAt,
     });
   } catch (e) {
-    if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+    if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+      rethrowIfInterrupted(e, "memo_generation", memoStartedAt);
+    }
     return withCost({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
 
@@ -371,7 +406,7 @@ export async function runFreshEditorialGeneration(
         wordCountContradictions: memoValidation.wordCountContradictions,
         wordCountErrors: memoValidation.wordCountErrors,
         proseGradeConflict: memoValidation.proseGradeConflict,
-        onBeforeProviderCall: beforeProvider,
+        ...providerHooks,
       });
       ledger.record({
         role: "memo_repair",
@@ -391,7 +426,9 @@ export async function runFreshEditorialGeneration(
         normalizationError = normalized.error;
       }
     } catch (e) {
-      if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+      if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+        rethrowIfCancelled(e);
+      }
       return withCost({
         ok: false,
         error: `Memo repair failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -455,7 +492,7 @@ export async function runFreshEditorialGeneration(
         currentText: text,
         genre,
         semanticAssessor: defaultSemanticAssessor({
-          onBeforeProviderCall: beforeProvider,
+          ...providerHooks,
           onUsage: (usage) => {
             ledger.record({
               role: "contrary_evidence",
@@ -487,7 +524,9 @@ export async function runFreshEditorialGeneration(
 
       gatePromptBlock = buildContraryEvidenceGatePromptBlock(gateResult.assessments).block;
     } catch (e) {
-      if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+      if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+        rethrowIfCancelled(e);
+      }
       gateState.gateStatus = "failed";
       return withCost({
         ok: false,
@@ -507,7 +546,7 @@ export async function runFreshEditorialGeneration(
       statistics,
       memoContent,
       contraryEvidenceGateBlock: gatePromptBlock || undefined,
-      onBeforeProviderCall: beforeProvider,
+      ...providerHooks,
     });
     ledger.record({
       role: "rubric_generation",
@@ -516,7 +555,9 @@ export async function runFreshEditorialGeneration(
       durationMs: Date.now() - t0,
     });
   } catch (e) {
-    if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+    if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+        rethrowIfCancelled(e);
+      }
     return withCost({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
 
@@ -556,7 +597,7 @@ export async function runFreshEditorialGeneration(
               malformedRaw: firstRubricRaw ?? rubricResult.content,
             }
           : undefined,
-        onBeforeProviderCall: beforeProvider,
+        ...providerHooks,
       });
       ledger.record({
         role: "rubric_retry",
@@ -565,7 +606,9 @@ export async function runFreshEditorialGeneration(
         durationMs: Date.now() - t0,
       });
     } catch (e) {
-      if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+      if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+        rethrowIfCancelled(e);
+      }
       return withCost({ ok: false, error: e instanceof Error ? e.message : String(e) });
     }
     rubricAssessment = assessRubricGenerationResult({
@@ -706,7 +749,7 @@ export async function runFreshEditorialGeneration(
         proseGradeConflict: validation.proseGradeConflict,
         calculatedLetterGrade: adjustedGrading.letterGrade,
         manuscriptScore: adjustedGrading.manuscriptScore,
-        onBeforeProviderCall: beforeProvider,
+        ...providerHooks,
       });
       ledger.record({
         role: "memo_repair",
@@ -716,7 +759,9 @@ export async function runFreshEditorialGeneration(
       });
       memoContent = repaired.content;
     } catch (e) {
-      if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+      if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+        rethrowIfCancelled(e);
+      }
       return withCost({ ok: false, error: `Prose grade repair failed: ${e instanceof Error ? e.message : String(e)}` });
     }
     validation = validateCombinedCommercialReview({
@@ -739,40 +784,73 @@ export async function runFreshEditorialGeneration(
 
   let issues: ParsedIssue[];
   let warnings: string[];
+  const revisionCandidatesStartedAt = Date.now();
   try {
     await workflowPhase(hooks, "revision_candidates");
     await workflowGuard(hooks);
-    const t0 = Date.now();
-    const candidateResult = await generateRevisionCandidates(
+    const t0 = revisionCandidatesStartedAt;
+    const rawCandidates = await generateRevisionCandidatesRaw(
       LITERARY_AGENT,
       validated.memoContent,
       text,
       intent,
       statistics,
-      { onBeforeProviderCall: beforeProvider },
+      providerHooks,
     );
-    issues = candidateResult.issues;
-    warnings = candidateResult.warnings;
-    ledger.record({
-      role: "revision_candidates",
-      model: candidateResult.model,
-      usage: usageFromMeta(candidateResult.generationMeta),
-      durationMs: Date.now() - t0,
+    let repairInvoked = false;
+    const stage = await completeRevisionCandidatesStage({
+      primary: {
+        content: rawCandidates.content,
+        model: rawCandidates.model,
+        generationMeta: rawCandidates.generationMeta,
+        durationMs: Date.now() - t0,
+      },
+      record: (entry) =>
+        ledger.record({
+          role: entry.role,
+          model: entry.model,
+          usage: entry.usage,
+          durationMs: entry.durationMs,
+          status: entry.status,
+        }),
+      repairOnce: async ({ malformedRaw, parseError }) => {
+        if (repairInvoked) {
+          throw new Error("Revision-candidate repair already attempted.");
+        }
+        repairInvoked = true;
+        await workflowGuard(hooks);
+        const repairStarted = Date.now();
+        const repaired = await repairRevisionCandidatesJson({
+          malformedRaw,
+          parseError,
+          ...providerHooks,
+        });
+        return {
+          content: repaired.content,
+          model: repaired.model,
+          generationMeta: repaired.generationMeta,
+          durationMs: Date.now() - repairStarted,
+        };
+      },
     });
+    revisionCandidateDiagnostics = stage.diagnostics as unknown as Record<string, unknown>;
+    if (!stage.ok || !stage.publishAllowed) {
+      return withCost({
+        ok: false,
+        error: stage.error ?? "No revision candidates were produced from the review.",
+        warnings: stage.warnings,
+        revisionCandidateDiagnostics,
+      });
+    }
+    issues = stage.issues;
+    warnings = stage.warnings;
   } catch (e) {
-    if (e instanceof WorkflowCancelledError) rethrowIfCancelled(e);
+    if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) {
+      const alreadyRecorded = ledger.calls.some((c) => c.role === "revision_candidates");
+      if (alreadyRecorded) return rethrowIfCancelled(e);
+      rethrowIfInterrupted(e, "revision_candidates", revisionCandidatesStartedAt);
+    }
     return withCost({ ok: false, error: e instanceof Error ? e.message : String(e) });
-  }
-
-  if (issues.length === 0) {
-    return withCost({
-      ok: false,
-      error:
-        warnings.length > 0
-          ? `No usable revision candidates were produced. ${warnings.join(" ")}`
-          : "No revision candidates were produced from the review.",
-      warnings,
-    });
   }
 
   const payload = buildReplacementPayload(issues, ctx.passageVerificationText);
@@ -841,6 +919,7 @@ export async function runFreshEditorialGeneration(
         memo_validation: memoValidationDiagnostics
           ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
           : null,
+        revision_candidates: revisionCandidateDiagnostics,
         contrary_evidence_gate: gateMeta,
         cost_accounting: costAccounting,
       },
@@ -878,5 +957,6 @@ export async function runFreshEditorialGeneration(
     memoValidationDiagnostics: memoValidationDiagnostics
       ? serializeMemoValidationDiagnostics(memoValidationDiagnostics)
       : undefined,
+    revisionCandidateDiagnostics: revisionCandidateDiagnostics ?? undefined,
   };
 }

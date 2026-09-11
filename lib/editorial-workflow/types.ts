@@ -116,8 +116,16 @@ export interface EditorialWorkflowHooks {
   onPhase?: (phase: InternalPhase) => Promise<void>;
   shouldCancel?: () => Promise<boolean>;
   assertVersionPin?: () => Promise<void>;
+  /** Cooperative Trigger/host keep-alive during long provider calls. */
+  onExecutionHeartbeat?: () => Promise<void>;
+  abortSignal?: AbortSignal;
   workflowId?: string;
   triggerRunId?: string | null;
+}
+
+export interface LiteraryAgentExecutionOptions {
+  onExecutionHeartbeat?: () => Promise<void>;
+  abortSignal?: AbortSignal;
 }
 
 export class WorkflowCancelledError extends Error {

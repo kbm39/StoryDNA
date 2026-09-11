@@ -8,6 +8,11 @@ import type { SemanticAssessor, SemanticAssessorInput, SemanticAssessmentResult 
 import type { ProviderCallHooks } from "@/lib/ai/provider-call-hooks";
 import type { ProviderTokenUsage } from "@/lib/editorial-generation/literary-agent-cost";
 import { usageFromAnthropicMessage } from "@/lib/editorial-generation/literary-agent-cost";
+import {
+  ProviderExecutionAbortedError,
+  runWithProviderExecutionKeepAlive,
+} from "@/lib/ai/provider-execution";
+import { WorkflowCancelledError } from "@/lib/editorial-workflow/types";
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
 
@@ -65,13 +70,24 @@ export function createAiSemanticAssessor(
       try {
         const client = new Anthropic();
         await callHooks?.onBeforeProviderCall?.();
-        const response = await client.messages.create({
-          model: MODEL,
-          max_tokens: 1024,
-          system:
-            "You assess revision impact on prior editorial criticisms. Output ONLY valid JSON. Never assign manuscript letter grades or overall scores.",
-          messages: [{ role: "user", content: buildAssessorPrompt(input) }],
-        });
+        const response = await runWithProviderExecutionKeepAlive(
+          ({ signal }) =>
+            client.messages.create(
+              {
+                model: MODEL,
+                max_tokens: 1024,
+                system:
+                  "You assess revision impact on prior editorial criticisms. Output ONLY valid JSON. Never assign manuscript letter grades or overall scores.",
+                messages: [{ role: "user", content: buildAssessorPrompt(input) }],
+              },
+              { signal },
+            ),
+          {
+            onExecutionHeartbeat: callHooks?.onExecutionHeartbeat,
+            shouldCancel: callHooks?.shouldCancel,
+            abortSignal: callHooks?.abortSignal,
+          },
+        );
 
         const usage = usageFromAnthropicMessage(response.usage);
         callHooks?.onUsage?.({ ...usage, model: response.model || MODEL });
@@ -92,7 +108,7 @@ export function createAiSemanticAssessor(
         if (!parsed) return assessConcernDeterministic(input);
         return parsed;
       } catch (e) {
-        if (e instanceof Error && e.name === "WorkflowCancelledError") throw e;
+        if (e instanceof WorkflowCancelledError || e instanceof ProviderExecutionAbortedError) throw e;
         return assessConcernDeterministic(input);
       }
     },

@@ -16,7 +16,8 @@ export type LiteraryAgentCallRole =
   | "contrary_evidence"
   | "rubric_generation"
   | "rubric_retry"
-  | "revision_candidates";
+  | "revision_candidates"
+  | "revision_candidates_repair";
 
 export interface ProviderTokenUsage {
   inputTokens: number | null;
@@ -51,6 +52,8 @@ export interface LiteraryAgentProviderCall {
   costUsd: number | null;
   costKind: "estimated" | "unknown";
   durationMs: number;
+  /** Present when a call completed but later parse/validation failed. */
+  status?: "ok" | "parse_failed" | "validation_failed";
 }
 
 export interface RoleTokenTotals {
@@ -71,6 +74,7 @@ export interface LiteraryAgentCostRecord {
   cacheCreationTokens: number;
   repairCallTokens: RoleTokenTotals;
   revisionCandidateCallTokens: RoleTokenTotals;
+  revisionCandidateRepairCallTokens: RoleTokenTotals;
   contraryEvidenceCallTokens: RoleTokenTotals;
   calls: LiteraryAgentProviderCall[];
   perCallCostUsd: Array<number | null>;
@@ -149,6 +153,7 @@ export function createLiteraryAgentCostLedger() {
     model: string;
     usage: ProviderTokenUsage;
     durationMs: number;
+    status?: LiteraryAgentProviderCall["status"];
   }): LiteraryAgentProviderCall {
     const costUsd = estimateCallCostUsd(args.model, args.usage);
     const call: LiteraryAgentProviderCall = {
@@ -162,6 +167,7 @@ export function createLiteraryAgentCostLedger() {
       costUsd,
       costKind: costUsd == null ? "unknown" : "estimated",
       durationMs: Math.max(0, args.durationMs),
+      ...(args.status ? { status: args.status } : {}),
     };
     calls.push(call);
     return call;
@@ -206,6 +212,7 @@ export function aggregateLiteraryAgentCost(
     cacheCreationTokens: sum(calls, (c) => c.cacheCreationTokens),
     repairCallTokens: roleTotals(calls, "memo_repair"),
     revisionCandidateCallTokens: roleTotals(calls, "revision_candidates"),
+    revisionCandidateRepairCallTokens: roleTotals(calls, "revision_candidates_repair"),
     contraryEvidenceCallTokens: roleTotals(calls, "contrary_evidence"),
     calls,
     perCallCostUsd: knownCosts,

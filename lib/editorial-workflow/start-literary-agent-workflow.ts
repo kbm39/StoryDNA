@@ -27,10 +27,12 @@ import { newWorkflowIdempotencyKey, isUniqueViolation } from "./idempotency.ts";
 import {
   LITERARY_AGENT_DEFINITION_VERSION,
   type EditorialWorkflowHooks,
+  type LiteraryAgentExecutionOptions,
   WorkflowCancelledError,
 } from "./types.ts";
 import { errorCodeFromMessage, safeErrorForCode } from "./safe-errors.ts";
 import { triggerLiteraryAgentReviewTask } from "./trigger-client.ts";
+import { ProviderExecutionAbortedError } from "@/lib/ai/provider-execution";
 import {
   nextBestActionForCompletedWorkflow,
   workflowMetadataForType,
@@ -50,6 +52,9 @@ function workflowAuditSummary(
   if (result.costAccounting) summary.costAccounting = result.costAccounting;
   if (result.memoValidationDiagnostics) {
     summary.memoValidation = result.memoValidationDiagnostics;
+  }
+  if (result.revisionCandidateDiagnostics) {
+    summary.revisionCandidateValidation = result.revisionCandidateDiagnostics;
   }
   return Object.keys(summary).length > 0 ? summary : null;
 }
@@ -166,7 +171,10 @@ async function persistUncaughtWorkflowFailure(workflowId: string, original: Erro
   }
 }
 
-export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<{
+export async function executeLiteraryAgentWorkflow(
+  workflowId: string,
+  execution?: LiteraryAgentExecutionOptions,
+): Promise<{
   ok: boolean;
   cancelled?: boolean;
   skipped?: boolean;
@@ -231,6 +239,8 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
   const hooks: EditorialWorkflowHooks = {
     workflowId,
     triggerRunId: workflow.trigger_run_id,
+    onExecutionHeartbeat: execution?.onExecutionHeartbeat,
+    abortSignal: execution?.abortSignal,
     onPhase: async (phase) => {
       await setWorkflowPhase(workflowId, phase);
     },
@@ -292,6 +302,18 @@ export async function executeLiteraryAgentWorkflow(workflowId: string): Promise<
         e.costAccounting ? { resultSummary: { costAccounting: e.costAccounting } } : undefined,
       );
       return { ok: true, cancelled: true };
+    }
+    if (e instanceof ProviderExecutionAbortedError) {
+      await markWorkflowFailed({
+        workflowId,
+        errorCode: "PIPELINE_FAILED",
+        safeErrorMessage: safeErrorForCode("PIPELINE_FAILED"),
+        resultSummary: {
+          failureKind: "provider_execution_aborted",
+          costAccounting: e.costAccounting ?? null,
+        },
+      });
+      return { ok: false };
     }
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "VERSION_PIN_MISMATCH") {

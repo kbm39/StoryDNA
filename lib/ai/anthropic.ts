@@ -12,6 +12,7 @@ import {
   type ReviewerDefinition,
   type ParsedIssue,
 } from "@/lib/ai/review-engine";
+import { buildRevisionCandidatesRepairPrompt } from "@/lib/ai/revision-candidate-recovery";
 import {
   clampManuscript,
   truncationNote,
@@ -74,11 +75,55 @@ import type { ProseGradeMatch } from "@/lib/prose-grade-validation";
 import type { ProviderCallHooks } from "@/lib/ai/provider-call-hooks";
 import { usageFromAnthropicMessage } from "@/lib/editorial-generation/literary-agent-cost";
 import type { WordCountContradiction } from "@/lib/word-count-validation";
+import {
+  runWithProviderExecutionKeepAlive,
+} from "@/lib/ai/provider-execution";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Claude Opus 4.8 has a 1M-token context window, so a whole novel fits. The
 // cap is just a sanity bound; raise it if you ever need to.
 const MAX_INPUT_CHARS = Number(process.env.ANTHROPIC_MAX_INPUT_CHARS || 3_000_000);
+
+type AnthropicClient = InstanceType<typeof Anthropic>;
+
+function executionHooksFromCallHooks(callHooks?: ProviderCallHooks): {
+  onExecutionHeartbeat?: ProviderCallHooks["onExecutionHeartbeat"];
+  shouldCancel?: ProviderCallHooks["shouldCancel"];
+  abortSignal?: AbortSignal;
+} {
+  return {
+    onExecutionHeartbeat: callHooks?.onExecutionHeartbeat,
+    shouldCancel: callHooks?.shouldCancel,
+    abortSignal: callHooks?.abortSignal,
+  };
+}
+
+async function anthropicStreamFinalMessage(
+  client: Anthropic,
+  body: Parameters<AnthropicClient["messages"]["stream"]>[0],
+  callHooks?: ProviderCallHooks,
+) {
+  await callHooks?.onBeforeProviderCall?.();
+  return runWithProviderExecutionKeepAlive(
+    async ({ signal }) => {
+      const stream = client.messages.stream(body, { signal });
+      return stream.finalMessage();
+    },
+    executionHooksFromCallHooks(callHooks),
+  );
+}
+
+async function anthropicCreateMessage(
+  client: Anthropic,
+  body: Parameters<AnthropicClient["messages"]["create"]>[0] & { stream?: false },
+  callHooks?: ProviderCallHooks,
+) {
+  await callHooks?.onBeforeProviderCall?.();
+  return runWithProviderExecutionKeepAlive(
+    ({ signal }) => client.messages.create(body, { signal }),
+    executionHooksFromCallHooks(callHooks),
+  );
+}
 
 const SYSTEM = `You are a seasoned developmental editor giving craft-focused feedback on a novel manuscript. You read closely and respond to the actual writing — its structure, rhythm, and characters — not to generic checklists. You are honest and specific, and you point to concrete moments in the text.`;
 
@@ -183,20 +228,22 @@ export async function generateReview(
       storedWordCount: wordCountTotal,
     });
 
-  await callHooks?.onBeforeProviderCall?.();
-  const stream = client.messages.stream({
-    model: MODEL,
-    max_tokens: def.maxTokens,
-    thinking: { type: "adaptive" },
-    system: buildSystemPrompt(def),
-    messages: [
-      {
-        role: "user",
-        content: `${buildReviewPrompt(def, intent, { statistics: stats })}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
-      },
-    ],
-  });
-  const response = await stream.finalMessage();
+  const response = await anthropicStreamFinalMessage(
+    client,
+    {
+      model: MODEL,
+      max_tokens: def.maxTokens,
+      thinking: { type: "adaptive" },
+      system: buildSystemPrompt(def),
+      messages: [
+        {
+          role: "user",
+          content: `${buildReviewPrompt(def, intent, { statistics: stats })}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        },
+      ],
+    },
+    callHooks,
+  );
 
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty response.");
@@ -241,8 +288,7 @@ export async function generateAgentRubric(args: {
     parseError: string;
     malformedRaw: string;
   };
-  onBeforeProviderCall?: () => Promise<void>;
-}): Promise<ReviewResult> {
+} & ProviderCallHooks): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
   const { text: clamped, truncated } = clampManuscript(args.text, MAX_INPUT_CHARS);
@@ -257,19 +303,22 @@ export async function generateAgentRubric(args: {
     repairContext: args.repairContext,
   });
 
-  await args.onBeforeProviderCall?.();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: COMMERCIAL_RUBRIC_MAX_TOKENS,
-    system:
-      "You score commercial fiction manuscripts. Output ONLY valid JSON matching STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1. No markdown fences, no prose, no letter grades.",
-    messages: [
-      {
-        role: "user",
-        content: `${prompt}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
-      },
-    ],
-  });
+  const response = await anthropicCreateMessage(
+    client,
+    {
+      model: MODEL,
+      max_tokens: COMMERCIAL_RUBRIC_MAX_TOKENS,
+      system:
+        "You score commercial fiction manuscripts. Output ONLY valid JSON matching STORYDNA_COMMERCIAL_FICTION_RUBRIC_V1. No markdown fences, no prose, no letter grades.",
+      messages: [
+        {
+          role: "user",
+          content: `${prompt}${truncationNote(truncated, sentWordCount)}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        },
+      ],
+    },
+    args,
+  );
 
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty rubric response.");
@@ -350,8 +399,7 @@ export async function repairCommercialMemoValidation(args: {
   wordCountContradictions?: WordCountContradiction[];
   wordCountErrors?: string[];
   proseGradeConflict?: ProseGradeMatch;
-  onBeforeProviderCall?: () => Promise<void>;
-}): Promise<ReviewResult> {
+} & ProviderCallHooks): Promise<ReviewResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
   const client = new Anthropic();
 
@@ -365,15 +413,17 @@ export async function repairCommercialMemoValidation(args: {
     manuscriptScore: args.manuscriptScore,
   });
 
-  await args.onBeforeProviderCall?.();
-  const stream = client.messages.stream({
-    model: MODEL,
-    max_tokens: LITERARY_AGENT.maxTokens,
-    thinking: { type: "adaptive" },
-    system: buildSystemPrompt(LITERARY_AGENT),
-    messages: [{ role: "user", content: prompt }],
-  });
-  const response = await stream.finalMessage();
+  const response = await anthropicStreamFinalMessage(
+    client,
+    {
+      model: MODEL,
+      max_tokens: LITERARY_AGENT.maxTokens,
+      thinking: { type: "adaptive" },
+      system: buildSystemPrompt(LITERARY_AGENT),
+      messages: [{ role: "user", content: prompt }],
+    },
+    args,
+  );
   const content = textOf(response);
   if (!content) throw new Error("Claude returned an empty memo repair response.");
   const model = response.model || MODEL;
@@ -427,7 +477,8 @@ export async function repairCommercialReviewWordCount(args: {
  * grounded Editorial Issues + Revision Candidates. Claude reads the whole
  * manuscript so every candidate's `original` can be a verbatim passage.
  */
-export async function generateRevisionCandidates(
+/** Provider call only — usage is available even if later JSON parse fails. */
+export async function generateRevisionCandidatesRaw(
   def: ReviewerDefinition,
   reviewMemo: string,
   text: string,
@@ -435,9 +486,8 @@ export async function generateRevisionCandidates(
   statistics?: ReviewStatistics | null,
   callHooks?: ProviderCallHooks,
 ): Promise<{
-  issues: ParsedIssue[];
+  content: string;
   model: string;
-  warnings: string[];
   generationMeta: GenerationMeta;
 }> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
@@ -453,28 +503,98 @@ export async function generateRevisionCandidates(
       storedWordCount: wordCountTotal,
     });
 
-  await callHooks?.onBeforeProviderCall?.();
-  const stream = client.messages.stream({
-    model: MODEL,
-    max_tokens: 16000,
-    system:
-      "You convert your own editorial review into structured, grounded revision candidates. Output only the JSON object requested.",
-    messages: [
-      {
-        role: "user",
-        content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent, { statistics: stats })}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
-      },
-    ],
-  });
-  const response = await stream.finalMessage();
+  const response = await anthropicStreamFinalMessage(
+    client,
+    {
+      model: MODEL,
+      max_tokens: 16000,
+      system:
+        "You convert your own editorial review into structured, grounded revision candidates. Output only the JSON object requested.",
+      messages: [
+        {
+          role: "user",
+          content: `${buildRevisionCandidatesPrompt(def, reviewMemo, intent, { statistics: stats })}\n\n---\nMANUSCRIPT:\n\n${clamped}`,
+        },
+      ],
+    },
+    callHooks,
+  );
 
-  const content = textOf(response);
-  if (!content) throw new Error("Claude returned an empty response.");
-  const { issues, warnings } = parseRevisionCandidates(content);
+  return {
+    content: textOf(response) ?? "",
+    model: response.model || MODEL,
+    generationMeta: generationMetaFromResponse(response, 16000),
+  };
+}
+
+export async function generateRevisionCandidates(
+  def: ReviewerDefinition,
+  reviewMemo: string,
+  text: string,
+  intent: AuthorIntent | null,
+  statistics?: ReviewStatistics | null,
+  callHooks?: ProviderCallHooks,
+): Promise<{
+  issues: ParsedIssue[];
+  model: string;
+  warnings: string[];
+  generationMeta: GenerationMeta;
+}> {
+  const raw = await generateRevisionCandidatesRaw(
+    def,
+    reviewMemo,
+    text,
+    intent,
+    statistics,
+    callHooks,
+  );
+  if (!raw.content) throw new Error("Claude returned an empty response.");
+  const { issues, warnings } = parseRevisionCandidates(raw.content);
   return {
     issues,
-    model: response.model || MODEL,
     warnings,
+    model: raw.model,
+    generationMeta: raw.generationMeta,
+  };
+}
+
+/** Bounded JSON-only repair. Does not re-send the manuscript. At most one call per workflow. */
+export async function repairRevisionCandidatesJson(
+  args: {
+    malformedRaw: string;
+    parseError: string;
+  } & ProviderCallHooks,
+): Promise<{
+  content: string;
+  model: string;
+  generationMeta: GenerationMeta;
+}> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  const client = new Anthropic();
+  const response = await anthropicCreateMessage(
+    client,
+    {
+      model: MODEL,
+      max_tokens: 16000,
+      system:
+        "You repair invalid JSON so it matches the requested schema. Return only JSON. Do not change editorial meaning or invent missing content.",
+      messages: [
+        {
+          role: "user",
+          content: buildRevisionCandidatesRepairPrompt({
+            malformedRaw: args.malformedRaw,
+            parseError: args.parseError,
+          }),
+        },
+      ],
+    },
+    args,
+  );
+  const content = textOf(response);
+  if (!content) throw new Error("Claude returned an empty revision-candidate repair response.");
+  return {
+    content,
+    model: response.model || MODEL,
     generationMeta: generationMetaFromResponse(response, 16000),
   };
 }

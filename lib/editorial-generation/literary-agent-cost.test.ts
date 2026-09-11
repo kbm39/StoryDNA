@@ -142,6 +142,27 @@ describe("literary-agent-cost aggregation", () => {
     });
   });
 
+  it("marks aborted in-flight calls as unknown/partial, never $0 exact", () => {
+    const ledger = createLiteraryAgentCostLedger();
+    ledger.record({
+      role: "memo_generation",
+      model: "claude-opus-4-8",
+      usage: {
+        inputTokens: null,
+        outputTokens: null,
+        cachedTokens: null,
+        cacheCreationTokens: null,
+      },
+      durationMs: 294_700,
+    });
+    const record = ledger.finalize(300_388);
+    assert.equal(record.tokenCounts, "missing");
+    assert.equal(record.costUsdKind, "unknown");
+    assert.equal(record.totalRunCostUsd, null);
+    assert.equal(record.calls[0]?.costKind, "unknown");
+    assert.equal(record.calls[0]?.costUsd, null);
+  });
+
   it("marks tokenCounts partial when a call is missing usage", () => {
     const record = aggregateLiteraryAgentCost(
       [
@@ -182,6 +203,7 @@ describe("literary-agent cost wiring in generation pipeline", () => {
     assert.match(src, /role: "memo_repair"/);
     assert.match(src, /role: "contrary_evidence"/);
     assert.match(src, /role: "rubric_retry"/);
-    assert.match(src, /role: "revision_candidates"/);
+    assert.match(src, /completeRevisionCandidatesStage/);
+    assert.match(src, /repairRevisionCandidatesJson/);
   });
 });

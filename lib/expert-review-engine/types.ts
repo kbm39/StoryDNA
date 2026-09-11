@@ -44,6 +44,10 @@ export const EXPERT_CAPABILITIES = [
   "production",
   "marketing",
   "publishing",
+  "structured_output",
+  "long_context",
+  "evidence_backed",
+  "author_challenge",
 ] as const;
 
 export type ExpertCapability = (typeof EXPERT_CAPABILITIES)[number];

@@ -2,6 +2,7 @@
  * Draft expert runtime loaders — validated but excluded from production bootstrap.
  */
 
+import { archivistRuntimeDefinition } from "@/experts/archivist/runtime-definition.ts";
 import { militaryExpertRuntimeDefinition } from "@/experts/military-expert/runtime-definition.ts";
 import { validateExpertRuntimeDefinition } from "../validate-runtime-definition.ts";
 import type { ExpertRuntimeDefinition } from "../types.ts";
@@ -13,6 +14,15 @@ export function loadMilitaryExpertDraftRuntimeDefinition(): ExpertRuntimeDefinit
     throw new Error(
       `Invalid Military Expert draft runtime definition: ${validation.errors.join("; ")}`,
     );
+  }
+  return definition;
+}
+
+export function loadArchivistDraftRuntimeDefinition(): ExpertRuntimeDefinition {
+  const definition = archivistRuntimeDefinition();
+  const validation = validateExpertRuntimeDefinition(definition);
+  if (!validation.ok) {
+    throw new Error(`Invalid Archivist draft runtime definition: ${validation.errors.join("; ")}`);
   }
   return definition;
 }

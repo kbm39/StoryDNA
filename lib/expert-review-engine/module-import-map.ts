@@ -7,6 +7,9 @@
 
 /** Approved module namespace importers keyed by exact runtime moduleId. */
 export const EXPERT_MODULE_IMPORTERS = {
+  "@/experts/archivist/definition": () => import("@/experts/archivist/definition.ts"),
+  "@/experts/archivist/normalization": () => import("@/experts/archivist/normalization.ts"),
+  "@/experts/archivist/validation": () => import("@/experts/archivist/validation.ts"),
   "@/experts/military-expert/definition": () => import("@/experts/military-expert/definition.ts"),
   "@/experts/military-expert/generation-contract": () => import("@/experts/military-expert/generation-contract.ts"),
   "@/experts/military-expert/normalization": () => import("@/experts/military-expert/normalization.ts"),

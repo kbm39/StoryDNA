@@ -5,6 +5,7 @@ import { hashExpertDefinition } from "./definition-hash.ts";
 import { editorInChiefDefinitionV1 } from "./seed/editor-in-chief.v1.ts";
 import { developmentalEditorDefinitionV1 } from "./seed/developmental-editor.v1.ts";
 import { militaryExpertRegistryDefinitionV1 } from "./seed/military-expert-registry.v1.ts";
+import { archivistRegistryDefinitionV1 } from "@/experts/archivist/registry-definition.ts";
 import { PLATFORM_EXPERT_SEED_DEFINITIONS } from "./seed/platform-seeds.ts";
 
 describe("platform expert seed definitions", () => {
@@ -21,6 +22,16 @@ describe("platform expert seed definitions", () => {
   it("Military Expert seed validates", () => {
     const result = validateExpertDefinition(militaryExpertRegistryDefinitionV1());
     assert.equal(result.ok, true);
+  });
+
+  it("Archivist seed validates as a disabled draft", () => {
+    const result = validateExpertDefinition(archivistRegistryDefinitionV1());
+    assert.equal(result.ok, true);
+    const def = archivistRegistryDefinitionV1();
+    assert.equal(def.identity.expert_key, "archivist");
+    assert.equal(def.versioning.version, "v1.0.0-draft");
+    assert.equal(def.versioning.lifecycle_status, "draft");
+    assert.equal(def.registry_metadata?.execution_wired, false);
   });
 
   it("all PLATFORM_EXPERT_SEED_DEFINITIONS have unique expert keys", () => {
@@ -43,10 +54,15 @@ describe("platform expert seed definitions", () => {
 });
 
 describe("seed idempotency logic (unit)", () => {
-  it("PLATFORM_EXPERT_SEED_DEFINITIONS includes editor, developmental, and military experts", () => {
-    assert.equal(PLATFORM_EXPERT_SEED_DEFINITIONS.length, 3);
+  it("PLATFORM_EXPERT_SEED_DEFINITIONS includes editor, developmental, military, and archivist experts", () => {
+    assert.equal(PLATFORM_EXPERT_SEED_DEFINITIONS.length, 4);
     const keys = PLATFORM_EXPERT_SEED_DEFINITIONS.map((s) => s.expertKey).sort();
-    assert.deepEqual(keys, ["developmental_editor", "editor_in_chief", "military_expert"]);
+    assert.deepEqual(keys, [
+      "archivist",
+      "developmental_editor",
+      "editor_in_chief",
+      "military_expert",
+    ]);
   });
 
   it("full platform seed list includes literary_agent (wired in seed.ts)", () => {

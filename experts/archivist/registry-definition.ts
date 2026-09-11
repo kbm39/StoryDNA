@@ -1,8 +1,8 @@
 /**
  * Registry-ready Archivist ExpertDefinitionV1 snapshot.
  *
- * Compatible with Expert Registry 0024. NOT seeded. Do not add to
- * PLATFORM_EXPERT_SEED_DEFINITIONS.
+ * Compatible with Expert Registry 0024. Seeded as a disabled draft only:
+ * execution_wired=false, runtime enabled=false, studio_selectable=false.
  */
 
 import { hashExpertDefinition } from "@/lib/expert-registry/definition-hash.ts";

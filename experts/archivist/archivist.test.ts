@@ -88,14 +88,17 @@ describe("Archivist Phase 2", () => {
     assert.equal(getExpertRuntimeDefinition("archivist", { includeDisabled: true }), null);
   });
 
-  it("is not seeded and not studio-selectable", () => {
-    assert.equal(
-      PLATFORM_EXPERT_SEED_DEFINITIONS.some((spec) => spec.expertKey === "archivist"),
-      false,
-    );
-    assert.equal(PLATFORM_EXPERT_SEED_DEFINITIONS.length, 3);
+  it("is seeded as a disabled draft and is not studio-selectable", () => {
+    const seed = PLATFORM_EXPERT_SEED_DEFINITIONS.find((spec) => spec.expertKey === "archivist");
+    assert.ok(seed);
+    assert.equal(seed.displayName, "Archivist");
+    assert.equal(seed.category, "archivist_continuity");
+    assert.equal(seed.definition().versioning.version, ARCHIVIST_VERSION);
+    assert.equal(seed.definition().versioning.lifecycle_status, "draft");
+    assert.equal(seed.definition().registry_metadata?.execution_wired, false);
+    assert.equal(PLATFORM_EXPERT_SEED_DEFINITIONS.length, 4);
     assert.equal(getExpertCatalogEntry("archivist" as never), undefined);
-    assert.equal(archivistRegistryDefinitionV1().registry_metadata?.execution_wired, false);
+    assert.equal(ARCHIVIST_CONSTITUTION.studio_selectable, false);
   });
 
   it("registry-ready definition validates", () => {
@@ -273,7 +276,7 @@ describe("Archivist Phase 2", () => {
     assert.equal(report.certification_status, ARCHIVIST_CERTIFICATION_STATUS);
     assert.equal(report.live_model_certified, false);
     assert.equal(report.runtime_disabled, true);
-    assert.equal(report.seeded, false);
+    assert.equal(report.seeded, true);
     assert.equal(report.execution_wired, false);
     assert.equal(report.errors.join("\n"), "");
     assert.equal(report.mandatory_gates_passed, true);

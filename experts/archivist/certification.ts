@@ -71,7 +71,7 @@ export interface ArchivistDraftCertificationReport {
   module_refs_ok: boolean;
   runtime_disabled: boolean;
   execution_wired: false;
-  seeded: false;
+  seeded: true;
   fixtures_evaluated: number;
   fixture_failures: string[];
   gates: ArchivistGateResult[];
@@ -233,7 +233,9 @@ export async function runArchivistDraftCertification(): Promise<ArchivistDraftCe
   if (registryDefinition.registry_metadata?.execution_wired) {
     errors.push("registry execution_wired must be false");
   }
-  if (seeded) errors.push("Archivist must not be present in PLATFORM_EXPERT_SEED_DEFINITIONS");
+  if (!seeded) {
+    errors.push("Archivist must be present in PLATFORM_EXPERT_SEED_DEFINITIONS as a disabled draft");
+  }
 
   return {
     certification_status: ARCHIVIST_CERTIFICATION_STATUS,
@@ -248,7 +250,7 @@ export async function runArchivistDraftCertification(): Promise<ArchivistDraftCe
     module_refs_ok: moduleRefs.ok,
     runtime_disabled: runtime.enabled === false,
     execution_wired: false,
-    seeded: false,
+    seeded: true,
     fixtures_evaluated: ARCHIVIST_CERTIFICATION_FIXTURES.length,
     fixture_failures: fixtureFailures,
     gates,

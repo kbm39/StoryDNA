@@ -1,4 +1,5 @@
 import type { ExpertCategory, ExpertDefinitionV1 } from "../types.ts";
+import { archivistRegistryDefinitionV1 } from "@/experts/archivist/registry-definition.ts";
 import { editorInChiefDefinitionV1 } from "./editor-in-chief.v1.ts";
 import { developmentalEditorDefinitionV1 } from "./developmental-editor.v1.ts";
 import { militaryExpertRegistryDefinitionV1 } from "./military-expert-registry.v1.ts";
@@ -33,5 +34,12 @@ export const PLATFORM_EXPERT_SEED_DEFINITIONS: PlatformExpertSeedSpec[] = [
     category: "military_expert",
     department: "Research",
     definition: militaryExpertRegistryDefinitionV1,
+  },
+  {
+    expertKey: "archivist",
+    displayName: "Archivist",
+    category: "archivist_continuity",
+    department: "Editorial",
+    definition: archivistRegistryDefinitionV1,
   },
 ];

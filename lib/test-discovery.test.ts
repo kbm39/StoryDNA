@@ -34,7 +34,7 @@ describe("npm test discovery", () => {
 
   it("discovers every current lib/**/*.test.ts file recursively", () => {
     const discovered = globSync(LIB_TEST_GLOB, { cwd: ROOT }).sort();
-    assert.equal(discovered.length, 85, "expected exactly 85 lib test files");
+    assert.equal(discovered.length, 87, "expected exactly 87 lib test files");
     assert.ok(
       discovered.includes("lib/word-count.test.ts"),
       "missing root-level lib test",
@@ -58,6 +58,14 @@ describe("npm test discovery", () => {
     assert.ok(
       discovered.includes("lib/expert-review-engine/registry/multi-version-contract.test.ts"),
       "missing P2-10 multi-version contract test",
+    );
+    assert.ok(
+      discovered.includes("lib/canon/canon.test.ts"),
+      "missing archivist canon domain test",
+    );
+    assert.ok(
+      discovered.includes("lib/canon/migration-0025.test.ts"),
+      "missing migration 0025 static test",
     );
   });
 

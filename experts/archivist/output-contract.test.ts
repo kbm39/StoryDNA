@@ -4,6 +4,7 @@ import {
   ARCHIVIST_CANON_DELTA_REQUIRED_KEYS,
   ARCHIVIST_ENTITY_AMBIGUITY_REQUIRED_KEYS,
   ARCHIVIST_FINDING_REQUIRED_KEYS,
+  ARCHIVIST_MODEL_OUTPUT_TOP_LEVEL_KEYS,
   ARCHIVIST_REVIEW_SCHEMA,
   ARCHIVIST_REVIEW_TOP_LEVEL_KEYS,
 } from "./output-schema.ts";
@@ -26,6 +27,12 @@ import {
 describe("Archivist output contract", () => {
   it("declares typed top-level, finding, delta, and ambiguity keys", () => {
     assert.equal(ARCHIVIST_REVIEW_SCHEMA, "archivist_review@v1");
+    assert.deepEqual([...ARCHIVIST_MODEL_OUTPUT_TOP_LEVEL_KEYS], [
+      "summary",
+      "findings",
+      "canon_delta",
+      "entity_ambiguities",
+    ]);
     assert.ok(ARCHIVIST_REVIEW_TOP_LEVEL_KEYS.includes("findings"));
     assert.ok(ARCHIVIST_REVIEW_TOP_LEVEL_KEYS.includes("canon_delta"));
     assert.ok(ARCHIVIST_REVIEW_TOP_LEVEL_KEYS.includes("entity_ambiguities"));

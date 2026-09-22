@@ -20,6 +20,8 @@ export interface ExpertCostUsage {
   cacheCreationTokens: number | null;
 }
 
+export type ExpertCostTokenStatus = "exact" | "partial" | "missing";
+
 export interface ExpertCostCall {
   role: string;
   provider: ExecuteExpertProvenance["provider"];
@@ -30,6 +32,8 @@ export interface ExpertCostCall {
   cacheCreationTokens: number | null;
   costUsd: number | null;
   durationMs: number;
+  token_status: ExpertCostTokenStatus;
+  status?: "ok" | "parse_failed" | "validation_failed";
 }
 
 export interface ExpertCostLedger {
@@ -42,9 +46,25 @@ export interface ExpertCostLedger {
     usage: ExpertCostUsage;
     durationMs: number;
     costUsd?: number | null;
+    status?: ExpertCostCall["status"];
   }): ExpertCostCall;
   finalize(runtimeMs: number): ExecuteExpertCostSummary;
   readonly calls: readonly ExpertCostCall[];
+}
+
+function tokenStatusForUsage(usage: ExpertCostUsage): ExpertCostTokenStatus {
+  const inputKnown = usage.inputTokens != null;
+  const outputKnown = usage.outputTokens != null;
+  if (inputKnown && outputKnown) return "exact";
+  if (
+    !inputKnown &&
+    !outputKnown &&
+    usage.cachedTokens == null &&
+    usage.cacheCreationTokens == null
+  ) {
+    return "missing";
+  }
+  return "partial";
 }
 
 function dryRunExactZero(
@@ -81,6 +101,7 @@ export function createExpertCostLedger(args: {
     usage: ExpertCostUsage;
     durationMs: number;
     costUsd?: number | null;
+    status?: ExpertCostCall["status"];
   }): ExpertCostCall {
     if (args.mode === "dry_run") {
       throw new DryRunProviderForbiddenError(
@@ -95,8 +116,10 @@ export function createExpertCostLedger(args: {
       outputTokens: call.usage.outputTokens,
       cachedTokens: call.usage.cachedTokens,
       cacheCreationTokens: call.usage.cacheCreationTokens,
-      costUsd: call.costUsd ?? 0,
+      costUsd: call.costUsd === undefined ? 0 : call.costUsd,
       durationMs: Math.max(0, call.durationMs),
+      token_status: tokenStatusForUsage(call.usage),
+      ...(call.status ? { status: call.status } : {}),
     };
     calls.push(row);
     return row;

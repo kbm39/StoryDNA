@@ -32,11 +32,12 @@ export function buildArchivistSystemPrompt(def: ReviewerDefinition): string {
     ...ARCHIVIST_CONSTITUTION_RULE_SUMMARIES.map((rule) => `- ${rule}`),
     "",
     `Mission: ${ARCHIVIST_PURPOSE}`,
-    `Output schema: ${ARCHIVIST_REVIEW_SCHEMA}`,
-    `Expert key: ${ARCHIVIST_EXPERT_KEY}`,
+    `Authoritative stored schema: ${ARCHIVIST_REVIEW_SCHEMA}`,
+    `Model-facing schema: archivist_model_output@v1 — findings, canon_delta, entity_ambiguities, summary only.`,
+    `Expert key ${ARCHIVIST_EXPERT_KEY} is StoryDNA-owned and must not be invented.`,
     `Evidence excerpts may not exceed ${ARCHIVIST_MAX_EVIDENCE_EXCERPT_WORDS} words.`,
     "Never emit accepted canon. Canon delta status is always candidate.",
-    "author_challenge_supported must be true.",
+    "Do not emit author_challenge_supported or author_action. StoryDNA sets those.",
     "Do not assign letter grades.",
   ]
     .filter((line) => line !== "")

@@ -54,4 +54,5 @@ next-env.d.ts
 
 # locally generated milestone review DOCX (scripts/generate-milestone-review-docx.mjs)
 /.calibration-results/
+/.archivist-cert-results/
 

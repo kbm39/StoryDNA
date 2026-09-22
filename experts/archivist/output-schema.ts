@@ -9,6 +9,13 @@ import {
 
 export const ARCHIVIST_OUTPUT_SCHEMA_VERSION = "archivist_output@v1-draft" as const;
 
+export const ARCHIVIST_MODEL_OUTPUT_TOP_LEVEL_KEYS = [
+  "summary",
+  "findings",
+  "canon_delta",
+  "entity_ambiguities",
+] as const;
+
 export const ARCHIVIST_REVIEW_TOP_LEVEL_KEYS = [
   "schema",
   "expert_key",

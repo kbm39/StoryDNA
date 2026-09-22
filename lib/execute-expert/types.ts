@@ -123,6 +123,7 @@ export type ExecuteExpertErrorCode =
   | "aborted"
   | "validation_failed"
   | "parse_failed"
+  | "structured_output_invalid"
   | "canon_write_forbidden";
 
 export interface ExecuteExpertProvenance {

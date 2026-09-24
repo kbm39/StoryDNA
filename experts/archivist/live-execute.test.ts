@@ -118,13 +118,13 @@ async function runLive(args: {
 }
 
 describe("Archivist live execution path — disabled, mock-certified", () => {
-  it("keeps live flags off and the public executeExpert live path fail-closed", async () => {
+  it("keeps execution gates closed and the public executeExpert live path fail-closed", async () => {
     const gates = archivistLiveGateSnapshot();
     assert.equal(gates.execution_wired, false);
     assert.equal(gates.runtime_enabled, false);
     assert.equal(gates.studio_selectable, false);
-    assert.equal(gates.live_model_certified, false);
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(gates.live_model_certified, true);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
     assert.equal(ARCHIVIST_CONSTITUTION.execution_wired, false);
     assert.equal(ARCHIVIST_CONSTITUTION.studio_selectable, false);
     assert.equal(archivistRuntimeDefinition().enabled, false);
@@ -525,6 +525,10 @@ describe("Archivist live execution path — disabled, mock-certified", () => {
     assert.equal(HOLD_FAST_PILOT_PLAN.author_acceptance_automated, false);
     assert.equal(HOLD_FAST_PILOT_PLAN.run_now, false);
     assert.equal(HOLD_FAST_PILOT_PLAN.upload_or_link_now, false);
+    assert.equal(HOLD_FAST_PILOT_PLAN.reckoning_pilot.authorized_to_run, false);
+    assert.equal(HOLD_FAST_PILOT_PLAN.reckoning_pilot.run_now, false);
+    assert.equal(HOLD_FAST_PILOT_PLAN.reckoning_pilot.automatic_canon_changes, false);
+    assert.equal(HOLD_FAST_PILOT_PLAN.book_2_gate.authorized, false);
     assert.ok(HOLD_FAST_PILOT_SEQUENCE.every((step) => step.automated_author_acceptance === false));
   });
 });

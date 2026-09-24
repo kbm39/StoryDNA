@@ -1,6 +1,6 @@
 /**
- * Draft Archivist certification harness — reports draft_not_certified.
- * Does not certify live model behavior.
+ * Draft Archivist fixture certification harness — reports draft_not_certified.
+ * Live pipeline certification is a separate bit (live_model_certified).
  */
 
 import { deepFreeze } from "@/lib/expert-review-engine/deep-freeze.ts";
@@ -32,6 +32,7 @@ import {
   ARCHIVIST_EXPERT_KEY,
   type ArchivistCertificationStatus,
 } from "./contracts.ts";
+import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 
 const EXPECTED_LA_RUNTIME_HASH =
   "bb022e5dce030d053c13b7720c92f253fbc70d3e09eb9c474d3616e33eab813b";
@@ -60,7 +61,7 @@ export interface ArchivistGateResult {
 
 export interface ArchivistDraftCertificationReport {
   certification_status: ArchivistCertificationStatus;
-  live_model_certified: false;
+  live_model_certified: typeof ARCHIVIST_LIVE_MODEL_CERTIFIED;
   expert_key: string;
   expert_version: string;
   constitution_definition_hash: string;
@@ -239,7 +240,7 @@ export async function runArchivistDraftCertification(): Promise<ArchivistDraftCe
 
   return {
     certification_status: ARCHIVIST_CERTIFICATION_STATUS,
-    live_model_certified: false,
+    live_model_certified: ARCHIVIST_LIVE_MODEL_CERTIFIED,
     expert_key: runtime.expert_key,
     expert_version: runtime.expert_version,
     constitution_definition_hash: constitutionHash,

@@ -1,9 +1,9 @@
 /**
- * Live Archivist model certification harness.
+ * Live Archivist pipeline certification harness.
  *
- * Mock-only in this phase. Does not run paid certification.
- * live_model_certified remains false until a separately approved live run
- * meets every threshold below.
+ * Mock-only. Does not run paid certification and does not enable execution.
+ * live_model_certified means the complete configured pipeline using the pinned
+ * model met the official bar — not raw Haiku accuracy.
  */
 
 import { ARCHIVIST_CONSTITUTION } from "./constitution.ts";
@@ -38,8 +38,8 @@ export type ArchivistLiveCertificationGate =
   (typeof ARCHIVIST_LIVE_CERTIFICATION_REQUIRED_GATES)[number];
 
 /**
- * Exact bar required to set live_model_certified=true.
- * This phase never sets the bit, even if a mock harness is green.
+ * Exact bar required for live_model_certified=true.
+ * Official scoring uses StoryDNA final_classification, not raw model output.
  */
 export const ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS = {
   continuity_detection: {
@@ -79,7 +79,7 @@ export const ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS = {
     max_repair_calls: ARCHIVIST_LIVE_MAX_REPAIR_CALLS,
     repair_must_be_representation_only: true,
   },
-  set_live_model_certified: false,
+  set_live_model_certified: true,
 } as const;
 
 export interface ArchivistLiveCertificationGateResult {
@@ -90,7 +90,7 @@ export interface ArchivistLiveCertificationGateResult {
 
 export interface ArchivistLiveCertificationReport {
   certification_status: typeof ARCHIVIST_CERTIFICATION_STATUS;
-  live_model_certified: false;
+  live_model_certified: typeof ARCHIVIST_LIVE_MODEL_CERTIFIED;
   paid_certification_executed: false;
   execution_wired: false;
   runtime_enabled: false;
@@ -284,11 +284,10 @@ export async function runArchivistLiveCertificationHarness(): Promise<ArchivistL
   if (ARCHIVIST_CONSTITUTION.execution_wired) errors.push("execution_wired must remain false");
   if (archivistRuntimeDefinition().enabled) errors.push("runtime.enabled must remain false");
   if (ARCHIVIST_CONSTITUTION.studio_selectable) errors.push("studio_selectable must remain false");
-  if (ARCHIVIST_LIVE_MODEL_CERTIFIED) errors.push("live_model_certified must remain false");
 
   return {
     certification_status: ARCHIVIST_CERTIFICATION_STATUS,
-    live_model_certified: false,
+    live_model_certified: ARCHIVIST_LIVE_MODEL_CERTIFIED,
     paid_certification_executed: false,
     execution_wired: false,
     runtime_enabled: false,

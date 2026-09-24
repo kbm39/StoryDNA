@@ -123,7 +123,7 @@ describe("Archivist model-facing output + envelope", () => {
   });
 
   it("records the failed session evidence gap and keeps gates closed", () => {
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
     assert.equal(
       ARCHIVIST_SMOKE_20260922_V1_EVIDENCE.cases.every((item) => item.raw_primary_preserved === false),
       true,

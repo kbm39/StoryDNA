@@ -49,7 +49,7 @@ describe("Archivist v2 regression fixtures after StoryDNA semantics", () => {
     assert.equal(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.session_id, "archivist-smoke-20260922-v2");
     assert.notEqual(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.session_id, ARCHIVIST_SMOKE_20260922_V3_SESSION_ID);
     assert.equal(ARCHIVIST_V3_AUTHORIZED, false);
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
   });
 
   it("keeps the blue/green confirmed contradiction after fenced extract", () => {

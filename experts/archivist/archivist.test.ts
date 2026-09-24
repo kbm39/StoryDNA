@@ -274,7 +274,7 @@ describe("Archivist Phase 2", () => {
   it("certification remains draft_not_certified", async () => {
     const report = await runArchivistDraftCertification();
     assert.equal(report.certification_status, ARCHIVIST_CERTIFICATION_STATUS);
-    assert.equal(report.live_model_certified, false);
+    assert.equal(report.live_model_certified, true);
     assert.equal(report.runtime_disabled, true);
     assert.equal(report.seeded, true);
     assert.equal(report.execution_wired, false);

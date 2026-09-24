@@ -2,7 +2,8 @@
  * Founder-approved paid Archivist certification smoke.
  *
  * Short synthetic manuscripts only. No Hold Fast upload, no canon writes,
- * no Studio/UI enablement, and live_model_certified stays false.
+ * no Studio/UI enablement. After formal certification this harness refuses
+ * another paid smoke so historical sessions stay frozen.
  */
 
 import { createHash } from "node:crypto";
@@ -206,7 +207,7 @@ export async function runPaidArchivistScopeCertification(args: {
 }): Promise<ArchivistPaidCertificationReport> {
   assertPaidCertificationAcknowledged(args.acknowledge);
   if (ARCHIVIST_LIVE_MODEL_CERTIFIED) {
-    throw new Error("live_model_certified must remain false during paid smoke");
+    throw new Error("paid Archivist smoke is closed after formal pipeline certification");
   }
 
   const maxCost = args.maxCostUsd ?? ARCHIVIST_PAID_SMOKE_MAX_COST_USD;

@@ -40,14 +40,14 @@ describe("Archivist live-model certification harness (mocked, unpaid)", () => {
       false,
     );
     assert.equal(ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS.structured_output_compliance.max_repair_calls, 1);
-    assert.equal(ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS.set_live_model_certified, false);
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS.set_live_model_certified, true);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
   });
 
-  it("runs the mocked harness without paid calls and does not set live_model_certified", async () => {
+  it("runs the mocked harness without paid calls and keeps execution gates closed", async () => {
     const report = await runArchivistLiveCertificationHarness();
     assert.equal(report.paid_certification_executed, false);
-    assert.equal(report.live_model_certified, false);
+    assert.equal(report.live_model_certified, true);
     assert.equal(report.ready_to_set_live_model_certified, false);
     assert.equal(report.execution_wired, false);
     assert.equal(report.runtime_enabled, false);

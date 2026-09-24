@@ -1,7 +1,6 @@
 /**
- * Broader-cert session criteria. v3 remains official 13/15 FAIL.
- * v4 is the proposed next paid session after canon-delta sanitization.
- * This file does not authorize or run v4.
+ * Broader-cert session criteria. Historical official results are frozen:
+ * v3 = 13/15 FAIL, v4 = 15/15 PASS. Do not authorize another paid session here.
  */
 
 export const ARCHIVIST_CERT_20260924_V2_SESSION_ID = "archivist-cert-20260924-v2" as const;
@@ -61,3 +60,5 @@ export const ARCHIVIST_CERT_20260924_V4_SUCCESS_BAR = {
   no_uncontrolled_repair_loops: true,
   canon_writes: 0,
 } as const;
+
+export const ARCHIVIST_CERT_20260924_V4_OFFICIAL_RESULT = "15/15 PASS" as const;

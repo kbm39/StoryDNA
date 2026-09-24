@@ -45,7 +45,7 @@ export interface LiveArchivistExecutionOptions extends ExpertExecutionOptions {
   allowUnwiredForTests?: boolean;
   /**
    * CLI-only paid certification smoke. Never set from UI, Trigger, or executeExpert.
-   * Still requires an injected Anthropic provider. Does not flip live_model_certified.
+   * Still requires an injected Anthropic provider. Does not enable execution or Studio.
    */
   allowPaidCertificationRun?: boolean;
   provider?: import("./live-provider.ts").ArchivistLiveProvider;

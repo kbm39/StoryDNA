@@ -19,6 +19,8 @@ import {
 import { ARCHIVIST_CERT_20260924_V1_EVIDENCE } from "./session-archivist-cert-20260924-v1.ts";
 import { ARCHIVIST_CERT_20260924_V2_EVIDENCE } from "./session-archivist-cert-20260924-v2.ts";
 import { ARCHIVIST_CERT_20260924_V3_EVIDENCE } from "./session-archivist-cert-20260924-v3.ts";
+import { ARCHIVIST_CERT_20260924_V4_EVIDENCE } from "./session-archivist-cert-20260924-v4.ts";
+import { ARCHIVIST_SMOKE_20260922_V3_EVIDENCE } from "./session-archivist-smoke-20260922-v3.ts";
 import {
   ARCHIVIST_CERT_20260924_V2_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V2_SESSION_ID,
@@ -29,12 +31,13 @@ import {
   ARCHIVIST_CERT_20260924_V3_SESSION_ID,
   ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR,
   ARCHIVIST_CERT_20260924_V4_AUTHORIZED,
+  ARCHIVIST_CERT_20260924_V4_OFFICIAL_RESULT,
   ARCHIVIST_CERT_20260924_V4_SESSION_ID,
 } from "./v4-certification-criteria.ts";
 
 describe("Archivist paid scope certification", () => {
   it("requires the founder ack token and never flips live gates", () => {
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
     assert.equal(HOLD_FAST_PILOT_PLAN.run_now, false);
     assert.throws(() => assertPaidCertificationAcknowledged(undefined));
     assert.throws(() => assertPaidCertificationAcknowledged("yes"));
@@ -58,8 +61,11 @@ describe("Archivist paid scope certification", () => {
     assert.equal(ARCHIVIST_CERT_20260924_V3_MODEL, ARCHIVIST_PAID_SMOKE_MODEL);
     assert.equal(ARCHIVIST_CERT_20260924_V3_CASE_COUNT, 15);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.official_passes, 15);
+    assert.equal(ARCHIVIST_SMOKE_20260922_V3_EVIDENCE.official_result, "3/3 PASS");
     assert.equal(ARCHIVIST_CERT_20260924_V4_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V4_SESSION_ID, "archivist-cert-20260924-v4");
+    assert.equal(ARCHIVIST_CERT_20260924_V4_OFFICIAL_RESULT, "15/15 PASS");
+    assert.equal(ARCHIVIST_CERT_20260924_V4_EVIDENCE.official_result, "15/15 PASS");
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.false_confirmed_contradictions, 0);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.canon_writes, 0);
     assert.ok(ARCHIVIST_PAID_SCOPE_CASES.every((item) => !/hold fast/i.test(item.manuscript_text)));

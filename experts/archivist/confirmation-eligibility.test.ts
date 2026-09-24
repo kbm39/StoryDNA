@@ -139,7 +139,7 @@ describe("Archivist confirmation eligibility and laterality", () => {
     assert.equal(ARCHIVIST_CERT_20260924_V3_SESSION_ID, "archivist-cert-20260924-v3");
     assert.equal(ARCHIVIST_CERT_20260924_V4_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V4_SESSION_ID, "archivist-cert-20260924-v4");
-    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
+    assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, true);
   });
 
   it("promotes an eligible possible finding and records the audit", () => {

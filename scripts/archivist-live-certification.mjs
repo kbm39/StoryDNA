@@ -1,6 +1,6 @@
 /**
  * Paid Archivist certification smoke CLI.
- * Does not enable Studio, Trigger, or live_model_certified.
+ * Does not enable Studio, Trigger, or execution. Paid smoke is closed after certification.
  */
 const { parsePaidCertificationArgv, runPaidArchivistScopeCertification } = await import(
   "@/experts/archivist/live-paid-certification.ts"

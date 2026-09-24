@@ -72,7 +72,8 @@ describe("Archivist certification fixtures and gates", () => {
     );
     assert.equal(report.mandatory_gates_passed, true, report.errors.join("\n"));
     assert.equal(report.certification_status, ARCHIVIST_CERTIFICATION_STATUS);
-    assert.equal(report.live_model_certified, false);
+    assert.equal(report.live_model_certified, true);
+    assert.equal(report.execution_wired, false);
     assert.equal(report.definition_validation_ok, true);
     assert.equal(report.runtime_validation_ok, true);
     assert.equal(report.module_refs_ok, true);

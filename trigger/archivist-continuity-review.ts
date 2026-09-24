@@ -3,7 +3,7 @@
  *
  * Uses the hardened Literary Agent execution foundation (heartbeat/yield,
  * timeout.signal, AbortSignal, maxDuration). Not deployed or run in this phase.
- * If invoked, fail closed: execution_wired and live_model_certified remain false.
+ * If invoked, fail closed: execution_wired remains false. Certification does not enable Trigger.
  */
 
 import { task, heartbeats, timeout } from "@trigger.dev/sdk/v3";

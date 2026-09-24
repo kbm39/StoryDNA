@@ -73,6 +73,44 @@ export const HOLD_FAST_PILOT_SEQUENCE = [
   },
 ] as const;
 
+export const RECKONING_STAGING_PILOT = {
+  series: HOLD_FAST_SERIES_TITLE,
+  book: HOLD_FAST_BOOK_1_TITLE,
+  authorized_to_run: false,
+  run_now: false,
+  purpose: [
+    "read a real full manuscript",
+    "extract candidate canon",
+    "detect within-book continuity conflicts",
+    "measure false positives",
+    "measure evidence quality",
+    "measure full-novel cost/runtime",
+    "make zero authoritative canon changes automatically",
+  ],
+  must_produce: [
+    "findings",
+    "both_side_evidence",
+    "candidate_canon",
+    "entity_ambiguities",
+    "model_vs_final_classification_diagnostics",
+    "full_cost_ledger",
+  ],
+  automatic_canon_changes: false,
+  author_acceptance: "after_review",
+} as const;
+
+export const HOLD_FAST_BOOK_2_GATE = {
+  book: HOLD_FAST_BOOK_2_TITLE,
+  authorized: false,
+  requires: [
+    "the_reckoning_pilot_complete",
+    "kevin_reviews_archivist_findings",
+    "kevin_approves_selected_book_1_canon",
+    "accepted_hold_fast_series_bible_canon_exists",
+  ],
+  then: "No Mercy = Book 2 continuity audit against accepted Book 1 canon",
+} as const;
+
 export const HOLD_FAST_PILOT_PLAN = {
   series_title: HOLD_FAST_SERIES_TITLE,
   books: HOLD_FAST_PILOT_BOOKS,
@@ -80,4 +118,6 @@ export const HOLD_FAST_PILOT_PLAN = {
   author_acceptance_automated: false,
   upload_or_link_now: false,
   run_now: false,
+  reckoning_pilot: RECKONING_STAGING_PILOT,
+  book_2_gate: HOLD_FAST_BOOK_2_GATE,
 } as const;

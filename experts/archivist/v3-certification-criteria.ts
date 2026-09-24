@@ -1,6 +1,6 @@
 /**
- * Expected official success for a future paid session archivist-smoke-20260922-v3.
- * This file does not authorize or run that session.
+ * Historical smoke-v3 criteria. Official result is frozen as 3/3 PASS.
+ * This file does not authorize or rerun that session.
  */
 
 export const ARCHIVIST_SMOKE_20260922_V3_SESSION_ID = "archivist-smoke-20260922-v3" as const;
@@ -28,3 +28,5 @@ export const ARCHIVIST_V3_CASE_CRITERIA = {
 } as const;
 
 export const ARCHIVIST_V3_REQUIRED_OFFICIAL_PASSES = 3 as const;
+
+export const ARCHIVIST_SMOKE_20260922_V3_OFFICIAL_RESULT = "3/3 PASS" as const;

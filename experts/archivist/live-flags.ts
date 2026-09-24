@@ -1,14 +1,28 @@
 /**
- * Live Archivist enablement gates. All remain closed in this phase.
- * Do not flip these without a separately approved live-model certification.
+ * Live Archivist enablement gates.
+ *
+ * live_model_certified may be true after the formal pipeline checkpoint.
+ * execution_wired, runtime enabled, studio_selectable, and Production remain closed
+ * until separately approved. Certification and execution are different gates.
  */
 
 import { ARCHIVIST_CONSTITUTION } from "./constitution.ts";
 import { archivistRuntimeDefinition } from "./runtime-definition.ts";
 import { archivistRegistryDefinitionV1 } from "./registry-definition.ts";
 
-/** Explicit live-model certification bit. Remains false until a paid live cert is approved. */
-export const ARCHIVIST_LIVE_MODEL_CERTIFIED = false as const;
+/**
+ * Meaning of live_model_certified:
+ * the complete configured live Archivist pipeline using the pinned model
+ * passed the official synthetic certification bar (final_classification).
+ *
+ * This is NOT raw Haiku accuracy. v4 raw detection was 5/7.
+ * Do not read this flag as "Haiku is 100% accurate."
+ */
+export const ARCHIVIST_LIVE_MODEL_CERTIFIED_SEMANTICS =
+  "complete_configured_live_expert_pipeline_using_certified_model" as const;
+
+/** Formal checkpoint after archivist-cert-20260924-v4. Does not enable execution. */
+export const ARCHIVIST_LIVE_MODEL_CERTIFIED = true as const;
 
 export class ArchivistLiveDisabledError extends Error {
   readonly code = "archivist_live_disabled" as const;
@@ -30,14 +44,14 @@ export function archivistLiveGateSnapshot(): {
   execution_wired: false;
   runtime_enabled: false;
   studio_selectable: false;
-  live_model_certified: false;
+  live_model_certified: true;
   registry_execution_wired: false;
 } {
   return {
     execution_wired: false,
     runtime_enabled: false,
     studio_selectable: false,
-    live_model_certified: false,
+    live_model_certified: true,
     registry_execution_wired: false,
   };
 }

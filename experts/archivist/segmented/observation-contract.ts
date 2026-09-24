@@ -16,7 +16,7 @@ import type {
   SegmentObservationFact,
 } from "./types.ts";
 
-const FACT_GROUPS = [
+export const FACT_GROUPS = [
   "candidate_facts",
   "events",
   "state_transitions",
@@ -34,6 +34,15 @@ const FACT_GROUPS = [
   "weapons_equipment",
   "vehicles",
   "organizations",
+] as const;
+
+export const RECOVERABLE_TOP_LEVEL_ARRAYS = [
+  "entities",
+  "aliases",
+  ...FACT_GROUPS,
+  "local_continuity_concerns",
+  "evidence_references",
+  "entity_ambiguities",
 ] as const;
 
 export function emptySegmentObservation(segmentId: string): ArchivistSegmentObservation {

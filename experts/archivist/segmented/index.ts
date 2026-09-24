@@ -33,6 +33,12 @@ export {
 } from "./checkpoint.ts";
 export { selectSegmentsToRun } from "./resume.ts";
 export { mergeSegmentObservations } from "./book-graph.ts";
+export { flattenNestedEntityFacts, normalizeSegmentObservation } from "./observation-normalization.ts";
+export {
+  chooseObservationPreferringRecoveredPrimary,
+  recoverAndNormalizeSegmentObservation,
+  recoverCompleteTopLevelArrays,
+} from "./nested-observation-adapter.ts";
 export { pairDeterministicContradictions } from "./contradiction-pairing.ts";
 export { batchReconciliationItems, buildReconciliationItems } from "./reconciliation.ts";
 export { rehydrateEvidenceRecord, downgradeUnrehydratedConfirmed } from "./evidence-rehydration.ts";

@@ -4,6 +4,7 @@
  * Order:
  * raw payload already parsed/enveloped
  * → deterministic entity resolution
+ * → prior-canon provenance attachment
  * → temporal/persistence evaluation
  * → confirmation eligibility / final classification
  * → safe normalization
@@ -24,6 +25,8 @@ import {
 } from "./entity-resolution.ts";
 import { normalizeArchivistReview } from "./normalization.ts";
 import { applyConfirmationEligibility } from "./confirmation-eligibility.ts";
+import { ARCHIVIST_CERTIFICATION_PRIOR_SOURCES } from "./prior-source-catalog.ts";
+import { applyPriorCanonProvenance } from "./prior-canon-provenance.ts";
 import { applyArchivistTemporalContinuity } from "./temporal-continuity.ts";
 
 export interface ArchivistLivePostprocessOptions {
@@ -82,19 +85,27 @@ export function applyArchivistLivePostprocess(
   };
 
   const identitiesApplied = applyArchivistEntityResolution(review, entityContext);
+  const withProvenance = applyPriorCanonProvenance(identitiesApplied, {
+    canonStore: entityContext.canonStore,
+    priorSources: resolvedOptions.useCertificationEntityCatalog
+      ? ARCHIVIST_CERTIFICATION_PRIOR_SOURCES
+      : undefined,
+    currentManuscriptId: identitiesApplied.manuscript_id,
+    currentVersionId: identitiesApplied.manuscript_version_id,
+  });
   const optionsWithContext: ArchivistLivePostprocessOptions = {
     ...resolvedOptions,
     entityContext,
   };
-  const temporallyEvaluated = identitiesApplied.findings.map((finding) =>
+  const temporallyEvaluated = withProvenance.findings.map((finding) =>
     applyArchivistTemporalContinuity(finding),
   );
   const classified = temporallyEvaluated
-    .map((finding) => applyFinalClassification(finding, optionsWithContext, identitiesApplied))
+    .map((finding) => applyFinalClassification(finding, optionsWithContext, withProvenance))
     .filter((finding) => !isUnnecessaryCleanVerification(finding));
 
   return normalizeArchivistReview({
-    ...identitiesApplied,
+    ...withProvenance,
     findings: classified,
     generation: {
       ...identitiesApplied.generation,

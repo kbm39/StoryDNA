@@ -12,6 +12,7 @@ import {
   type ArchivistReview,
 } from "./contracts.ts";
 import { ARCHIVIST_NORMALIZATION_VERSION, ARCHIVIST_PROMPT_VERSION, ARCHIVIST_VALIDATOR_VERSION } from "./runtime-definition.ts";
+import { ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS } from "./prior-source-catalog.ts";
 
 export const FIXTURE_MANUSCRIPT_ID = "ms-archivist-fixture";
 export const FIXTURE_MANUSCRIPT_VERSION_ID = "mv-archivist-fixture";
@@ -54,19 +55,35 @@ function located(
   role: ArchivistEvidenceRecord["evidence_role"],
   source: ArchivistEvidenceRecord["source_kind"] = "manuscript",
   canonFactId?: string,
+  sourceIdentity?: {
+    manuscript_id: string;
+    manuscript_version_id: string;
+    content_hash: string;
+  },
 ): ArchivistEvidenceRecord {
+  const identity = sourceIdentity ?? {
+    manuscript_id: FIXTURE_MANUSCRIPT_ID,
+    manuscript_version_id: FIXTURE_MANUSCRIPT_VERSION_ID,
+    content_hash: FIXTURE_CONTENT_HASH,
+  };
   return {
     excerpt,
     locator,
     evidence_role: role,
     verification_status: "located",
     source_kind: source,
-    manuscript_id: FIXTURE_MANUSCRIPT_ID,
-    manuscript_version_id: FIXTURE_MANUSCRIPT_VERSION_ID,
-    content_hash: FIXTURE_CONTENT_HASH,
+    manuscript_id: identity.manuscript_id,
+    manuscript_version_id: identity.manuscript_version_id,
+    content_hash: identity.content_hash,
     canon_fact_id: canonFactId,
   };
 }
+
+const FIXTURE_PRIOR_BOOK_1 = {
+  manuscript_id: ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS.book1Manuscript,
+  manuscript_version_id: ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS.book1Version,
+  content_hash: ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS.book1Hash,
+};
 
 function metricsFor(review: Omit<ArchivistReview, "metrics" | "summary"> & {
   summary?: ArchivistReview["summary"];
@@ -308,6 +325,7 @@ export const FIXTURE_03_SERIES_AGE: ArchivistCertificationFixture = {
             "conflicting_canon",
             "prior_volume_canon",
             "canon-fact-age-mara",
+            FIXTURE_PRIOR_BOOK_1,
           ),
         ],
         temporal_analysis: {
@@ -438,6 +456,7 @@ export const FIXTURE_07_RELATIONSHIP: ArchivistCertificationFixture = {
   id: "relationship_history",
   title: "Relationship history",
   safety: false,
+  manuscript_text: "Chapter 6. Mara had never met Calder before tonight.",
   expect: { validation_ok: true, confirmed_count: 1 },
   review: baseReview({
     series_id: FIXTURE_SERIES_ID,
@@ -446,12 +465,13 @@ export const FIXTURE_07_RELATIONSHIP: ArchivistCertificationFixture = {
         id: "f-relationship",
         issue_type: "relationship",
         explanation: "Current book says Mara never met Calder; accepted prior history records them as former partners.",
+        current_location: { locator: "Chapter 6", chapter: "6", book_order: 2 },
         current_evidence: [
           located("Mara had never met Calder before tonight.", "Chapter 6", "current_observation"),
         ],
         conflicting_source: "prior_volume_canon",
         conflicting_location: { locator: "Book 1 Chapter 12", chapter: "12", book_order: 1 },
-        conflicting_canon_fact_id: "canon-fact-rel-mara-calder",
+        conflicting_canon_fact_id: ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS.relationshipFact,
         conflicting_canon_status: "accepted",
         conflicting_authority: "prior_volume_canon",
         conflicting_evidence: [
@@ -460,7 +480,8 @@ export const FIXTURE_07_RELATIONSHIP: ArchivistCertificationFixture = {
             "Book 1 Chapter 12",
             "conflicting_canon",
             "prior_volume_canon",
-            "canon-fact-rel-mara-calder",
+            ARCHIVIST_FIXTURE_PRIOR_SOURCE_IDS.relationshipFact,
+            FIXTURE_PRIOR_BOOK_1,
           ),
         ],
         temporal_analysis: {

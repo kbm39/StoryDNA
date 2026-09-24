@@ -10,9 +10,11 @@
  */
 
 import type { ArchivistContinuityCompatibility, ArchivistFinding } from "./contracts.ts";
+import { textHasAssertedPhrase } from "./assertion-classifier.ts";
 
 function evidenceHaystack(finding: ArchivistFinding): string {
   return [
+    finding.explanation,
     finding.temporal_analysis?.explanation,
     ...(finding.current_evidence ?? []).map((record) => record.excerpt),
     ...(finding.conflicting_evidence ?? []).map((record) => record.excerpt),
@@ -124,13 +126,7 @@ export function injuryLateralityMismatch(finding: ArchivistFinding): boolean {
 }
 
 export function hasSeparateInjuryExplanation(finding: ArchivistFinding): boolean {
-  const haystack = evidenceHaystack(finding).toLowerCase();
-  return SEPARATE_INJURY_MARKERS.some((marker) => {
-    if (!haystack.includes(marker)) return false;
-    const idx = haystack.indexOf(marker);
-    const before = haystack.slice(Math.max(0, idx - 48), idx);
-    return !/\b(no|not|without|lacking|never|neither)\b/.test(before);
-  });
+  return textHasAssertedPhrase(evidenceHaystack(finding), SEPARATE_INJURY_MARKERS);
 }
 
 export function evaluateInjuryContinuity(finding: ArchivistFinding): {

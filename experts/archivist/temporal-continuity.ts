@@ -12,6 +12,7 @@ import type {
   ArchivistFinding,
   ArchivistObservationTemporalRelation,
 } from "./contracts.ts";
+import { phraseIsAsserted } from "./assertion-classifier.ts";
 import { classifyFactPersistence } from "./fact-persistence.ts";
 import { evaluateInjuryContinuity } from "./injury-laterality.ts";
 import { evaluateKnowledgeContinuity } from "./knowledge-state.ts";
@@ -117,25 +118,13 @@ export function transitionEvidenceText(finding: ArchivistFinding): string {
     .join(" ");
 }
 
-function markerIsAffirmative(haystack: string, marker: string): boolean {
-  let from = 0;
-  while (from < haystack.length) {
-    const idx = haystack.indexOf(marker, from);
-    if (idx < 0) return false;
-    const before = haystack.slice(Math.max(0, idx - 48), idx);
-    if (!/\b(no|not|without|lacking|never|neither)\b/.test(before)) return true;
-    from = idx + marker.length;
-  }
-  return false;
-}
-
 export function hasTransitionEvidence(finding: ArchivistFinding, factType: string): boolean {
-  const haystack = transitionEvidenceText(finding).toLowerCase();
+  const haystack = transitionEvidenceText(finding);
   const markers = [
     ...(TRANSITION_MARKERS[factType] ?? []),
     ...(factType === "appearance" ? TRANSITION_MARKERS.appearance : []),
   ];
-  return markers.some((marker) => markerIsAffirmative(haystack, marker));
+  return markers.some((marker) => phraseIsAsserted(haystack, marker));
 }
 
 export function evaluateContinuityCompatibility(

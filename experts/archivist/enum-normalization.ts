@@ -18,6 +18,7 @@ import {
   ARCHIVIST_SEVERITY_LEVELS,
   ARCHIVIST_AUTHOR_ACTIONS,
 } from "./contracts.ts";
+import { ARCHIVIST_ISSUE_TYPE_FACT_TYPE_ALIASES } from "./prior-canon-provenance.ts";
 
 export const ARCHIVIST_ENUM_NORMALIZATION_VERSION = "archivist_enum_normalization@v1" as const;
 
@@ -100,7 +101,7 @@ export function normalizeArchivistEnumValue(
     case "issue_type":
       return foldAllowed(value, ARCHIVIST_ISSUE_TYPES, null, path, audits);
     case "fact_type":
-      return foldAllowed(value, ARCHIVIST_FACT_TYPES, null, path, audits);
+      return foldAllowed(value, ARCHIVIST_FACT_TYPES, ARCHIVIST_ISSUE_TYPE_FACT_TYPE_ALIASES, path, audits);
     case "authority":
       return foldAllowed(value, ARCHIVIST_AUTHORITIES, null, path, audits);
     case "entity_type":

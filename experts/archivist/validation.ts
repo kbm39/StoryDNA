@@ -26,6 +26,11 @@ import {
 } from "./contracts.ts";
 import { countExcerptWords, confirmedContradictionHasBothSides } from "./evidence.ts";
 import { ARCHIVIST_MAX_EVIDENCE_EXCERPT_WORDS } from "./contracts.ts";
+import {
+  hasPriorCanonLocator,
+  hasPriorCanonSourceIdentity,
+  isPriorCanonFinding,
+} from "./prior-canon-provenance.ts";
 
 const LETTER_GRADE_PATTERN =
   /\b(?:grade\s*[A-F][+-]?|[A-F][+-]?\s*grade|letter\s*grade|[A-F][+-]?\s*(?:average|score))\b/i;
@@ -180,6 +185,17 @@ function validateFinding(
     }
     if (finding.conflicting_canon_fact_id && (finding.conflicting_evidence?.length ?? 0) === 0) {
       errors.push(`${prefix}: conflicting canon fact referenced without conflicting evidence`);
+    }
+    if (isPriorCanonFinding(finding)) {
+      if (!hasPriorCanonLocator(finding)) {
+        errors.push(`${prefix}: prior-canon locator is required for a confirmed contradiction`);
+      }
+      if (!hasPriorCanonSourceIdentity(finding)) {
+        errors.push(`${prefix}: prior-canon source identity is required for a confirmed contradiction`);
+      }
+      if (!finding.conflicting_source) {
+        errors.push(`${prefix}: conflicting canon fact referenced without provenance`);
+      }
     }
   }
 }

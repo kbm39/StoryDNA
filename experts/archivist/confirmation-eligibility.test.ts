@@ -16,10 +16,19 @@ import { evaluateContinuityCompatibility } from "./temporal-continuity.ts";
 import { classifyFactPersistence } from "./fact-persistence.ts";
 import type { ArchivistFinding } from "./contracts.ts";
 import { ARCHIVIST_CERT_20260924_V1_EVIDENCE } from "./session-archivist-cert-20260924-v1.ts";
+import { ARCHIVIST_CERT_20260924_V2_EVIDENCE } from "./session-archivist-cert-20260924-v2.ts";
 import {
   ARCHIVIST_CERT_20260924_V2_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V2_SESSION_ID,
+  ARCHIVIST_CERT_20260924_V3_AUTHORIZED,
+  ARCHIVIST_CERT_20260924_V3_SESSION_ID,
 } from "./v4-certification-criteria.ts";
+import {
+  ARCHIVIST_V2_INJURY_MANUSCRIPT,
+  ARCHIVIST_V2_INJURY_PAYLOAD,
+  ARCHIVIST_V2_OBJECT_MANUSCRIPT,
+  ARCHIVIST_V2_OBJECT_PAYLOAD,
+} from "./v2-cert-regression-fixtures.ts";
 import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 import {
   ARCHIVIST_V2_AMBIGUOUS_JOHN_PAYLOAD,
@@ -114,11 +123,15 @@ function run(raw: unknown, manuscript: string) {
 }
 
 describe("Archivist confirmation eligibility and laterality", () => {
-  it("preserves v1 as an official 12/15 FAIL and does not authorize v2", () => {
+  it("preserves v1 and v2 as official 12/15 FAILs and does not authorize v3", () => {
     assert.equal(ARCHIVIST_CERT_20260924_V1_EVIDENCE.official_result, "12/15 FAIL");
     assert.equal(ARCHIVIST_CERT_20260924_V1_EVIDENCE.not_a_pass, true);
+    assert.equal(ARCHIVIST_CERT_20260924_V2_EVIDENCE.official_result, "12/15 FAIL");
+    assert.equal(ARCHIVIST_CERT_20260924_V2_EVIDENCE.not_a_pass, true);
     assert.equal(ARCHIVIST_CERT_20260924_V2_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V2_SESSION_ID, "archivist-cert-20260924-v2");
+    assert.equal(ARCHIVIST_CERT_20260924_V3_AUTHORIZED, false);
+    assert.equal(ARCHIVIST_CERT_20260924_V3_SESSION_ID, "archivist-cert-20260924-v3");
     assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
   });
 
@@ -346,6 +359,26 @@ describe("Archivist confirmation eligibility and laterality", () => {
       { entityContext: ENTITY },
     );
     assert.equal(eligibility.final_classification, "possible_continuity_conflict");
+  });
+
+  it("confirms the v2 injury and object shapes after assertion filtering", () => {
+    const injury = run(ARCHIVIST_V2_INJURY_PAYLOAD, ARCHIVIST_V2_INJURY_MANUSCRIPT);
+    assert.equal(injury.validation.ok, true, injury.validation.errors.join("; "));
+    assert.equal(injury.review.findings[0]?.final_classification, "confirmed_contradiction");
+    assert.equal(injury.review.findings[0]?.confirmation_eligibility, "eligible");
+    assert.equal(
+      injury.review.findings[0]?.temporal_analysis.continuity_compatibility,
+      "incompatible",
+    );
+
+    const object = run(ARCHIVIST_V2_OBJECT_PAYLOAD, ARCHIVIST_V2_OBJECT_MANUSCRIPT);
+    assert.equal(object.validation.ok, true, object.validation.errors.join("; "));
+    assert.equal(object.review.findings[0]?.final_classification, "confirmed_contradiction");
+    assert.equal(object.review.findings[0]?.confirmation_eligibility, "eligible");
+    assert.ok(
+      object.review.findings[0]?.temporal_analysis.continuity_compatibility === "incompatible" ||
+        object.review.findings[0]?.temporal_analysis.continuity_compatibility === "unexplained_change",
+    );
   });
 
   it("promotes the three v1 missed cases to final confirmed", () => {

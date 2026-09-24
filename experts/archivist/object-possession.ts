@@ -7,6 +7,7 @@
  */
 
 import type { ArchivistContinuityCompatibility, ArchivistFinding } from "./contracts.ts";
+import { textHasAssertedPhrase } from "./assertion-classifier.ts";
 
 const TRANSFER_MARKERS = [
   "gave",
@@ -17,10 +18,14 @@ const TRANSFER_MARKERS = [
   "stole",
   "stolen",
   "lost",
+  "transferred",
+  "transfer",
   "found",
   "left it",
   "took it",
   "returned",
+  "recovered",
+  "recovery",
   "duplicate",
   "copy of",
   "another compass",
@@ -70,13 +75,7 @@ export function objectAppearsUnique(finding: ArchivistFinding): boolean {
 }
 
 export function hasObjectTransferExplanation(finding: ArchivistFinding): boolean {
-  const text = haystack(finding).toLowerCase();
-  return TRANSFER_MARKERS.some((marker) => {
-    if (!text.includes(marker)) return false;
-    const idx = text.indexOf(marker);
-    const before = text.slice(Math.max(0, idx - 48), idx);
-    return !/\b(no|not|without|lacking|never|neither)\b/.test(before);
-  });
+  return textHasAssertedPhrase(haystack(finding), TRANSFER_MARKERS);
 }
 
 function sameTime(finding: ArchivistFinding): boolean {

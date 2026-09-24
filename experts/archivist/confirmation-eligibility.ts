@@ -21,6 +21,11 @@ import type { ArchivistEntityResolutionContext } from "./entity-resolution.ts";
 import { classifyFactPersistence, persistenceAllowsUnexplainedConfirm } from "./fact-persistence.ts";
 import { evaluateInjuryContinuity } from "./injury-laterality.ts";
 import { evaluateObjectPossessionContinuity } from "./object-possession.ts";
+import {
+  hasPriorCanonLocator,
+  hasPriorCanonSourceIdentity,
+  isPriorCanonFinding,
+} from "./prior-canon-provenance.ts";
 import { confirmedContradictionMayStand, findingTextHints } from "./temporal-continuity.ts";
 
 export const ARCHIVIST_CONFIRMATION_ELIGIBILITIES = [
@@ -57,6 +62,7 @@ const ISSUE_TYPES_REQUIRING_SUBJECT = new Set([
   "alive_status",
   "age",
   "family_history",
+  "prior_event_reference",
   "rank_title",
 ]);
 
@@ -152,6 +158,10 @@ function failedConfirmationGates(
   if (!finding.current_location?.locator?.trim() || !finding.conflicting_location?.locator?.trim()) {
     failed.push("missing_locators");
   }
+  if (isPriorCanonFinding(finding)) {
+    if (!hasPriorCanonLocator(finding)) failed.push("missing_prior_locator");
+    if (!hasPriorCanonSourceIdentity(finding)) failed.push("missing_prior_source_identity");
+  }
   if (!confirmedContradictionHasBothSides(finding)) failed.push("both_sides_not_verified");
   if (!manuscriptEvidenceVerified(finding, context?.manuscriptText)) {
     failed.push("passage_verification_failed");
@@ -200,6 +210,8 @@ function eligibilityFromFailures(failed: string[]): ConfirmationEligibility {
       "missing_current_evidence",
       "missing_conflicting_evidence",
       "missing_locators",
+      "missing_prior_locator",
+      "missing_prior_source_identity",
       "both_sides_not_verified",
       "passage_verification_failed",
       "temporal_relation_unknown",

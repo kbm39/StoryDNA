@@ -90,7 +90,7 @@ export function archivistRegistryDefinitionV1(): ExpertDefinitionV1 {
       ],
       bias_avoidance_rules: [
         "Do not treat later-book author-approved retcons as errors against superseded canon.",
-        "Do not treat disjoint temporal states as contradictions.",
+        "Do not treat different chapters as automatically non-contradictory. Persistent facts still conflict without transition evidence.",
       ],
       disclosure_requirements: ["Disclose entity ambiguity instead of guessing."],
       uncertainty_rules: [

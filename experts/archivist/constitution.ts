@@ -115,7 +115,7 @@ export const ARCHIVIST_CONSTITUTION_RULES = {
       "supersession_retcon_status",
     ],
     summary:
-      "Do not call two facts contradictory merely because values differ. Disjoint temporal states may both be valid.",
+      "Do not call two facts contradictory merely because values differ. Separate when observations occur from whether the change is compatible. Persistent facts remain contradictory across chapters unless transition evidence exists. Changeable facts may both be valid when chronology and transition evidence exist.",
   },
   F_series_authority: {
     id: "F",
@@ -129,7 +129,7 @@ export const ARCHIVIST_CONSTITUTION_RULES = {
     title: "AMBIGUOUS ENTITY IDENTITY",
     on_ambiguous: ["author_verification_needed", "unresolved_entity_ambiguity"],
     summary:
-      "Shared aliases may refer to multiple entities. If entity resolution is ambiguous, do not guess.",
+      "Shared aliases may refer to multiple entities. The model names entities; StoryDNA resolves IDs. If resolution is ambiguous, do not guess or invent identifiers.",
   },
   H_story_grounding: {
     id: "H",

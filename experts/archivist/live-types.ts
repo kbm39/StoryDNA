@@ -56,6 +56,8 @@ export interface LiveArchivistExecutionOptions extends ExpertExecutionOptions {
     prior_authoritative_manuscript_versions?: LiveArchivistRequest["prior_authoritative_manuscript_versions"];
   }) => Promise<readonly CanonFact[]> | readonly CanonFact[];
   allowRepair?: boolean;
+  /** Optional fixture-owned identities. Never invents IDs. */
+  entityCatalog?: import("./entity-catalog.ts").ArchivistResolvableEntity[];
 }
 
 export interface LiveArchivistExecutionResult extends ExecuteExpertResult {

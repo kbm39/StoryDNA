@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ARCHIVIST_CERTIFICATION_ENTITY_CATALOG } from "./entity-catalog.ts";
 import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 import { createAnthropicArchivistLiveProvider } from "./live-provider.ts";
 import { runArchivistLiveExecution } from "./live-execute.ts";
@@ -37,6 +38,7 @@ export interface ArchivistPaidScopeCase {
   expect: {
     min_confirmed?: number;
     max_confirmed: number;
+    max_author_verification?: number;
   };
 }
 
@@ -67,7 +69,7 @@ export const ARCHIVIST_PAID_SCOPE_CASES: readonly ArchivistPaidScopeCase[] = [
     gate: "false_positives",
     manuscript_text:
       "Chapter 1. Mara kept the blue-eyed description consistent through the Harbor chapters.",
-    expect: { max_confirmed: 0 },
+    expect: { max_confirmed: 0, max_author_verification: 0 },
   },
 ];
 
@@ -160,8 +162,14 @@ export function scorePaidScopeCase(
   const count = confirmed.length;
   const min = fixture.expect.min_confirmed ?? 0;
   const countOk = count >= min && count <= fixture.expect.max_confirmed;
+  const verificationCount = (result.review?.findings ?? []).filter(
+    (finding) => finding.classification === "author_verification_needed",
+  ).length;
+  const verificationOk =
+    fixture.expect.max_author_verification == null ||
+    verificationCount <= fixture.expect.max_author_verification;
   const structuredOk = !result.error_code;
-  const passed = structuredOk && countOk && !accepted && !disposition && bothSides;
+  const passed = structuredOk && countOk && verificationOk && !accepted && !disposition && bothSides;
   return {
     id: fixture.id,
     gate: fixture.gate,
@@ -257,6 +265,7 @@ export async function runPaidArchivistScopeCertification(args: {
         allowPaidCertificationRun: true,
         allowRepair: true,
         provider,
+        entityCatalog: [...ARCHIVIST_CERTIFICATION_ENTITY_CATALOG],
       },
     });
 

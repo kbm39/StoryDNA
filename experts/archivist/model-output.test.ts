@@ -22,6 +22,7 @@ import {
 import { FIXTURE_CONTENT_HASH, FIXTURE_MANUSCRIPT_ID, FIXTURE_MANUSCRIPT_VERSION_ID } from "./fixtures.ts";
 import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 import { ARCHIVIST_SMOKE_20260922_V1_EVIDENCE } from "./session-archivist-smoke-20260922-v1.ts";
+import { ARCHIVIST_SMOKE_20260922_V2_EVIDENCE } from "./session-archivist-smoke-20260922-v2.ts";
 import { ARCHIVIST_ANTHROPIC_STRUCTURED_OUTPUT_CAPABILITY } from "./native-structured-output.ts";
 import { getLiveProviderInvocationCount, resetLiveProviderInvocationCountForTests } from "@/lib/execute-expert/dry-run-guard.ts";
 import { completeArchivistStructuredOutput } from "./live-structured-output.ts";
@@ -71,10 +72,11 @@ describe("Archivist model-facing output + envelope", () => {
     );
     assert.equal(confirmed.ok, true);
     if (!confirmed.ok) return;
-    const post = applyArchivistLivePostprocess(
-      confirmed.review,
-      "Chapter 3. Mara had blue eyes that caught the lantern light.\nChapter 22. Mara's green eyes narrowed at the map.",
-    );
+    const post = applyArchivistLivePostprocess(confirmed.review, {
+      manuscriptText:
+        "Chapter 3. Mara had blue eyes that caught the lantern light.\nChapter 22. Mara's green eyes narrowed at the map.",
+      useCertificationEntityCatalog: true,
+    });
     assert.equal(
       post.findings.filter((finding) => finding.classification === "confirmed_contradiction").length,
       1,
@@ -132,5 +134,7 @@ describe("Archivist model-facing output + envelope", () => {
       ARCHIVIST_SMOKE_20260922_V1_EVIDENCE.blue_green_contradiction_detected_by_haiku,
       "unknown_raw_output_not_preserved",
     );
+    assert.equal(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.not_a_pass, true);
+    assert.equal(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.official_result, "0/3 failed certification");
   });
 });

@@ -54,8 +54,9 @@ export const ARCHIVIST_LIVE_CERTIFICATION_THRESHOLDS = {
     confirmed_must_have_locators_for_both_sides: true,
   },
   temporal_reasoning: {
-    disjoint_must_not_remain_confirmed: true,
+    earlier_later_persistent_unexplained_may_confirm: true,
     explained_non_conflicts_must_not_confirm: true,
+    changeable_with_transition_must_not_confirm: true,
   },
   alias_ambiguity: {
     silent_alias_resolution_allowed: false,
@@ -248,7 +249,7 @@ export async function runArchivistLiveCertificationHarness(): Promise<ArchivistL
     {
       gate: "temporal_reasoning",
       passed: temporalPass,
-      detail: "disjoint/explained temporal cases must not remain confirmed",
+      detail: "explained or transitioned temporal changes must not remain confirmed",
     },
     {
       gate: "alias_ambiguity",

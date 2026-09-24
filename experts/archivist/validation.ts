@@ -4,7 +4,9 @@
 
 import { manuscriptPassageLocated } from "@/lib/passage-locate.ts";
 import {
+  ARCHIVIST_CONTINUITY_COMPATIBILITIES,
   ARCHIVIST_EXPERT_KEY,
+  ARCHIVIST_OBSERVATION_TEMPORAL_RELATIONS,
   ARCHIVIST_REVIEW_SCHEMA,
   ARCHIVIST_VERSION,
   CONTENT_HASH_PATTERN,
@@ -28,7 +30,7 @@ import { ARCHIVIST_MAX_EVIDENCE_EXCERPT_WORDS } from "./contracts.ts";
 const LETTER_GRADE_PATTERN =
   /\b(?:grade\s*[A-F][+-]?|[A-F][+-]?\s*grade|letter\s*grade|[A-F][+-]?\s*(?:average|score))\b/i;
 
-const TEMPORAL_RELATIONS = ["identical", "overlap", "disjoint", "unknown"] as const;
+const TEMPORAL_RELATIONS = ARCHIVIST_OBSERVATION_TEMPORAL_RELATIONS;
 
 export interface ValidateArchivistReviewOptions {
   expectedDefinitionHash?: string;
@@ -90,6 +92,14 @@ function validateFinding(
   if (!(TEMPORAL_RELATIONS as readonly string[]).includes(finding.temporal_analysis?.relation)) {
     errors.push(`${prefix}: unsupported temporal relation`);
   }
+  if (
+    finding.temporal_analysis?.continuity_compatibility &&
+    !(ARCHIVIST_CONTINUITY_COMPATIBILITIES as readonly string[]).includes(
+      finding.temporal_analysis.continuity_compatibility,
+    )
+  ) {
+    errors.push(`${prefix}: unsupported continuity compatibility`);
+  }
   pushIf(!finding.explanation?.trim(), errors, `${prefix}: explanation is required`);
   pushIf(
     !finding.suggested_resolution?.trim(),
@@ -127,11 +137,16 @@ function validateFinding(
     if (!confirmedContradictionHasBothSides(finding)) {
       errors.push(`${prefix}: confirmed_contradiction requires both-side located evidence and locators`);
     }
-    const relation = finding.temporal_analysis?.relation;
-    if (relation === "disjoint") {
-      errors.push(`${prefix}: disjoint temporal states cannot be confirmed contradictions`);
+    const compatibility = finding.temporal_analysis?.continuity_compatibility;
+    if (compatibility === "compatible_change") {
+      errors.push(`${prefix}: compatible temporal change cannot be a confirmed contradiction`);
     }
-    if (relation === "unknown") {
+    if (compatibility === "insufficient_evidence") {
+      errors.push(
+        `${prefix}: insufficient continuity evidence cannot be a confirmed contradiction`,
+      );
+    }
+    if (finding.temporal_analysis?.relation === "unknown" && !compatibility) {
       errors.push(
         `${prefix}: unknown temporal relation cannot be confirmed; use author_verification_needed`,
       );
@@ -186,7 +201,9 @@ function validateCanonDelta(
   );
 
   if (delta.entity.resolution === "resolved" && !delta.entity.entity_id?.trim()) {
-    errors.push(`${prefix}: resolved entity requires entity_id`);
+    errors.push(
+      `${prefix}: resolved entity requires a StoryDNA entity_id after deterministic resolution`,
+    );
   }
   if (
     (delta.entity.resolution === "ambiguous" || delta.entity.resolution === "unresolved") &&

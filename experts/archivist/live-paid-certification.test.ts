@@ -11,6 +11,11 @@ import {
 import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 import { createArchivistLiveProvider } from "./live-provider.ts";
 import { HOLD_FAST_PILOT_PLAN } from "./hold-fast-pilot.ts";
+import { ARCHIVIST_SMOKE_20260922_V2_EVIDENCE } from "./session-archivist-smoke-20260922-v2.ts";
+import {
+  ARCHIVIST_SMOKE_20260922_V3_SESSION_ID,
+  ARCHIVIST_V3_AUTHORIZED,
+} from "./v3-certification-criteria.ts";
 
 describe("Archivist paid scope certification", () => {
   it("requires the founder ack token and never flips live gates", () => {
@@ -25,6 +30,8 @@ describe("Archivist paid scope certification", () => {
   it("pins a scoped three-case Haiku smoke, not Hold Fast", () => {
     assert.equal(ARCHIVIST_PAID_SCOPE_CASES.length, 3);
     assert.equal(ARCHIVIST_PAID_SMOKE_MODEL, "claude-haiku-4-5-20251001");
+    assert.equal(ARCHIVIST_V3_AUTHORIZED, false);
+    assert.notEqual(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.session_id, ARCHIVIST_SMOKE_20260922_V3_SESSION_ID);
     assert.ok(ARCHIVIST_PAID_SCOPE_CASES.every((item) => !/hold fast/i.test(item.manuscript_text)));
     assert.deepEqual(
       parsePaidCertificationArgv([

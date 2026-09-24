@@ -150,7 +150,7 @@ function finding(overrides: Partial<ArchivistFinding> & Pick<ArchivistFinding, "
     current_evidence: [],
     conflicting_evidence: [],
     temporal_analysis: {
-      relation: "identical",
+      relation: "same_time",
       explanation: "Same narrative present.",
       current_scope: { kind: "at", book_order: 1, chapter: "3" },
       conflicting_scope: { kind: "at", book_order: 1, chapter: "22" },
@@ -170,7 +170,7 @@ function candidateDelta(overrides: Partial<ArchivistCanonDelta>): ArchivistCanon
       resolution: "resolved",
       alias: "Mara",
       entity_type: "person",
-      entity_id: "entity-mara",
+      entity_id: "fixture-entity-mara",
       canonical_name: "Mara Quinn",
     },
     entity_type: "person",
@@ -211,8 +211,9 @@ export const FIXTURE_01_WITHIN_BOOK_EXACT: ArchivistCertificationFixture = {
           located("Mara's green eyes narrowed at the map.", "Chapter 22", "conflicting_canon"),
         ],
         temporal_analysis: {
-          relation: "identical",
-          explanation: "Both passages describe Mara in the present with no intervening change.",
+          relation: "earlier_later",
+          continuity_compatibility: "incompatible",
+          explanation: "Chapter 3 precedes chapter 22; eye color is persistent without transition evidence.",
           current_scope: { kind: "at", book_order: 1, chapter: "3", narrative_time: "present" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "22", narrative_time: "present" },
         },
@@ -266,8 +267,9 @@ export const FIXTURE_02_EXPLAINED_APPEARANCE: ArchivistCertificationFixture = {
           ),
         ],
         temporal_analysis: {
-          relation: "disjoint",
-          explanation: "Later appearance is a deliberate disguise, not the same temporal state.",
+          relation: "earlier_later",
+          continuity_compatibility: "compatible_change",
+          explanation: "Later appearance is a deliberate disguise, not an unexplained persistent change.",
           current_scope: { kind: "at", book_order: 1, chapter: "3" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "22" },
         },
@@ -309,7 +311,8 @@ export const FIXTURE_03_SERIES_AGE: ArchivistCertificationFixture = {
           ),
         ],
         temporal_analysis: {
-          relation: "overlap",
+          relation: "overlapping",
+          continuity_compatibility: "incompatible",
           explanation: "Both ages are claimed for the same calendar year across volumes.",
           current_scope: { kind: "at", book_order: 2, chapter: "1", narrative_time: "winter Y4" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "18", narrative_time: "winter Y4" },
@@ -351,7 +354,7 @@ export const FIXTURE_04_TIMELINE: ArchivistCertificationFixture = {
           located("That same afternoon they docked in Greyport.", "Chapter 9", "conflicting_canon"),
         ],
         temporal_analysis: {
-          relation: "overlap",
+          relation: "overlapping",
           explanation: "Same afternoon cannot be both Harbor City two days later and Greyport.",
           current_scope: { kind: "at", book_order: 1, chapter: "9", narrative_time: "two days later" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "9", narrative_time: "same afternoon" },
@@ -385,7 +388,7 @@ export const FIXTURE_05_INJURY: ArchivistCertificationFixture = {
           located("The medic wrapped Mara's right shoulder.", "Chapter 11", "conflicting_canon"),
         ],
         temporal_analysis: {
-          relation: "identical",
+          relation: "same_time",
           explanation: "Same scene, incompatible injury sides.",
           current_scope: { kind: "at", book_order: 1, chapter: "11" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "11" },
@@ -419,7 +422,7 @@ export const FIXTURE_06_KNOWLEDGE: ArchivistCertificationFixture = {
           located("Mara learned the courier password at dusk.", "Chapter 4", "conflicting_canon"),
         ],
         temporal_analysis: {
-          relation: "overlap",
+          relation: "overlapping",
           explanation: "Knowledge is used before the acquisition scene.",
           current_scope: { kind: "at", book_order: 1, chapter: "2" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "4" },
@@ -461,7 +464,7 @@ export const FIXTURE_07_RELATIONSHIP: ArchivistCertificationFixture = {
           ),
         ],
         temporal_analysis: {
-          relation: "overlap",
+          relation: "overlapping",
           explanation: "Prior accepted partnership conflicts with a never-met claim.",
           current_scope: { kind: "at", book_order: 2, chapter: "6" },
           conflicting_scope: { kind: "from_to", book_order: 1, from: "8", to: "12" },
@@ -495,7 +498,7 @@ export const FIXTURE_08_OBJECT: ArchivistCertificationFixture = {
           located("Calder spun the silver compass on the chart table.", "Chapter 7", "conflicting_canon"),
         ],
         temporal_analysis: {
-          relation: "identical",
+          relation: "same_time",
           explanation: "Same unique object, same moment, two locations.",
           current_scope: { kind: "at", book_order: 1, chapter: "7" },
           conflicting_scope: { kind: "at", book_order: 1, chapter: "7" },
@@ -607,8 +610,8 @@ export const FIXTURE_11_AMBIGUOUS_ALIAS: ArchivistCertificationFixture = {
           alias: "John",
           entity_type: "person",
           candidates: [
-            { entity_id: "entity-john-reeves", canonical_name: "John Reeves" },
-            { entity_id: "entity-john-hale", canonical_name: "John Hale" },
+            { entity_id: "fixture-entity-john-reeves", canonical_name: "John Reeves" },
+            { entity_id: "fixture-entity-john-hale", canonical_name: "John Hale" },
           ],
         },
         fact_type: "presence",
@@ -625,13 +628,13 @@ export const FIXTURE_11_AMBIGUOUS_ALIAS: ArchivistCertificationFixture = {
         alias: "John",
         candidate_entities: [
           {
-            entity_id: "entity-john-reeves",
+            entity_id: "fixture-entity-john-reeves",
             canonical_name: "John Reeves",
             entity_type: "person",
             evidence: [located("John Reeves signed the Harbor roster.", "Chapter 1", "supporting")],
           },
           {
-            entity_id: "entity-john-hale",
+            entity_id: "fixture-entity-john-hale",
             canonical_name: "John Hale",
             entity_type: "person",
             evidence: [located("John Hale waited by the warehouse.", "Chapter 2", "supporting")],

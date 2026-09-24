@@ -242,7 +242,19 @@ export async function runArchivistLivePipeline(args: {
   const manuscriptText = args.request.manuscript_text.trim()
     ? args.request.manuscript_text
     : undefined;
-  const postprocessed = applyArchivistLivePostprocess(bound, manuscriptText);
+  const postprocessed = applyArchivistLivePostprocess(bound, {
+    manuscriptText,
+    useCertificationEntityCatalog:
+      args.options.allowPaidCertificationRun === true ||
+      args.options.allowUnwiredForTests === true,
+    entityContext: {
+      catalog: args.options.entityCatalog,
+      canonStore: args.options.canonicalContext,
+      canonScope: args.request.series_id
+        ? { series_id: args.request.series_id }
+        : { standalone_manuscript_id: args.request.manuscript_id },
+    },
+  });
 
   if (liveReviewEmitsAcceptedCanon(postprocessed) || liveReviewEmitsAuthorDisposition(postprocessed)) {
     return {

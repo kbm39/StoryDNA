@@ -15,6 +15,7 @@ import {
   type ArchivistReviewSummary,
 } from "./contracts.ts";
 import { normalizeArchivistEnumValue, type ArchivistEnumNormalizationAudit } from "./enum-normalization.ts";
+import { mapArchivistTemporalRelation } from "./temporal-continuity.ts";
 
 export type ArchivistParseFailureCode =
   | "malformed_json"
@@ -189,9 +190,12 @@ function foldFinding(
         ) as ArchivistFinding["conflicting_authority"])
       : undefined,
     temporal_analysis: {
-      relation: (typeof temporal.relation === "string"
-        ? temporal.relation.trim().toLowerCase()
-        : "unknown") as ArchivistFinding["temporal_analysis"]["relation"],
+      relation: mapArchivistTemporalRelation(temporal.relation) as ArchivistFinding["temporal_analysis"]["relation"],
+      continuity_compatibility:
+        typeof temporal.continuity_compatibility === "string"
+          ? (temporal.continuity_compatibility.trim().toLowerCase() as
+              | ArchivistFinding["temporal_analysis"]["continuity_compatibility"])
+          : undefined,
       explanation: typeof temporal.explanation === "string" ? temporal.explanation : "",
       current_scope: foldTemporalScope(temporal.current_scope),
       conflicting_scope: temporal.conflicting_scope
@@ -233,6 +237,7 @@ function foldDelta(
         `${prefix}.entity.entity_type`,
         audits,
       ) as ArchivistCanonDelta["entity"]["entity_type"],
+      // Model-emitted IDs are captured then stripped during StoryDNA resolution.
       entity_id: typeof entity.entity_id === "string" ? entity.entity_id : undefined,
       canonical_name: typeof entity.canonical_name === "string" ? entity.canonical_name : undefined,
       candidates: Array.isArray(entity.candidates)

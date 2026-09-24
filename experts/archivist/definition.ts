@@ -107,8 +107,8 @@ export const ARCHIVIST: ReviewerDefinition = {
     {
       name: "Temporal reasoning",
       authorities: ["Narrative time", "Chapter/scene locators", "Book order"],
-      keyConcepts: ["identical", "overlap", "disjoint", "unknown"],
-      commonErrors: ["treating disjoint states as contradictions"],
+      keyConcepts: ["same_time", "earlier_later", "overlapping", "unknown", "compatible_change", "incompatible"],
+      commonErrors: ["treating different chapters as automatically non-contradictory"],
     },
     {
       name: "Entity identity",
@@ -166,7 +166,7 @@ export const ARCHIVIST: ReviewerDefinition = {
   recommendation: {
     field: "classification",
     values: [
-      { value: "confirmed_contradiction", meaning: "Both sides of evidence located; temporal overlap." },
+      { value: "confirmed_contradiction", meaning: "Both sides of evidence located; incompatible or unexplained persistent change." },
       { value: "possible_continuity_conflict", meaning: "Apparent conflict without both-side confirmation." },
       { value: "author_verification_needed", meaning: "Ambiguity or insufficient evidence." },
     ],

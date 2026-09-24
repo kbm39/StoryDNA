@@ -26,6 +26,27 @@ import {
   type TemporalScope,
 } from "@/lib/canon/types.ts";
 
+/** Observation time — not continuity compatibility. */
+export const ARCHIVIST_OBSERVATION_TEMPORAL_RELATIONS = [
+  "same_time",
+  "earlier_later",
+  "overlapping",
+  "unknown",
+] as const;
+
+export type ArchivistObservationTemporalRelation =
+  (typeof ARCHIVIST_OBSERVATION_TEMPORAL_RELATIONS)[number];
+
+export const ARCHIVIST_CONTINUITY_COMPATIBILITIES = [
+  "compatible_change",
+  "unexplained_change",
+  "incompatible",
+  "insufficient_evidence",
+] as const;
+
+export type ArchivistContinuityCompatibility =
+  (typeof ARCHIVIST_CONTINUITY_COMPATIBILITIES)[number];
+
 export const ARCHIVIST_EXPERT_KEY = "archivist" as const;
 
 export const ARCHIVIST_DISPLAY_NAME = "Archivist" as const;
@@ -141,7 +162,9 @@ export interface ArchivistEvidenceRecord {
 }
 
 export interface ArchivistTemporalAnalysis {
-  relation: TemporalRelation;
+  relation: ArchivistObservationTemporalRelation;
+  /** StoryDNA-owned. Model explanations may inform it; the model does not author it. */
+  continuity_compatibility?: ArchivistContinuityCompatibility;
   explanation: string;
   current_scope: TemporalScope;
   conflicting_scope?: TemporalScope;
@@ -172,6 +195,7 @@ export interface ArchivistEntityRef {
   resolution: ArchivistEntityResolution;
   alias: string;
   entity_type: CanonEntityType;
+  /** StoryDNA-owned after deterministic resolution. Model-emitted IDs are stripped. */
   entity_id?: string;
   canonical_name?: string;
   candidates?: Array<{ entity_id: string; canonical_name: string }>;

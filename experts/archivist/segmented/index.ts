@@ -46,6 +46,14 @@ export { createStagingSegmentedPersistence } from "./staging-persistence.ts";
 export { createStagingManuscriptStore } from "./staging-store.ts";
 export { assertSegmentedLiveMayNotStart } from "./orchestration.ts";
 export {
+  RECKONING_PAID_PILOT_AUTHORIZATION,
+  clonePaidPilotAuthorization,
+} from "./paid-pilot-authorization.ts";
+export {
+  assertPaidPilotMayConstructProvider,
+  reachPaidPilotProviderBoundary,
+} from "./paid-pilot-gate.ts";
+export {
   RECKONING_REVISED_11_SEGMENT_PLAN,
   RECKONING_REVISED_11_STRUCTURAL_UNITS,
 } from "./reckoning-revised-11-segment-plan.ts";

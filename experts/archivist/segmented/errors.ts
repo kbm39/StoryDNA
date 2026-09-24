@@ -62,3 +62,17 @@ export class SegmentedExecutionUnauthorizedError extends SegmentedArchivistError
     this.name = "SegmentedExecutionUnauthorizedError";
   }
 }
+
+export class PaidPilotUnauthorizedError extends SegmentedArchivistError {
+  constructor(reason: string) {
+    super(`paid_pilot_unauthorized:${reason}`, reason);
+    this.name = "PaidPilotUnauthorizedError";
+  }
+}
+
+export class PaidPilotCostCeilingError extends SegmentedArchivistError {
+  constructor(message: string) {
+    super("paid_pilot_cost_ceiling", message);
+    this.name = "PaidPilotCostCeilingError";
+  }
+}

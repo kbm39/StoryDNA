@@ -13,6 +13,8 @@ import {
   DuplicateSegmentedResumeError,
   SegmentedExecutionUnauthorizedError,
 } from "./errors.ts";
+import { RECKONING_PAID_PILOT_AUTHORIZATION } from "./paid-pilot-authorization.ts";
+import { assertPaidPilotMayConstructProvider, matchingPaidPilotGateRequest } from "./paid-pilot-gate.ts";
 import type { SegmentCheckpoint } from "./types.ts";
 
 export const SEGMENTED_ORCHESTRATION_PHASES = [
@@ -54,6 +56,14 @@ export async function assertSegmentedLiveMayNotStart(args?: {
   if ((args?.activeWorkflowIds?.length ?? 0) > 0) {
     throw new DuplicateSegmentedResumeError("duplicate active segmented workflow");
   }
+  assertPaidPilotMayConstructProvider(
+    matchingPaidPilotGateRequest({
+      authorization: RECKONING_PAID_PILOT_AUTHORIZATION,
+      cancelled: false,
+      signal: args?.signal,
+      active_workflow_count: args?.activeWorkflowIds?.length ?? 0,
+    }),
+  );
   throw new SegmentedExecutionUnauthorizedError(
     "segmented live orchestration is implemented but not authorized",
   );

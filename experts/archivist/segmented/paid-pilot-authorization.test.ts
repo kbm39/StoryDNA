@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,6 +15,13 @@ import {
   RECKONING_PAID_PILOT_AUTHORIZATION,
   clonePaidPilotAuthorization,
 } from "./paid-pilot-authorization.ts";
+import {
+  PAID_PILOT_CODE_BINDINGS_NOT_IN_0027,
+  assertDurableRowBindings,
+  authorizationFromDurableRow,
+  preparedPaidPilotDurableRow,
+  projectDurableAuthorization,
+} from "./paid-pilot-durable-row.ts";
 import {
   matchingPaidPilotGateRequest,
   reachPaidPilotProviderBoundary,
@@ -224,24 +232,80 @@ describe("REVISED-11-2 paid-pilot authorization preparation", () => {
   });
 });
 
-describe("0027 paid-pilot authorization schema (source only, not applied)", () => {
-  const sql = readFileSync(
+describe("0027 paid-pilot authorization schema", () => {
+  const reviewed = readFileSync(
     join(ROOT, "experts/archivist/segmented/schema/0027_archivist_pilot_authorizations.sql"),
     "utf8",
   );
+  const canonical = readFileSync(
+    join(ROOT, "supabase/migrations/0027_archivist_pilot_authorizations.sql"),
+    "utf8",
+  );
 
-  it("is additive, RLS-closed, and excluded from supabase/migrations", () => {
-    assert.match(sql, /DO NOT APPLY/);
-    assert.match(sql, /archivist_pilot_authorizations/);
-    assert.match(sql, /prepared/);
-    assert.match(sql, /explicitly_authorized/);
-    assert.match(sql, /consumed/);
-    assert.match(sql, /revoked/);
-    assert.match(sql, /tumcpxklduhiigxjwlrp/);
-    assert.match(sql, /enable row level security/);
-    assert.doesNotMatch(sql, /drop table/i);
-    assert.doesNotMatch(sql, /canon_facts/);
-    const applied = readFileSync(join(ROOT, "supabase/migrations/0026_archivist_segmented_workflows.sql"), "utf8");
-    assert.doesNotMatch(applied, /archivist_pilot_authorizations/);
+  it("is additive, RLS-closed, and identical in the canonical migration path", () => {
+    assert.equal(canonical, reviewed);
+    assert.equal(
+      createHash("sha256").update(canonical).digest("hex"),
+      "d5f0a842c5aa1107ef2f4e9fcdc4cc7b6be2fc3697492351174356bf8e977808",
+    );
+    assert.match(reviewed, /archivist_pilot_authorizations/);
+    assert.match(reviewed, /prepared/);
+    assert.match(reviewed, /explicitly_authorized/);
+    assert.match(reviewed, /consumed/);
+    assert.match(reviewed, /revoked/);
+    assert.match(reviewed, /tumcpxklduhiigxjwlrp/);
+    assert.match(reviewed, /enable row level security/);
+    assert.doesNotMatch(reviewed, /drop table/i);
+    assert.doesNotMatch(reviewed, /canon_facts/);
+    const prior = readFileSync(join(ROOT, "supabase/migrations/0026_archivist_segmented_workflows.sql"), "utf8");
+    assert.doesNotMatch(prior, /archivist_pilot_authorizations/);
+  });
+});
+
+describe("durable prepared authorization row", () => {
+  it("emits only prepared and cannot start a workflow from that payload", () => {
+    const row = preparedPaidPilotDurableRow();
+    assert.equal(row.status, "prepared");
+    assert.equal(row.bound_workflow_id, null);
+    assert.equal(row.authorization_id, "reckoning-revised-11-2-paid-pilot-prep-20260924");
+    assert.equal(row.manuscript_id, RECKONING_PAID_PILOT_AUTHORIZATION.manuscript_id);
+    assert.equal(row.content_hash, RECKONING_PAID_PILOT_AUTHORIZATION.content_hash);
+    assert.equal(row.plan_fingerprint, RECKONING_PAID_PILOT_AUTHORIZATION.plan_fingerprint);
+    assert.equal(row.model, "claude-haiku-4-5-20251001");
+    assert.equal(row.hard_cost_ceiling_usd, 1);
+    assert.equal(PAID_PILOT_CODE_BINDINGS_NOT_IN_0027.authorized_to_run, false);
+    assert.equal(PAID_PILOT_CODE_BINDINGS_NOT_IN_0027.series_id, null);
+    const reconstructed = authorizationFromDurableRow(row);
+    assert.equal(reconstructed.status, "prepared");
+    assert.equal(
+      fence(matchingPaidPilotGateRequest({ authorization: reconstructed })),
+      0,
+    );
+    assert.doesNotThrow(() => assertDurableRowBindings(row));
+  });
+
+  it("projects one-shot lifecycle in memory without reopening a terminal gate", () => {
+    const prepared = preparedPaidPilotDurableRow();
+    assert.throws(() => projectDurableAuthorization(prepared, "consume", { workflow_id: "wf-1" }), /consume/);
+    const authorized = projectDurableAuthorization(prepared, "authorize");
+    assert.equal(authorized.status, "explicitly_authorized");
+    assert.equal(authorized.bound_workflow_id, null);
+    const consumed = projectDurableAuthorization(authorized, "consume", { workflow_id: "wf-1" });
+    assert.equal(consumed.status, "consumed");
+    assert.equal(consumed.bound_workflow_id, "wf-1");
+    assert.equal(projectDurableAuthorization(consumed, "consume", { workflow_id: "wf-1" }).bound_workflow_id, "wf-1");
+    assert.throws(() => projectDurableAuthorization(consumed, "consume", { workflow_id: "wf-2" }), /second_workflow/);
+    assert.throws(() => projectDurableAuthorization(consumed, "authorize"), /authorize/);
+    const revoked = projectDurableAuthorization(prepared, "revoke");
+    assert.equal(revoked.status, "revoked");
+    assert.throws(() => projectDurableAuthorization(revoked, "authorize"), /authorize/);
+    assert.throws(
+      () =>
+        projectDurableAuthorization(
+          { ...prepared, manuscript_id: "0".repeat(36) },
+          "authorize",
+        ),
+      /durable_binding_mismatch:manuscript_id/,
+    );
   });
 });

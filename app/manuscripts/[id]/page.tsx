@@ -43,7 +43,9 @@ import type {
 import GenerateReviewsButton from "./GenerateReviewsButton";
 import LiteraryAgentPublishingSection from "./LiteraryAgentPublishingSection";
 import ArchivistDryRunPanel from "./ArchivistDryRunPanel";
+import ArchivistCandidateReviewPanel from "./ArchivistCandidateReviewPanel";
 import { isArchivistDryRunUiAllowed } from "@/lib/archivist-dry-run/allow.ts";
+import { loadArchivistCandidateReviewForManuscript } from "@/lib/archivist-candidate-review/load.ts";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
 import { ReviewGradingPanel } from "./ReviewGradingPanel";
 import { RevisionImpactPanel } from "./RevisionImpactPanel";
@@ -339,6 +341,7 @@ export default async function ManuscriptPage({
   const manuscript = await getManuscriptMeta(id);
   if (!manuscript) notFound();
   const showArchivistDryRun = isArchivistDryRunUiAllowed();
+  const candidateReview = await loadArchivistCandidateReviewForManuscript(id);
 
   const currentVersionId = manuscript.current_version_id ?? null;
   const fallbackWordCount = manuscript.word_count;
@@ -516,6 +519,7 @@ export default async function ManuscriptPage({
       <nav className="mb-8 flex flex-wrap gap-1 border-y border-black/10 py-2 text-sm dark:border-white/10">
         {[
           ["Reviews", "#reviews"],
+          ...(candidateReview.ok ? [["Archivist review", "#archivist-candidate-review"]] : []),
           ...(showArchivistDryRun ? [["Archivist dry run", "#archivist-dry-run"]] : []),
           ["Producer’s read", "#screen"],
           ["Treatment", "#treatment"],
@@ -552,6 +556,7 @@ export default async function ManuscriptPage({
           workflowEnabled={workflowEnabled}
           initialActiveWorkflow={activeWorkflow}
         />
+        {candidateReview.ok ? <ArchivistCandidateReviewPanel model={candidateReview.model} /> : null}
         {showArchivistDryRun ? <ArchivistDryRunPanel manuscriptId={id} /> : null}
         {(commercial || craft) && (
           <div className="mb-3 flex justify-end">

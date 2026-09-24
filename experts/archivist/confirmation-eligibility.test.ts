@@ -17,11 +17,14 @@ import { classifyFactPersistence } from "./fact-persistence.ts";
 import type { ArchivistFinding } from "./contracts.ts";
 import { ARCHIVIST_CERT_20260924_V1_EVIDENCE } from "./session-archivist-cert-20260924-v1.ts";
 import { ARCHIVIST_CERT_20260924_V2_EVIDENCE } from "./session-archivist-cert-20260924-v2.ts";
+import { ARCHIVIST_CERT_20260924_V3_EVIDENCE } from "./session-archivist-cert-20260924-v3.ts";
 import {
   ARCHIVIST_CERT_20260924_V2_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V2_SESSION_ID,
   ARCHIVIST_CERT_20260924_V3_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V3_SESSION_ID,
+  ARCHIVIST_CERT_20260924_V4_AUTHORIZED,
+  ARCHIVIST_CERT_20260924_V4_SESSION_ID,
 } from "./v4-certification-criteria.ts";
 import {
   ARCHIVIST_V2_INJURY_MANUSCRIPT,
@@ -123,15 +126,19 @@ function run(raw: unknown, manuscript: string) {
 }
 
 describe("Archivist confirmation eligibility and laterality", () => {
-  it("preserves v1 and v2 as official 12/15 FAILs and does not authorize v3", () => {
+  it("preserves v1/v2 12/15 and v3 13/15 official FAILs and does not authorize v4", () => {
     assert.equal(ARCHIVIST_CERT_20260924_V1_EVIDENCE.official_result, "12/15 FAIL");
     assert.equal(ARCHIVIST_CERT_20260924_V1_EVIDENCE.not_a_pass, true);
     assert.equal(ARCHIVIST_CERT_20260924_V2_EVIDENCE.official_result, "12/15 FAIL");
     assert.equal(ARCHIVIST_CERT_20260924_V2_EVIDENCE.not_a_pass, true);
     assert.equal(ARCHIVIST_CERT_20260924_V2_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V2_SESSION_ID, "archivist-cert-20260924-v2");
+    assert.equal(ARCHIVIST_CERT_20260924_V3_EVIDENCE.official_result, "13/15 FAIL");
+    assert.equal(ARCHIVIST_CERT_20260924_V3_EVIDENCE.not_a_pass, true);
     assert.equal(ARCHIVIST_CERT_20260924_V3_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SESSION_ID, "archivist-cert-20260924-v3");
+    assert.equal(ARCHIVIST_CERT_20260924_V4_AUTHORIZED, false);
+    assert.equal(ARCHIVIST_CERT_20260924_V4_SESSION_ID, "archivist-cert-20260924-v4");
     assert.equal(ARCHIVIST_LIVE_MODEL_CERTIFIED, false);
   });
 

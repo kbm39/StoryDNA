@@ -1,6 +1,7 @@
 /**
- * Proposed next paid session after negation/hypothetical transition filter
- * and relationship provenance. This file does not authorize or run that session.
+ * Broader-cert session criteria. v3 remains official 13/15 FAIL.
+ * v4 is the proposed next paid session after canon-delta sanitization.
+ * This file does not authorize or run v4.
  */
 
 export const ARCHIVIST_CERT_20260924_V2_SESSION_ID = "archivist-cert-20260924-v2" as const;
@@ -30,6 +31,27 @@ export const ARCHIVIST_CERT_20260924_V3_CASE_CRITERIA = {
 } as const;
 
 export const ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR = {
+  official_passes: 15,
+  official_failures: 0,
+  false_confirmed_contradictions: 0,
+  intended_contradictions_detected: true,
+  structured_output_gate: true,
+  canon_safety_gate: true,
+  no_uncontrolled_repair_loops: true,
+  canon_writes: 0,
+} as const;
+
+export const ARCHIVIST_CERT_20260924_V3_OFFICIAL_RESULT = "13/15 FAIL" as const;
+
+export const ARCHIVIST_CERT_20260924_V4_SESSION_ID = "archivist-cert-20260924-v4" as const;
+
+export const ARCHIVIST_CERT_20260924_V4_AUTHORIZED = false as const;
+
+export const ARCHIVIST_CERT_20260924_V4_MODEL = "claude-haiku-4-5-20251001" as const;
+
+export const ARCHIVIST_CERT_20260924_V4_CASE_COUNT = 15 as const;
+
+export const ARCHIVIST_CERT_20260924_V4_SUCCESS_BAR = {
   official_passes: 15,
   official_failures: 0,
   false_confirmed_contradictions: 0,

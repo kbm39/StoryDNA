@@ -7,6 +7,7 @@
  * → prior-canon provenance attachment
  * → temporal/persistence evaluation
  * → confirmation eligibility / final classification
+ * → canon-delta sanitization / disposition
  * → safe normalization
  *
  * May: attach StoryDNA entity IDs, rewrite real ambiguities, evaluate
@@ -23,6 +24,7 @@ import {
   applyArchivistEntityResolution,
   type ArchivistEntityResolutionContext,
 } from "./entity-resolution.ts";
+import { applyArchivistCanonDeltaSanitization } from "./canon-delta-sanitization.ts";
 import { normalizeArchivistReview } from "./normalization.ts";
 import { applyConfirmationEligibility } from "./confirmation-eligibility.ts";
 import { ARCHIVIST_CERTIFICATION_PRIOR_SOURCES } from "./prior-source-catalog.ts";
@@ -104,9 +106,13 @@ export function applyArchivistLivePostprocess(
     .map((finding) => applyFinalClassification(finding, optionsWithContext, withProvenance))
     .filter((finding) => !isUnnecessaryCleanVerification(finding));
 
-  return normalizeArchivistReview({
+  const sanitized = applyArchivistCanonDeltaSanitization({
     ...withProvenance,
     findings: classified,
+  });
+
+  return normalizeArchivistReview({
+    ...sanitized,
     generation: {
       ...identitiesApplied.generation,
       provider: "none",
@@ -116,7 +122,14 @@ export function applyArchivistLivePostprocess(
 }
 
 export function liveReviewEmitsAcceptedCanon(review: ArchivistReview): boolean {
-  return review.canon_delta.some((delta) => (delta.status as string) !== "candidate");
+  if (review.canon_delta.some((delta) => (delta.status as string) !== "candidate")) {
+    return true;
+  }
+  return (review.canon_delta_dispositions ?? []).some(
+    (item) =>
+      item.disposition === "rejected_unsafe" &&
+      (item.reason === "status_accepted" || item.reason === "status_not_candidate"),
+  );
 }
 
 export function liveReviewEmitsAuthorDisposition(review: ArchivistReview): boolean {

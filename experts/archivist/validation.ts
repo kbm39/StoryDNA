@@ -26,6 +26,7 @@ import {
 } from "./contracts.ts";
 import { countExcerptWords, confirmedContradictionHasBothSides } from "./evidence.ts";
 import { ARCHIVIST_MAX_EVIDENCE_EXCERPT_WORDS } from "./contracts.ts";
+import { unsafeCanonDeltaValidationErrors } from "./canon-delta-sanitization.ts";
 import {
   hasPriorCanonLocator,
   hasPriorCanonSourceIdentity,
@@ -345,6 +346,7 @@ export function validateArchivistReview(
   for (const [index, finding] of review.findings.entries()) {
     validateFinding(finding, index, errors, options);
   }
+  errors.push(...unsafeCanonDeltaValidationErrors(review));
   for (const [index, delta] of review.canon_delta.entries()) {
     validateCanonDelta(delta, index, review.entity_ambiguities, errors);
   }

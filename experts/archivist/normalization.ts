@@ -244,6 +244,7 @@ export function normalizeArchivistReview(review: ArchivistReview): ArchivistRevi
     findings,
     canon_delta,
     entity_ambiguities,
+    canon_delta_dispositions: review.canon_delta_dispositions,
     metrics: {
       finding_count: findings.length,
       confirmed_contradiction_count: confirmed.length,

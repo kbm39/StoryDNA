@@ -287,6 +287,35 @@ export interface ArchivistReview {
   metrics: ArchivistReviewMetrics;
   generation: ArchivistGenerationMetadata;
   author_challenge_supported: true;
+  /** StoryDNA-owned. Model output must not emit this. */
+  canon_delta_dispositions?: ArchivistCanonDeltaDisposition[];
+}
+
+export const ARCHIVIST_CANON_DELTA_DISPOSITIONS = [
+  "retained",
+  "dropped_incomplete",
+  "dropped_reference_only",
+  "rejected_unsafe",
+] as const;
+
+export type ArchivistCanonDeltaDispositionKind =
+  (typeof ARCHIVIST_CANON_DELTA_DISPOSITIONS)[number];
+
+export interface ArchivistCanonDeltaDisposition {
+  original_index: number;
+  delta_id: string;
+  disposition: ArchivistCanonDeltaDispositionKind;
+  reason: string;
+  model_proposed_authority?: string;
+  assigned_authority?: string;
+}
+
+export interface ArchivistCanonDeltaDispositionSummary {
+  emitted: number;
+  retained: number;
+  dropped_incomplete: number;
+  dropped_reference_only: number;
+  rejected_unsafe: number;
 }
 
 export interface ArchivistValidationResult {

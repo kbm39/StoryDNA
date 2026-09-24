@@ -18,14 +18,18 @@ import {
 } from "./v3-certification-criteria.ts";
 import { ARCHIVIST_CERT_20260924_V1_EVIDENCE } from "./session-archivist-cert-20260924-v1.ts";
 import { ARCHIVIST_CERT_20260924_V2_EVIDENCE } from "./session-archivist-cert-20260924-v2.ts";
+import { ARCHIVIST_CERT_20260924_V3_EVIDENCE } from "./session-archivist-cert-20260924-v3.ts";
 import {
   ARCHIVIST_CERT_20260924_V2_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V2_SESSION_ID,
   ARCHIVIST_CERT_20260924_V3_AUTHORIZED,
   ARCHIVIST_CERT_20260924_V3_CASE_COUNT,
   ARCHIVIST_CERT_20260924_V3_MODEL,
+  ARCHIVIST_CERT_20260924_V3_OFFICIAL_RESULT,
   ARCHIVIST_CERT_20260924_V3_SESSION_ID,
   ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR,
+  ARCHIVIST_CERT_20260924_V4_AUTHORIZED,
+  ARCHIVIST_CERT_20260924_V4_SESSION_ID,
 } from "./v4-certification-criteria.ts";
 
 describe("Archivist paid scope certification", () => {
@@ -47,11 +51,15 @@ describe("Archivist paid scope certification", () => {
     assert.equal(ARCHIVIST_CERT_20260924_V2_EVIDENCE.official_result, "12/15 FAIL");
     assert.equal(ARCHIVIST_CERT_20260924_V2_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V2_SESSION_ID, "archivist-cert-20260924-v2");
+    assert.equal(ARCHIVIST_CERT_20260924_V3_EVIDENCE.official_result, "13/15 FAIL");
+    assert.equal(ARCHIVIST_CERT_20260924_V3_OFFICIAL_RESULT, "13/15 FAIL");
     assert.equal(ARCHIVIST_CERT_20260924_V3_AUTHORIZED, false);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SESSION_ID, "archivist-cert-20260924-v3");
     assert.equal(ARCHIVIST_CERT_20260924_V3_MODEL, ARCHIVIST_PAID_SMOKE_MODEL);
     assert.equal(ARCHIVIST_CERT_20260924_V3_CASE_COUNT, 15);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.official_passes, 15);
+    assert.equal(ARCHIVIST_CERT_20260924_V4_AUTHORIZED, false);
+    assert.equal(ARCHIVIST_CERT_20260924_V4_SESSION_ID, "archivist-cert-20260924-v4");
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.false_confirmed_contradictions, 0);
     assert.equal(ARCHIVIST_CERT_20260924_V3_SUCCESS_BAR.canon_writes, 0);
     assert.ok(ARCHIVIST_PAID_SCOPE_CASES.every((item) => !/hold fast/i.test(item.manuscript_text)));

@@ -5,6 +5,7 @@
 
 import { WorkflowCancelledError } from "@/lib/editorial-workflow/types.ts";
 import { RECKONING_REVISED_11_SOURCE_PIN } from "../reckoning-revised-11-source-pin.ts";
+import { RECKONING_REVISED_11_2_SOURCE_PIN } from "../reckoning-revised-11-2-source-pin.ts";
 import { isArchivistLiveExecutionAllowed } from "../live-flags.ts";
 import { reconcileArchivistOrphanedWorkflowState } from "../live-orphan.ts";
 import { assertCertifiedSegmentedModel } from "./certified-model.ts";
@@ -37,12 +38,15 @@ export async function assertSegmentedLiveMayNotStart(args?: {
   if (RECKONING_REVISED_11_SOURCE_PIN.authorized_to_run !== false) {
     throw new SegmentedExecutionUnauthorizedError("authorized_to_run must remain false");
   }
+  if (RECKONING_REVISED_11_2_SOURCE_PIN.authorized_to_run !== false) {
+    throw new SegmentedExecutionUnauthorizedError("authorized_to_run must remain false");
+  }
   if (isArchivistLiveExecutionAllowed() !== false) {
     throw new SegmentedExecutionUnauthorizedError("public live execution must remain fail-closed");
   }
   assertCertifiedSegmentedModel({
-    provider: RECKONING_REVISED_11_SOURCE_PIN.provider,
-    model: RECKONING_REVISED_11_SOURCE_PIN.model,
+    provider: RECKONING_REVISED_11_2_SOURCE_PIN.provider,
+    model: RECKONING_REVISED_11_2_SOURCE_PIN.model,
   });
   if (args?.signal?.aborted || (args?.shouldCancel && await args.shouldCancel())) {
     throw new WorkflowCancelledError();

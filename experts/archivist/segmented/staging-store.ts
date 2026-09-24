@@ -1,17 +1,28 @@
 /**
  * Staging persistence adapter for the pinned manuscript.
- * Server-only. Tests inject a memory store instead.
+ * Tests inject a memory store instead.
  * Does not read Downloads. Does not call model providers.
  */
 
-import { getSupabaseAdmin } from "@/lib/supabase/server.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { RECKONING_REVISED_11_SOURCE_PIN } from "../reckoning-revised-11-source-pin.ts";
+import { RECKONING_REVISED_11_2_SOURCE_PIN } from "../reckoning-revised-11-2-source-pin.ts";
+
+function sourceDocxSha256ForManuscript(manuscriptId: string): string {
+  if (manuscriptId === RECKONING_REVISED_11_2_SOURCE_PIN.manuscript_id) {
+    return RECKONING_REVISED_11_2_SOURCE_PIN.source_docx_sha256;
+  }
+  if (manuscriptId === RECKONING_REVISED_11_SOURCE_PIN.manuscript_id) {
+    return RECKONING_REVISED_11_SOURCE_PIN.source_docx_sha256;
+  }
+  return "";
+}
 import type { PinnedManuscriptSnapshot, PinnedManuscriptStore } from "./types.ts";
 
-export function createStagingManuscriptStore(): PinnedManuscriptStore {
+export function createStagingManuscriptStore(client: SupabaseClient): PinnedManuscriptStore {
   return {
     async loadPinnedVersion(args) {
-      const supabase = getSupabaseAdmin();
+      const supabase = client;
       const { data, error } = await supabase
         .from("manuscript_versions")
         .select(
@@ -29,7 +40,7 @@ export function createStagingManuscriptStore(): PinnedManuscriptStore {
         is_current: data.is_current,
         content_hash: data.content_hash,
         source_filename: data.source_filename,
-        source_docx_sha256: RECKONING_REVISED_11_SOURCE_PIN.source_docx_sha256,
+        source_docx_sha256: sourceDocxSha256ForManuscript(data.manuscript_id),
         analytical_word_count: data.word_count ?? 0,
         extracted_text: data.extracted_text ?? "",
       } satisfies PinnedManuscriptSnapshot;

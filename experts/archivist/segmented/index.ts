@@ -10,6 +10,7 @@ export {
   createMemoryManuscriptStore,
   loadManuscriptSnapshot,
   loadPinnedReckoningRevised11,
+  loadPinnedReckoningRevised112,
   storyDnaContentHash,
 } from "./manuscript-loader.ts";
 export {
@@ -39,8 +40,16 @@ export { candidateCanonFromBookGraph } from "./candidate-canon.ts";
 export { assembleSegmentedArchivistReview } from "./final-assembly.ts";
 export { projectSegmentedRunCost } from "./cost-model.ts";
 export { runLocalSegmentedSimulation } from "./simulation.ts";
+export { runSegmentedRehearsal, assertRehearsalGatesClosed } from "./rehearsal.ts";
+export { createMemorySegmentedPersistence } from "./persistence.ts";
+export { createStagingSegmentedPersistence } from "./staging-persistence.ts";
+export { createStagingManuscriptStore } from "./staging-store.ts";
 export { assertSegmentedLiveMayNotStart } from "./orchestration.ts";
 export {
   RECKONING_REVISED_11_SEGMENT_PLAN,
   RECKONING_REVISED_11_STRUCTURAL_UNITS,
 } from "./reckoning-revised-11-segment-plan.ts";
+export {
+  RECKONING_REVISED_11_2_SEGMENT_PLAN,
+  RECKONING_REVISED_11_2_STRUCTURAL_UNITS,
+} from "./reckoning-revised-11-2-segment-plan.ts";

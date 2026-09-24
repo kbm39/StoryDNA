@@ -44,8 +44,12 @@ export function buildCoverageReport(args: {
   text: string;
   plan: SegmentPlan;
   canonicalWordCount: number;
+  includedSegmentIds?: readonly string[];
 }): FullNovelCoverageReport {
-  const primaryRanges = args.plan.segments.flatMap((segment) =>
+  const selected = args.includedSegmentIds
+    ? args.plan.segments.filter((segment) => args.includedSegmentIds!.includes(segment.segment_id))
+    : args.plan.segments;
+  const primaryRanges = selected.flatMap((segment) =>
     segment.assignments
       .filter((item) => item.role === "primary")
       .map((item) => ({
@@ -77,7 +81,7 @@ export function buildCoverageReport(args: {
     });
   }
 
-  const unique_words_covered = args.plan.segments.reduce(
+  const unique_words_covered = selected.reduce(
     (sum, segment) => sum + segment.unique_word_count,
     0,
   );
@@ -85,7 +89,12 @@ export function buildCoverageReport(args: {
     (sum, segment) => sum + segment.overlap_word_count,
     0,
   );
-  const represented = new Set(args.plan.units.map((unit) => structuralRootId(unit.unit_id)));
+  const represented = new Set(
+    (args.includedSegmentIds
+      ? selected.flatMap((segment) => segment.primary_unit_ids)
+      : args.plan.units.map((unit) => unit.unit_id)
+    ).map((unitId) => structuralRootId(unitId)),
+  );
   const exact =
     unique_words_covered === args.canonicalWordCount &&
     uncovered.length === 0 &&
@@ -114,7 +123,13 @@ export function buildCoverageReport(args: {
     })),
     unique_words_covered,
     overlap_words,
-    uncovered_ranges: uncovered.map((range) => ({ ...range, kind: "uncovered" as const })),
+    uncovered_ranges: uncovered.map((range) => ({
+      ...range,
+      kind: "uncovered" as const,
+      segment_id: args.plan.segments.find(
+        (segment) => segment.start_offset < range.end && segment.end_offset > range.start,
+      )?.segment_id,
+    })),
     duplicated_ranges: duplicated,
     coverage_percentage,
     complete: exact,

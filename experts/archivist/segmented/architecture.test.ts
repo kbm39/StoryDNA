@@ -9,6 +9,7 @@ import { ARCHIVIST_CONSTITUTION } from "../constitution.ts";
 import { archivistRuntimeDefinition } from "../runtime-definition.ts";
 import { archivistRegistryDefinitionV1 } from "../registry-definition.ts";
 import { RECKONING_REVISED_11_SOURCE_PIN } from "../reckoning-revised-11-source-pin.ts";
+import { RECKONING_REVISED_11_2_SOURCE_PIN } from "../reckoning-revised-11-2-source-pin.ts";
 import { assertCertifiedSegmentedModel } from "./certified-model.ts";
 import { CertifiedModelMismatchError, SourcePinMismatchError } from "./errors.ts";
 import {
@@ -25,6 +26,7 @@ import {
   createMemoryManuscriptStore,
   loadManuscriptSnapshot,
   loadPinnedReckoningRevised11,
+  loadPinnedReckoningRevised112,
   storyDnaContentHash,
 } from "./manuscript-loader.ts";
 import { attachStoryDnaObservationProvenance, validateSegmentObservation } from "./observation-contract.ts";
@@ -32,6 +34,7 @@ import { assertSegmentedLiveMayNotStart, reconcileSegmentedOrphans } from "./orc
 import { selectSegmentsToRun } from "./resume.ts";
 import { planSegments } from "./segment-planner.ts";
 import { RECKONING_REVISED_11_SEGMENT_PLAN, RECKONING_REVISED_11_STRUCTURAL_UNITS } from "./reckoning-revised-11-segment-plan.ts";
+import { RECKONING_REVISED_11_2_SEGMENT_PLAN, RECKONING_REVISED_11_2_STRUCTURAL_UNITS } from "./reckoning-revised-11-2-segment-plan.ts";
 import { runLocalSegmentedSimulation } from "./simulation.ts";
 import { assertExpectedReckoningStructure, extractStructuralUnits, splitOversizedUnit } from "./structural-units.ts";
 import { DuplicateSegmentedResumeError } from "./errors.ts";
@@ -52,6 +55,21 @@ describe("segmented Archivist architecture", () => {
     });
     await assert.rejects(
       () => loadPinnedReckoningRevised11(store),
+      SourcePinMismatchError,
+    );
+    const newStore = createMemoryManuscriptStore({
+      ...snapshot,
+      manuscript_id: RECKONING_REVISED_11_2_SOURCE_PIN.manuscript_id,
+      manuscript_version_id: RECKONING_REVISED_11_2_SOURCE_PIN.manuscript_version_id,
+      content_hash: RECKONING_REVISED_11_2_SOURCE_PIN.content_hash,
+      source_filename: RECKONING_REVISED_11_2_SOURCE_PIN.source_filename,
+      source_docx_sha256: RECKONING_REVISED_11_2_SOURCE_PIN.source_docx_sha256,
+      analytical_word_count: RECKONING_REVISED_11_2_SOURCE_PIN.analytical_word_count,
+      version_number: 1,
+      is_current: true,
+    });
+    await assert.rejects(
+      () => loadPinnedReckoningRevised112(newStore),
       SourcePinMismatchError,
     );
   });
@@ -80,6 +98,29 @@ describe("segmented Archivist architecture", () => {
     );
     assert.equal(RECKONING_REVISED_11_SEGMENT_PLAN.coverage_percentage, 100);
     assert.equal(RECKONING_REVISED_11_SEGMENT_PLAN.complete, true);
+  });
+
+  it("records the actual REVISED-11-2 14-segment plan without novel text", () => {
+    assert.equal(RECKONING_REVISED_11_2_STRUCTURAL_UNITS.length, 30);
+    assert.equal(RECKONING_REVISED_11_2_SEGMENT_PLAN.segment_count, 14);
+    assert.equal(
+      RECKONING_REVISED_11_2_STRUCTURAL_UNITS.reduce((sum, unit) => sum + unit.word_count, 0),
+      109907,
+    );
+    assert.equal(
+      RECKONING_REVISED_11_2_SEGMENT_PLAN.segments.reduce((sum, segment) => sum + segment.unique_words, 0),
+      109907,
+    );
+    assert.equal(RECKONING_REVISED_11_2_SEGMENT_PLAN.coverage_percentage, 100);
+    assert.equal(RECKONING_REVISED_11_2_SEGMENT_PLAN.complete, true);
+    assert.equal(
+      RECKONING_REVISED_11_2_SEGMENT_PLAN.plan_fingerprint,
+      "a7245bb6ae7b9a7e589e5ade1787973047e44d8546f47f1a4de3b57c24106409",
+    );
+    assert.notEqual(
+      RECKONING_REVISED_11_2_SOURCE_PIN.content_hash,
+      RECKONING_REVISED_11_SOURCE_PIN.content_hash,
+    );
   });
 
   it("detects 30 stable structural units", () => {
@@ -308,6 +349,7 @@ describe("segmented Archivist architecture", () => {
     assert.equal(ARCHIVIST_CONSTITUTION.studio_selectable, false);
     assert.equal(archivistRegistryDefinitionV1().registry_metadata?.execution_wired, false);
     assert.equal(RECKONING_REVISED_11_SOURCE_PIN.authorized_to_run, false);
+    assert.equal(RECKONING_REVISED_11_2_SOURCE_PIN.authorized_to_run, false);
     await assert.rejects(() => assertSegmentedLiveMayNotStart());
     const result = await executeExpert({
       expert_key: "archivist",

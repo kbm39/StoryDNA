@@ -7,6 +7,7 @@ import {
 } from "../entity-resolution.ts";
 import { ARCHIVIST_BOOK_GRAPH_SCHEMA } from "./constants.ts";
 import { allObservationFacts, observationAmbiguities, observationEvidence } from "./observation-contract.ts";
+import { locatorFromRepresentation, type ObservationQuarantine } from "./observation-normalization.ts";
 import type {
   ArchivistBookGraph,
   ArchivistSegmentObservation,
@@ -15,8 +16,12 @@ import type {
   SegmentCheckpoint,
 } from "./types.ts";
 
-function stableValue(value: Record<string, unknown>): string {
-  return JSON.stringify(value, Object.keys(value).sort());
+function stableValue(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return JSON.stringify(value ?? null);
+  }
+  const record = value as Record<string, unknown>;
+  return JSON.stringify(record, Object.keys(record).sort());
 }
 
 function entityKey(alias: string, entityType: CanonEntityType, entityId?: string): string {
@@ -39,6 +44,16 @@ export function mergeSegmentObservations(args: {
   checkpoints: readonly SegmentCheckpoint[];
   entityContext?: ArchivistEntityResolutionContext;
 }): ArchivistBookGraph {
+  return mergeSegmentObservationsWithDiagnostics(args).graph;
+}
+
+export function mergeSegmentObservationsWithDiagnostics(args: {
+  manuscript_id: string;
+  manuscript_version_id: string;
+  content_hash: string;
+  checkpoints: readonly SegmentCheckpoint[];
+  entityContext?: ArchivistEntityResolutionContext;
+}): { graph: ArchivistBookGraph; quarantined: ObservationQuarantine[] } {
   const context: ArchivistEntityResolutionContext = {
     catalog: args.entityContext?.catalog ?? ARCHIVIST_CERTIFICATION_ENTITY_CATALOG,
     canonStore: args.entityContext?.canonStore,
@@ -48,6 +63,7 @@ export function mergeSegmentObservations(args: {
   const facts = new Map<string, BookGraphFact>();
   const ambiguities = new Map<string, (typeof args.checkpoints)[number] extends never ? never : import("../contracts.ts").ArchivistEntityAmbiguity>();
   const evidence: import("../contracts.ts").ArchivistEvidenceRecord[] = [];
+  const quarantined: ObservationQuarantine[] = [];
 
   const validated = args.checkpoints.filter(
     (item) => item.status === "validated" && item.observation,
@@ -86,6 +102,25 @@ export function mergeSegmentObservations(args: {
     }
 
     for (const fact of allObservationFacts(observation)) {
+      const locator = locatorFromRepresentation(fact.locator) ?? locatorFromRepresentation(
+        (fact as { location?: unknown }).location,
+      );
+      if (!locator) {
+        quarantined.push({
+          segment_id: observation.segment_id,
+          fact_id: fact.id,
+          reason: "missing_locator",
+        });
+        continue;
+      }
+      if (!fact.value || typeof fact.value !== "object" || Array.isArray(fact.value)) {
+        quarantined.push({
+          segment_id: observation.segment_id,
+          fact_id: fact.id,
+          reason: "missing_value",
+        });
+        continue;
+      }
       const resolved = resolveArchivistEntityIdentity(fact.alias, fact.entity_type, context);
       const graphFact: BookGraphFact = {
         id: fact.id,
@@ -98,17 +133,17 @@ export function mergeSegmentObservations(args: {
         temporal_scope: fact.temporal_scope,
         evidence: [
           {
-            excerpt: fact.excerpt,
-            locator: fact.locator.locator,
+            excerpt: fact.excerpt ?? "",
+            locator: locator.locator,
             evidence_role: "current_observation",
-            verification_status: "located",
+            verification_status: fact.excerpt?.trim() ? "unverified" : "unverified",
             source_kind: "manuscript",
             manuscript_id: args.manuscript_id,
             manuscript_version_id: args.manuscript_version_id,
             content_hash: args.content_hash,
           },
         ],
-        locators: [fact.locator],
+        locators: [locator],
         source_segment_ids: [observation.segment_id],
         confidence: fact.confidence,
       };
@@ -139,6 +174,7 @@ export function mergeSegmentObservations(args: {
   };
 
   return {
+    graph: {
     schema: ARCHIVIST_BOOK_GRAPH_SCHEMA,
     manuscript_id: args.manuscript_id,
     manuscript_version_id: args.manuscript_version_id,
@@ -153,8 +189,10 @@ export function mergeSegmentObservations(args: {
     knowledge_histories: byType("knowledge_state"),
     location_travel_histories: byType(["location", "travel", "presence"]),
     possessions: byType("possession"),
-    unique_objects: allFacts.filter((fact) => fact.value.unique === true || fact.entity_type === "object"),
+    unique_objects: allFacts.filter((fact) => fact.value?.unique === true || fact.entity_type === "object"),
     organizations: allFacts.filter((fact) => fact.entity_type === "organization"),
     evidence_references: evidence,
+    },
+    quarantined,
   };
 }

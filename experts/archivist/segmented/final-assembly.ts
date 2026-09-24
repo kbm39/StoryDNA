@@ -16,8 +16,10 @@ import {
 import { assertCandidateOnlyCanon, candidateCanonFromBookGraph } from "./candidate-canon.ts";
 import { assertCompleteCoverage } from "./coverage.ts";
 import { CoverageIncompleteError, SegmentedPublicationBlockedError } from "./errors.ts";
+import { evidencePassesPassageVerification } from "../evidence.ts";
 import {
   downgradeUnrehydratedConfirmed,
+  findingHasRehydratedBothSides,
   rehydrateFindingEvidence,
 } from "./evidence-rehydration.ts";
 import type {
@@ -102,16 +104,39 @@ export function assembleSegmentedArchivistReview(args: {
     manuscript_version_id: args.manuscript_version_id,
     content_hash: args.content_hash,
   };
-  const rawFindings = findingsFromContradictionPairs(args.pairs, identity).map((finding) =>
-    downgradeUnrehydratedConfirmed(
-      rehydrateFindingEvidence({
-        finding,
-        manuscriptText: args.manuscriptText,
-        ...identity,
-      }),
-    ),
-  );
-  const canon_delta = candidateCanonFromBookGraph(args.graph);
+  const rawFindings = findingsFromContradictionPairs(args.pairs, identity).map((finding) => {
+    const rehydrated = rehydrateFindingEvidence({
+      finding,
+      manuscriptText: args.manuscriptText,
+      ...identity,
+    });
+    const current = rehydrated.current_evidence.filter((record) =>
+      evidencePassesPassageVerification(record, args.manuscriptText),
+    );
+    const conflicting = rehydrated.conflicting_evidence.filter((record) =>
+      evidencePassesPassageVerification(record, args.manuscriptText),
+    );
+    const stripped = {
+      ...rehydrated,
+      current_evidence: current,
+      conflicting_evidence: conflicting,
+    };
+    const downgraded = downgradeUnrehydratedConfirmed(stripped);
+    if (
+      downgraded.classification === "confirmed_contradiction" &&
+      !findingHasRehydratedBothSides(downgraded)
+    ) {
+      return {
+        ...downgraded,
+        classification: "possible_continuity_conflict" as const,
+        final_classification: "possible_continuity_conflict" as const,
+        confirmation_eligibility: "insufficient_evidence" as const,
+        classification_adjustment_reason: "one_sided_or_unrecoverable_evidence",
+      };
+    }
+    return downgraded;
+  });
+  const canon_delta = candidateCanonFromBookGraph(args.graph, args.manuscriptText);
   assertCandidateOnlyCanon(canon_delta);
 
   const draft: ArchivistReview = {
@@ -125,18 +150,29 @@ export function assembleSegmentedArchivistReview(args: {
       confirmed_contradiction_count: rawFindings.filter((item) => item.classification === "confirmed_contradiction").length,
       possible_conflict_count: rawFindings.filter((item) => item.classification === "possible_continuity_conflict").length,
       author_verification_count: rawFindings.filter((item) => item.classification === "author_verification_needed").length,
-      narrative: "Segmented full-manuscript Archivist assembly. Candidate-only. No accepted canon.",
+      narrative:
+        "Segmented full-manuscript Archivist assembly from preserved checkpoints. Candidate-only. No accepted canon. Unpublished non-contiguous manuscript excerpts were recovered or dropped; manuscriptPassageLocated was not weakened.",
     },
     findings: rawFindings,
     canon_delta,
-    entity_ambiguities: args.graph.unresolved_ambiguities,
+    entity_ambiguities: args.graph.unresolved_ambiguities.filter(
+      (item) =>
+        typeof item.alias === "string" &&
+        item.alias.trim() &&
+        (item.candidate_entities?.length ?? 0) >= 2,
+    ),
     metrics: {
       finding_count: rawFindings.length,
       confirmed_contradiction_count: 0,
       possible_conflict_count: 0,
       author_verification_count: 0,
       canon_delta_count: canon_delta.length,
-      entity_ambiguity_count: args.graph.unresolved_ambiguities.length,
+      entity_ambiguity_count: args.graph.unresolved_ambiguities.filter(
+        (item) =>
+          typeof item.alias === "string" &&
+          item.alias.trim() &&
+          (item.candidate_entities?.length ?? 0) >= 2,
+      ).length,
       evidence_record_count: 0,
     },
     generation: {

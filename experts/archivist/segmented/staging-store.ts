@@ -7,8 +7,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RECKONING_REVISED_11_SOURCE_PIN } from "../reckoning-revised-11-source-pin.ts";
 import { RECKONING_REVISED_11_2_SOURCE_PIN } from "../reckoning-revised-11-2-source-pin.ts";
+import { RECKONING_REVISED_13_SOURCE_PIN } from "../reckoning-revised-13-source-pin.ts";
 
 function sourceDocxSha256ForManuscript(manuscriptId: string): string {
+  if (manuscriptId === RECKONING_REVISED_13_SOURCE_PIN.manuscript_id) {
+    return RECKONING_REVISED_13_SOURCE_PIN.source_docx_sha256;
+  }
   if (manuscriptId === RECKONING_REVISED_11_2_SOURCE_PIN.manuscript_id) {
     return RECKONING_REVISED_11_2_SOURCE_PIN.source_docx_sha256;
   }

@@ -11,6 +11,7 @@ export {
   loadManuscriptSnapshot,
   loadPinnedReckoningRevised11,
   loadPinnedReckoningRevised112,
+  loadPinnedReckoningRevised13,
   storyDnaContentHash,
 } from "./manuscript-loader.ts";
 export {
@@ -42,6 +43,7 @@ export {
 export { pairDeterministicContradictions } from "./contradiction-pairing.ts";
 export { batchReconciliationItems, buildReconciliationItems } from "./reconciliation.ts";
 export { rehydrateEvidenceRecord, downgradeUnrehydratedConfirmed } from "./evidence-rehydration.ts";
+export { recoverContiguousManuscriptPassage } from "./contiguous-passage-recovery.ts";
 export { candidateCanonFromBookGraph } from "./candidate-canon.ts";
 export { assembleSegmentedArchivistReview } from "./final-assembly.ts";
 export { projectSegmentedRunCost } from "./cost-model.ts";

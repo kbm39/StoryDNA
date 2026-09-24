@@ -1,6 +1,7 @@
 import { manuscriptPassageLocated } from "@/lib/passage-locate.ts";
 import type { ArchivistEvidenceRecord, ArchivistFinding } from "../contracts.ts";
 import { evidenceIsLocated } from "../evidence.ts";
+import { recoverContiguousManuscriptPassage } from "./contiguous-passage-recovery.ts";
 
 export function rehydrateEvidenceRecord(args: {
   record: ArchivistEvidenceRecord;
@@ -8,17 +9,29 @@ export function rehydrateEvidenceRecord(args: {
   manuscript_id: string;
   manuscript_version_id: string;
   content_hash: string;
+  value?: Record<string, unknown>;
 }): ArchivistEvidenceRecord {
   const belongsToVersion =
     (!args.record.manuscript_id || args.record.manuscript_id === args.manuscript_id) &&
     (!args.record.manuscript_version_id ||
       args.record.manuscript_version_id === args.manuscript_version_id) &&
     (!args.record.content_hash || args.record.content_hash === args.content_hash);
-  const excerptExists = Boolean(args.record.excerpt?.trim());
+  let excerpt = args.record.excerpt;
+  if (excerpt?.trim() && !manuscriptPassageLocated(args.manuscriptText, excerpt)) {
+    const recovered = recoverContiguousManuscriptPassage({
+      excerpt,
+      locator: args.record.locator,
+      manuscriptText: args.manuscriptText,
+      value: args.value,
+    });
+    if (recovered.class === "B") excerpt = recovered.excerpt;
+  }
+  const excerptExists = Boolean(excerpt?.trim());
   const locatorResolves = Boolean(args.record.locator?.trim());
-  const matches = excerptExists && manuscriptPassageLocated(args.manuscriptText, args.record.excerpt);
+  const matches = excerptExists && manuscriptPassageLocated(args.manuscriptText, excerpt);
   return {
     ...args.record,
+    excerpt,
     manuscript_id: args.manuscript_id,
     manuscript_version_id: args.manuscript_version_id,
     content_hash: args.content_hash,

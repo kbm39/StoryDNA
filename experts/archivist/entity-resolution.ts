@@ -203,12 +203,19 @@ export function applyArchivistEntityResolution(
 
   const aliases = new Map<string, { alias: string; type: CanonEntityType }>();
   for (const delta of review.canon_delta) {
+    if (typeof delta.entity.alias !== "string" || !delta.entity.alias.trim()) continue;
     const key = normalizeAlias(delta.entity.alias);
     if (key) aliases.set(key, { alias: delta.entity.alias, type: delta.entity.entity_type });
   }
   for (const item of review.entity_ambiguities) {
+    if (typeof item.alias !== "string" || !item.alias.trim()) continue;
     const key = normalizeAlias(item.alias);
-    if (key) aliases.set(key, { alias: item.alias, type: item.candidate_entities[0]?.entity_type ?? "person" });
+    if (key) {
+      aliases.set(key, {
+        alias: item.alias,
+        type: item.candidate_entities?.[0]?.entity_type ?? "person",
+      });
+    }
   }
 
   const entity_ambiguities: ArchivistEntityAmbiguity[] = [];

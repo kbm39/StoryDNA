@@ -9,8 +9,8 @@ import {
 
 export type { CanonEntityScope } from "./types.ts";
 
-export function normalizeAlias(alias: string): string {
-  return alias.trim().toLowerCase();
+export function normalizeAlias(alias: string | null | undefined): string {
+  return (alias ?? "").trim().toLowerCase();
 }
 
 function entityInScope(entity: CanonEntity, scope: CanonEntityScope): boolean {

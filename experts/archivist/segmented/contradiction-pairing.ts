@@ -12,7 +12,7 @@ const CHAPTER_NAME_TO_NUMBER = new Map(
 );
 
 function chapterOrdinal(fact: BookGraphFact): number | null {
-  const fromScope = fact.temporal_scope.chapter;
+  const fromScope = fact.temporal_scope?.chapter;
   const fromLocator = fact.locators[0]?.chapter ?? fact.locators[0]?.locator;
   for (const candidate of [fromScope, fromLocator]) {
     if (!candidate) continue;

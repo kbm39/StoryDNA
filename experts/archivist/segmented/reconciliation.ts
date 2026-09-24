@@ -10,8 +10,8 @@ function temporalRelationship(
   left: BookGraphFact,
   right: BookGraphFact,
 ): ReconciliationItem["temporal_relationship"] {
-  const leftChapter = left.temporal_scope.chapter ?? left.locators[0]?.chapter;
-  const rightChapter = right.temporal_scope.chapter ?? right.locators[0]?.chapter;
+  const leftChapter = left.temporal_scope?.chapter ?? left.locators[0]?.chapter;
+  const rightChapter = right.temporal_scope?.chapter ?? right.locators[0]?.chapter;
   if (!leftChapter || !rightChapter) return "unknown";
   return leftChapter === rightChapter ? "same_time" : "earlier_later";
 }

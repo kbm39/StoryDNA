@@ -12,6 +12,7 @@ export const FACT_TYPE_REPRESENTATION_ALIASES = {
 
 export type ObservationQuarantineReason =
   | "missing_locator"
+  | "missing_value"
   | "missing_identity"
   | "unsupported_fact_type"
   | "unusable_optional";

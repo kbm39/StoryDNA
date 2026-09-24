@@ -1,0 +1,61 @@
+/**
+ * Actual deterministic REVISED-11 segment plan computed from the pinned
+ * staging manuscript. Does not contain manuscript text. Does not authorize a run.
+ */
+
+export const RECKONING_REVISED_11_STRUCTURAL_UNITS = [
+  { unit_id: "prologue", heading: "PROLOGUE", word_count: 3858 },
+  { unit_id: "chapter-01", heading: "CHAPTER ONE", word_count: 3663 },
+  { unit_id: "chapter-02", heading: "CHAPTER TWO", word_count: 2306 },
+  { unit_id: "chapter-03", heading: "CHAPTER THREE", word_count: 6683 },
+  { unit_id: "chapter-04", heading: "CHAPTER FOUR", word_count: 2028 },
+  { unit_id: "chapter-05", heading: "CHAPTER FIVE", word_count: 2436 },
+  { unit_id: "chapter-06", heading: "CHAPTER SIX", word_count: 1220 },
+  { unit_id: "chapter-07", heading: "CHAPTER SEVEN", word_count: 1464 },
+  { unit_id: "chapter-08", heading: "CHAPTER EIGHT", word_count: 3913 },
+  { unit_id: "chapter-09", heading: "CHAPTER NINE", word_count: 5517 },
+  { unit_id: "chapter-10", heading: "CHAPTER TEN", word_count: 3698 },
+  { unit_id: "chapter-11", heading: "CHAPTER ELEVEN", word_count: 5600 },
+  { unit_id: "chapter-12", heading: "CHAPTER TWELVE", word_count: 6186 },
+  { unit_id: "chapter-13", heading: "CHAPTER THIRTEEN", word_count: 4247 },
+  { unit_id: "chapter-14", heading: "CHAPTER FOURTEEN", word_count: 6348 },
+  { unit_id: "chapter-15", heading: "CHAPTER FIFTEEN", word_count: 7369 },
+  { unit_id: "chapter-16", heading: "CHAPTER SIXTEEN", word_count: 2398 },
+  { unit_id: "chapter-17", heading: "CHAPTER SEVENTEEN", word_count: 2259 },
+  { unit_id: "chapter-18", heading: "CHAPTER EIGHTEEN", word_count: 2479 },
+  { unit_id: "chapter-19", heading: "CHAPTER NINETEEN", word_count: 2253 },
+  { unit_id: "chapter-20", heading: "CHAPTER TWENTY", word_count: 4572 },
+  { unit_id: "chapter-21", heading: "CHAPTER TWENTY-ONE", word_count: 3838 },
+  { unit_id: "chapter-22", heading: "CHAPTER TWENTY-TWO", word_count: 1994 },
+  { unit_id: "chapter-23", heading: "CHAPTER TWENTY-THREE", word_count: 4078 },
+  { unit_id: "chapter-24", heading: "CHAPTER TWENTY-FOUR", word_count: 3841 },
+  { unit_id: "chapter-25", heading: "CHAPTER TWENTY-FIVE", word_count: 2849 },
+  { unit_id: "chapter-26", heading: "CHAPTER TWENTY-SIX", word_count: 3961 },
+  { unit_id: "chapter-27", heading: "CHAPTER TWENTY-SEVEN", word_count: 2756 },
+  { unit_id: "chapter-28", heading: "CHAPTER TWENTY-EIGHT", word_count: 4515 },
+  { unit_id: "chapter-29", heading: "CHAPTER TWENTY-NINE", word_count: 1827 },
+] as const;
+
+export const RECKONING_REVISED_11_SEGMENT_PLAN = {
+  segment_count: 14,
+  unique_manuscript_words: 110156,
+  overlap_words: 27641,
+  coverage_percentage: 100,
+  complete: true,
+  segments: [
+    { segment_id: "seg-01-prologue-chapter-02", primary: ["prologue", "chapter-01", "chapter-02"], unique_words: 9827, overlap_words: 0 },
+    { segment_id: "seg-02-chapter-03-chapter-04", primary: ["chapter-03", "chapter-04"], unique_words: 8711, overlap_words: 2306 },
+    { segment_id: "seg-03-chapter-05-chapter-08", primary: ["chapter-05", "chapter-06", "chapter-07", "chapter-08"], unique_words: 9033, overlap_words: 2028 },
+    { segment_id: "seg-04-chapter-09-chapter-09", primary: ["chapter-09"], unique_words: 5517, overlap_words: 3913 },
+    { segment_id: "seg-05-chapter-10-chapter-11", primary: ["chapter-10", "chapter-11"], unique_words: 9298, overlap_words: 1124 },
+    { segment_id: "seg-06-chapter-12-chapter-13", primary: ["chapter-12", "chapter-13"], unique_words: 10433, overlap_words: 1153 },
+    { segment_id: "seg-07-chapter-14-chapter-14", primary: ["chapter-14"], unique_words: 6348, overlap_words: 1198 },
+    { segment_id: "seg-08-chapter-15-chapter-16", primary: ["chapter-15", "chapter-16"], unique_words: 9767, overlap_words: 1166 },
+    { segment_id: "seg-09-chapter-17-chapter-19", primary: ["chapter-17", "chapter-18", "chapter-19"], unique_words: 6991, overlap_words: 2398 },
+    { segment_id: "seg-10-chapter-20-chapter-21", primary: ["chapter-20", "chapter-21"], unique_words: 8410, overlap_words: 2253 },
+    { segment_id: "seg-11-chapter-22-chapter-23", primary: ["chapter-22", "chapter-23"], unique_words: 6072, overlap_words: 3838 },
+    { segment_id: "seg-12-chapter-24-chapter-26", primary: ["chapter-24", "chapter-25", "chapter-26"], unique_words: 10651, overlap_words: 1195 },
+    { segment_id: "seg-13-chapter-27-chapter-28", primary: ["chapter-27", "chapter-28"], unique_words: 7271, overlap_words: 3961 },
+    { segment_id: "seg-14-chapter-29-chapter-29", primary: ["chapter-29"], unique_words: 1827, overlap_words: 1108 },
+  ],
+} as const;

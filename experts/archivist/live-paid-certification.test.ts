@@ -16,6 +16,11 @@ import {
   ARCHIVIST_SMOKE_20260922_V3_SESSION_ID,
   ARCHIVIST_V3_AUTHORIZED,
 } from "./v3-certification-criteria.ts";
+import { ARCHIVIST_CERT_20260924_V1_EVIDENCE } from "./session-archivist-cert-20260924-v1.ts";
+import {
+  ARCHIVIST_CERT_20260924_V2_AUTHORIZED,
+  ARCHIVIST_CERT_20260924_V2_SESSION_ID,
+} from "./v4-certification-criteria.ts";
 
 describe("Archivist paid scope certification", () => {
   it("requires the founder ack token and never flips live gates", () => {
@@ -32,6 +37,9 @@ describe("Archivist paid scope certification", () => {
     assert.equal(ARCHIVIST_PAID_SMOKE_MODEL, "claude-haiku-4-5-20251001");
     assert.equal(ARCHIVIST_V3_AUTHORIZED, false);
     assert.notEqual(ARCHIVIST_SMOKE_20260922_V2_EVIDENCE.session_id, ARCHIVIST_SMOKE_20260922_V3_SESSION_ID);
+    assert.equal(ARCHIVIST_CERT_20260924_V1_EVIDENCE.official_result, "12/15 FAIL");
+    assert.equal(ARCHIVIST_CERT_20260924_V2_AUTHORIZED, false);
+    assert.equal(ARCHIVIST_CERT_20260924_V2_SESSION_ID, "archivist-cert-20260924-v2");
     assert.ok(ARCHIVIST_PAID_SCOPE_CASES.every((item) => !/hold fast/i.test(item.manuscript_text)));
     assert.deepEqual(
       parsePaidCertificationArgv([

@@ -77,6 +77,24 @@ function validateFinding(
   if (!isArchivistClassification(String(finding.classification))) {
     errors.push(`${prefix}: unsupported classification "${String(finding.classification)}"`);
   }
+  if (
+    finding.model_classification &&
+    !isArchivistClassification(String(finding.model_classification))
+  ) {
+    errors.push(`${prefix}: unsupported model_classification`);
+  }
+  if (
+    finding.final_classification &&
+    !isArchivistClassification(String(finding.final_classification))
+  ) {
+    errors.push(`${prefix}: unsupported final_classification`);
+  }
+  if (
+    finding.confirmation_eligibility &&
+    !["eligible", "ineligible", "insufficient_evidence"].includes(finding.confirmation_eligibility)
+  ) {
+    errors.push(`${prefix}: unsupported confirmation_eligibility`);
+  }
   if (!isArchivistSeverity(String(finding.severity))) {
     errors.push(`${prefix}: unsupported severity "${String(finding.severity)}"`);
   }

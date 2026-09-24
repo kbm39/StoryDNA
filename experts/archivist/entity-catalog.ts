@@ -12,6 +12,8 @@ export const ARCHIVIST_FIXTURE_ENTITY_IDS = {
   elenaWard: "fixture-entity-elena-ward",
   johnReeves: "fixture-entity-john-reeves",
   johnHale: "fixture-entity-john-hale",
+  calder: "fixture-entity-calder",
+  silverCompass: "fixture-entity-silver-compass",
 } as const;
 
 export interface ArchivistResolvableEntity {
@@ -45,6 +47,18 @@ export const ARCHIVIST_CERTIFICATION_ENTITY_CATALOG: readonly ArchivistResolvabl
     canonical_name: "John Hale",
     aliases: ["John Hale", "John"],
     entity_type: "person",
+  },
+  {
+    entity_id: ARCHIVIST_FIXTURE_ENTITY_IDS.calder,
+    canonical_name: "Calder",
+    aliases: ["Calder"],
+    entity_type: "person",
+  },
+  {
+    entity_id: ARCHIVIST_FIXTURE_ENTITY_IDS.silverCompass,
+    canonical_name: "silver compass",
+    aliases: ["silver compass", "the silver compass"],
+    entity_type: "object",
   },
 ];
 

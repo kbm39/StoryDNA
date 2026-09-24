@@ -90,6 +90,39 @@ describe("Archivist temporal relation and persistence", () => {
     assert.equal(compatibility, "compatible_change");
   });
 
+  it("treats same-time left/right injury laterality as incompatible", () => {
+    const compatibility = evaluateContinuityCompatibility(finding({
+      issue_type: "injury",
+      current_location: { locator: "Chapter 11", chapter: "11" },
+      conflicting_location: { locator: "Chapter 11", chapter: "11" },
+      current_evidence: [
+        {
+          excerpt: "The wound on Mara's left shoulder had closed.",
+          locator: "Chapter 11",
+          evidence_role: "current_observation",
+          verification_status: "located",
+          source_kind: "manuscript",
+        },
+      ],
+      conflicting_evidence: [
+        {
+          excerpt: "The medic wrapped Mara's right shoulder.",
+          locator: "Chapter 11",
+          evidence_role: "conflicting_canon",
+          verification_status: "located",
+          source_kind: "manuscript",
+        },
+      ],
+      temporal_analysis: {
+        relation: "same_time",
+        explanation: "No evidence indicates the wound healed and relocated.",
+        current_scope: { kind: "at", chapter: "11" },
+        conflicting_scope: { kind: "at", chapter: "11" },
+      },
+    }));
+    assert.equal(compatibility, "incompatible");
+  });
+
   it("treats alive then died as a compatible changeable fact", () => {
     const compatibility = evaluateContinuityCompatibility(finding({
       issue_type: "alive_status",
@@ -114,6 +147,6 @@ describe("Archivist temporal relation and persistence", () => {
       explanation: "She is alive earlier and dies later.",
     }));
     assert.equal(compatibility, "compatible_change");
-    assert.equal(classifyFactPersistence({ factType: "alive_status" }), "changeable");
+    assert.equal(classifyFactPersistence({ factType: "alive_status" }), "stateful_changeable");
   });
 });

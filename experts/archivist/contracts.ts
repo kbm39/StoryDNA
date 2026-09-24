@@ -170,10 +170,25 @@ export interface ArchivistTemporalAnalysis {
   conflicting_scope?: TemporalScope;
 }
 
+export const ARCHIVIST_CONFIRMATION_ELIGIBILITIES = [
+  "eligible",
+  "ineligible",
+  "insufficient_evidence",
+] as const;
+
+export type ArchivistConfirmationEligibility =
+  (typeof ARCHIVIST_CONFIRMATION_ELIGIBILITIES)[number];
+
 export interface ArchivistFinding {
   id: string;
   issue_type: ArchivistIssueType;
+  /** Final StoryDNA classification after deterministic eligibility. */
   classification: ArchivistClassification;
+  /** Advisory model classification before StoryDNA adjustment. */
+  model_classification?: ArchivistClassification;
+  final_classification?: ArchivistClassification;
+  confirmation_eligibility?: ArchivistConfirmationEligibility;
+  classification_adjustment_reason?: string;
   severity: ArchivistSeverity;
   confidence: ArchivistConfidence;
   current_location: ArchivistLocation;

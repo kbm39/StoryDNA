@@ -5,12 +5,12 @@
  * raw payload already parsed/enveloped
  * → deterministic entity resolution
  * → temporal/persistence evaluation
+ * → confirmation eligibility / final classification
  * → safe normalization
- * → evidence downgrades
  *
  * May: attach StoryDNA entity IDs, rewrite real ambiguities, evaluate
- * temporal compatibility, downgrade confirmed findings that lack both-side
- * located evidence, fail passage verification, or are compatible changes.
+ * temporal compatibility, and promote or downgrade classification from
+ * deterministic confirmation eligibility. Never silently.
  * Must not: invent quotations, coerce accepted canon to candidate, accept
  * Series Bible facts, approve retcons, dismiss conflicts, author-dispose,
  * silently merge ambiguous entities, or trust model-emitted entity IDs.
@@ -22,28 +22,14 @@ import {
   applyArchivistEntityResolution,
   type ArchivistEntityResolutionContext,
 } from "./entity-resolution.ts";
-import {
-  confirmedContradictionHasBothSides,
-  evidencePassesPassageVerification,
-} from "./evidence.ts";
 import { normalizeArchivistReview } from "./normalization.ts";
-import {
-  applyArchivistTemporalContinuity,
-  confirmedContradictionMayStand,
-} from "./temporal-continuity.ts";
+import { applyConfirmationEligibility } from "./confirmation-eligibility.ts";
+import { applyArchivistTemporalContinuity } from "./temporal-continuity.ts";
 
 export interface ArchivistLivePostprocessOptions {
   manuscriptText?: string;
   entityContext?: ArchivistEntityResolutionContext;
   useCertificationEntityCatalog?: boolean;
-}
-
-function manuscriptEvidenceVerified(
-  finding: ArchivistFinding,
-  manuscriptText: string | undefined,
-): boolean {
-  const records = [...(finding.current_evidence ?? []), ...(finding.conflicting_evidence ?? [])];
-  return records.every((record) => evidencePassesPassageVerification(record, manuscriptText));
 }
 
 function isUnnecessaryCleanVerification(finding: ArchivistFinding): boolean {
@@ -55,28 +41,16 @@ function isUnnecessaryCleanVerification(finding: ArchivistFinding): boolean {
   return true;
 }
 
-function downgradeConfirmedFinding(
+function applyFinalClassification(
   finding: ArchivistFinding,
-  manuscriptText: string | undefined,
+  options: ArchivistLivePostprocessOptions,
+  review: ArchivistReview,
 ): ArchivistFinding {
-  if (finding.classification !== "confirmed_contradiction") return finding;
-
-  const bothSides = confirmedContradictionHasBothSides(finding);
-  const passagesOk = manuscriptEvidenceVerified(finding, manuscriptText);
-  const compatibility = finding.temporal_analysis?.continuity_compatibility;
-  const compatibilityBlocks = compatibility
-    ? !confirmedContradictionMayStand(compatibility)
-    : finding.temporal_analysis?.relation === "unknown";
-
-  if (bothSides && passagesOk && !compatibilityBlocks) return finding;
-
-  const hasAnyLocated =
-    (finding.current_evidence?.length ?? 0) > 0 || (finding.conflicting_evidence?.length ?? 0) > 0;
-
-  return {
-    ...finding,
-    classification: hasAnyLocated ? "possible_continuity_conflict" : "author_verification_needed",
-  };
+  return applyConfirmationEligibility(finding, {
+    manuscriptText: options.manuscriptText,
+    review,
+    entityContext: options.entityContext,
+  });
 }
 
 function resolvePostprocessOptions(
@@ -108,16 +82,20 @@ export function applyArchivistLivePostprocess(
   };
 
   const identitiesApplied = applyArchivistEntityResolution(review, entityContext);
+  const optionsWithContext: ArchivistLivePostprocessOptions = {
+    ...resolvedOptions,
+    entityContext,
+  };
   const temporallyEvaluated = identitiesApplied.findings.map((finding) =>
     applyArchivistTemporalContinuity(finding),
   );
-  const evidenceAdjusted = temporallyEvaluated
-    .map((finding) => downgradeConfirmedFinding(finding, resolvedOptions.manuscriptText))
+  const classified = temporallyEvaluated
+    .map((finding) => applyFinalClassification(finding, optionsWithContext, identitiesApplied))
     .filter((finding) => !isUnnecessaryCleanVerification(finding));
 
   return normalizeArchivistReview({
     ...identitiesApplied,
-    findings: evidenceAdjusted,
+    findings: classified,
     generation: {
       ...identitiesApplied.generation,
       provider: "none",

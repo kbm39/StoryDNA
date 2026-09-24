@@ -13,6 +13,9 @@ import type {
   ArchivistObservationTemporalRelation,
 } from "./contracts.ts";
 import { classifyFactPersistence } from "./fact-persistence.ts";
+import { evaluateInjuryContinuity } from "./injury-laterality.ts";
+import { evaluateKnowledgeContinuity } from "./knowledge-state.ts";
+import { evaluateObjectPossessionContinuity } from "./object-possession.ts";
 
 export const LEGACY_TEMPORAL_RELATION_MAP: Record<string, ArchivistObservationTemporalRelation> = {
   identical: "same_time",
@@ -41,10 +44,10 @@ const TRANSITION_MARKERS: Record<string, readonly string[]> = {
   rank_title: ["promoted", "demoted", "commissioned", "retired", "stripped"],
   location: ["moved", "traveled", "travelled", "left", "arrived", "fled"],
   possession: ["gave", "stole", "lost", "found", "handed"],
-  injury: ["healed", "recovered", "wounded", "injured", "treated"],
+  injury: ["healed", "recovered"],
   relationship: ["married", "divorced", "separated", "broke up", "became"],
   age: ["years later", "years passed"],
-  knowledge_state: ["learned", "told", "discovered", "revealed"],
+  knowledge_state: [],
 };
 
 function chapterNumber(value: string | undefined | null): number | null {
@@ -114,13 +117,25 @@ export function transitionEvidenceText(finding: ArchivistFinding): string {
     .join(" ");
 }
 
+function markerIsAffirmative(haystack: string, marker: string): boolean {
+  let from = 0;
+  while (from < haystack.length) {
+    const idx = haystack.indexOf(marker, from);
+    if (idx < 0) return false;
+    const before = haystack.slice(Math.max(0, idx - 48), idx);
+    if (!/\b(no|not|without|lacking|never|neither)\b/.test(before)) return true;
+    from = idx + marker.length;
+  }
+  return false;
+}
+
 export function hasTransitionEvidence(finding: ArchivistFinding, factType: string): boolean {
   const haystack = transitionEvidenceText(finding).toLowerCase();
   const markers = [
     ...(TRANSITION_MARKERS[factType] ?? []),
     ...(factType === "appearance" ? TRANSITION_MARKERS.appearance : []),
   ];
-  return markers.some((marker) => haystack.includes(marker));
+  return markers.some((marker) => markerIsAffirmative(haystack, marker));
 }
 
 export function evaluateContinuityCompatibility(
@@ -130,6 +145,15 @@ export function evaluateContinuityCompatibility(
     (finding.current_evidence?.length ?? 0) > 0 && (finding.conflicting_evidence?.length ?? 0) > 0;
   if (!bothSides) return "insufficient_evidence";
 
+  const injury = evaluateInjuryContinuity(finding);
+  if (injury.applies && injury.compatibility) return injury.compatibility;
+
+  const knowledge = evaluateKnowledgeContinuity(finding);
+  if (knowledge.applies && knowledge.compatibility) return knowledge.compatibility;
+
+  const object = evaluateObjectPossessionContinuity(finding);
+  if (object.applies && object.compatibility) return object.compatibility;
+
   const hints = findingTextHints(finding);
   const factType = finding.issue_type;
   const persistence = classifyFactPersistence({
@@ -138,9 +162,15 @@ export function evaluateContinuityCompatibility(
     textHints: hints,
   });
   const transition = hasTransitionEvidence(finding, factType);
+  const relation = inferObservationTemporalRelation(finding);
 
   if (transition) return "compatible_change";
-  if (persistence === "persistent") return "incompatible";
+  if (persistence === "persistent" || persistence === "event_attribute") return "incompatible";
+  if (persistence === "ephemeral") {
+    if (relation === "same_time" || relation === "overlapping") return "incompatible";
+    return "compatible_change";
+  }
+  if (persistence === "unknown") return "insufficient_evidence";
   return "unexplained_change";
 }
 

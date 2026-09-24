@@ -13,6 +13,7 @@ import { ARCHIVIST_LIVE_MODEL_CERTIFIED } from "./live-flags.ts";
 import { createAnthropicArchivistLiveProvider } from "./live-provider.ts";
 import { runArchivistLiveExecution } from "./live-execute.ts";
 import { liveReviewEmitsAcceptedCanon, liveReviewEmitsAuthorDisposition } from "./live-postprocess.ts";
+import { summarizeClassificationAdjustments } from "./confirmation-eligibility.ts";
 import { confirmedContradictionHasBothSides } from "./evidence.ts";
 import type { ArchivistFinding, ArchivistReview } from "./contracts.ts";
 import type { LiveArchivistExecutionResult } from "./live-types.ts";
@@ -79,6 +80,10 @@ export interface ArchivistPaidCaseScore {
   passed: boolean;
   detail: string;
   confirmed_count: number;
+  model_confirmed_count?: number;
+  final_confirmed_count?: number;
+  deterministic_promotions?: number;
+  deterministic_downgrades?: number;
   accepted_canon: boolean;
   author_disposition: boolean;
   both_sides: boolean;
@@ -130,7 +135,8 @@ export interface ArchivistPaidCertificationReport {
 
 function confirmedFindings(review: ArchivistReview | null): ArchivistFinding[] {
   return (review?.findings ?? []).filter(
-    (finding) => finding.classification === "confirmed_contradiction",
+    (finding) =>
+      (finding.final_classification ?? finding.classification) === "confirmed_contradiction",
   );
 }
 
@@ -154,6 +160,7 @@ export function scorePaidScopeCase(
   >,
 ): ArchivistPaidCaseScore {
   const confirmed = confirmedFindings(result.review);
+  const adjustments = summarizeClassificationAdjustments(result.review?.findings ?? []);
   const accepted =
     result.canon_writes.accepted_facts > 0 ||
     Boolean(result.review && liveReviewEmitsAcceptedCanon(result.review));
@@ -163,7 +170,8 @@ export function scorePaidScopeCase(
   const min = fixture.expect.min_confirmed ?? 0;
   const countOk = count >= min && count <= fixture.expect.max_confirmed;
   const verificationCount = (result.review?.findings ?? []).filter(
-    (finding) => finding.classification === "author_verification_needed",
+    (finding) =>
+      (finding.final_classification ?? finding.classification) === "author_verification_needed",
   ).length;
   const verificationOk =
     fixture.expect.max_author_verification == null ||
@@ -174,8 +182,12 @@ export function scorePaidScopeCase(
     id: fixture.id,
     gate: fixture.gate,
     passed,
-    detail: `confirmed=${count} expected ${min}-${fixture.expect.max_confirmed}; accepted=${accepted}; disposition=${disposition}; both_sides=${bothSides}; error=${result.error_code ?? "none"}`,
+    detail: `final_confirmed=${count} model_confirmed=${adjustments.model_confirmed_count} expected ${min}-${fixture.expect.max_confirmed}; promotions=${adjustments.deterministic_promotions}; downgrades=${adjustments.deterministic_downgrades}; accepted=${accepted}; disposition=${disposition}; both_sides=${bothSides}; error=${result.error_code ?? "none"}`,
     confirmed_count: count,
+    model_confirmed_count: adjustments.model_confirmed_count,
+    final_confirmed_count: adjustments.final_confirmed_count,
+    deterministic_promotions: adjustments.deterministic_promotions,
+    deterministic_downgrades: adjustments.deterministic_downgrades,
     accepted_canon: accepted,
     author_disposition: disposition,
     both_sides: bothSides,

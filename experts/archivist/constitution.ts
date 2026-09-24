@@ -115,7 +115,7 @@ export const ARCHIVIST_CONSTITUTION_RULES = {
       "supersession_retcon_status",
     ],
     summary:
-      "Do not call two facts contradictory merely because values differ. Separate when observations occur from whether the change is compatible. Persistent facts remain contradictory across chapters unless transition evidence exists. Changeable facts may both be valid when chronology and transition evidence exist.",
+      "Do not call two facts contradictory merely because values differ. Separate when observations occur from whether the change is compatible. Persistent facts remain contradictory across chapters unless transition evidence exists. Changeable facts may both be valid when chronology and transition evidence exist. Injury laterality is an event attribute of the same injury. The model's classification is advisory; StoryDNA owns confirmation eligibility.",
   },
   F_series_authority: {
     id: "F",

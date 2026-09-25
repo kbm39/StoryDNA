@@ -170,6 +170,7 @@ describe("archivist_segment_observation@v2", () => {
       "token-estimate.ts",
       "prompt.ts",
       "adapter.ts",
+      "enum-normalization.ts",
       "fixture-provider.ts",
       "rehearsal.ts",
       "examples.ts",

@@ -50,6 +50,22 @@ describe("archivist v2 prompt + compact adapter", () => {
     assert.match(prompt, /archivist_segment_observation@v2/);
     assert.match(prompt, /Do not ask or answer: What are the continuity problems\?/);
     assert.doesNotMatch(prompt, /^What are the continuity problems\?/m);
+    assert.match(prompt, /polarity must be the strings "true" \| "false" \| "unknown"/);
+    assert.match(prompt, /knowledge_state: known \| unknown \| learned \| inferred \| claimed/);
+    assert.match(prompt, /identity_claim: also_known_as \| role \| same_as \| unlinked/);
+    assert.match(prompt, /Do not collapse explicit departure and arrival clocks/);
+    assert.match(prompt, /Do not put the vehicle in traveler when a human traveler is named/);
+    assert.match(prompt, /emit a second object_equipment observation/);
+    assert.match(prompt, /knowledge_state=learned/);
+    assert.match(prompt, /different reasoning dimensions/);
+    assert.match(prompt, /operational_capability with state=used/);
+    assert.match(prompt, /Do not create statement rows from narration/);
+    assert.match(prompt, /Do not stitch sentences across intervening prose/);
+    assert.match(prompt, /location_presence requires an explicit location/);
+    assert.match(prompt, /laterality='unspecified'/);
+    assert.match(prompt, /Nested proposition is optional when the typed payload already contains/);
+    assert.match(prompt, /polarity must be the strings "true" \| "false" \| "unknown"/);
+    assert.match(prompt, /capability state: available \| unavailable \| unknown \| used/);
     const user = buildV2ObservationUserPrompt({
       segmentId: "seg-01",
       segmentText: "placeholder segment text for prompt contract",
@@ -266,6 +282,8 @@ describe("archivist v2 prompt + compact adapter", () => {
     const files = [
       "prompt.ts",
       "adapter.ts",
+      "enum-normalization.ts",
+      "evidence-contiguity.ts",
       "fixture-provider.ts",
       "rehearsal.ts",
       "examples.ts",

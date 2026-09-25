@@ -47,6 +47,22 @@ export {
   adaptV2ProviderOutput,
 } from "./adapter.ts";
 export {
+  V2_PROPOSITION_RECOVERY_MATRIX,
+  V2_PROPOSITION_RECOVERY_VERSION,
+  recoverV2PropositionFromTypedPayload,
+} from "./proposition-recovery.ts";
+export {
+  V2_EVIDENCE_GATE_VERSION,
+  applySegmentEvidenceGate,
+  excerptIsContiguousInSegment,
+} from "./evidence-contiguity.ts";
+export {
+  V2_ENUM_NORMALIZATION_VERSION,
+  applySafeEnumNormalizations,
+  lateralityNamedInExcerpt,
+  parseAlsoKnownAsClaim,
+} from "./enum-normalization.ts";
+export {
   V2_FIXTURE_MODEL,
   V2_FIXTURE_PROVIDER,
   fixtureObservationsForCase,

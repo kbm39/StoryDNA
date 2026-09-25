@@ -43,6 +43,7 @@ export interface V2Evidence {
   manuscript_id?: string;
   manuscript_version_id?: string;
   content_hash?: string;
+  evidence_status?: "verified" | "unverified";
 }
 
 export interface V2TimestampPayload {

@@ -242,6 +242,7 @@ export function emptySegmentObservationV2(segmentId: string): ArchivistSegmentOb
 
 export function observationIsConfirmationGrade(observation: V2Observation): boolean {
   const evidence = observation.evidence;
+  if (evidence.evidence_status === "unverified") return false;
   return (
     Boolean(evidence.locator?.trim()) &&
     evidence.excerpt.trim().length >= 8 &&

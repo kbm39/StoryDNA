@@ -18,7 +18,6 @@ import {
   V2_POLARITIES,
   V2_PRESENCE_STATES,
   V2_RELATIONSHIP_STATES,
-  V2_SOURCE_KINDS,
 } from "./constants.ts";
 import type {
   ArchivistSegmentObservationV2,
@@ -28,8 +27,13 @@ import type {
   V2ObservationKind,
   V2Polarity,
   V2Proposition,
-  V2SourceKind,
 } from "./types.ts";
+import {
+  applySafeEnumNormalizations,
+  type V2NormalizationAudit,
+} from "./enum-normalization.ts";
+import { recoverV2PropositionFromTypedPayload } from "./proposition-recovery.ts";
+import { applySegmentEvidenceGate, type V2EvidenceStatus } from "./evidence-contiguity.ts";
 import {
   emptySegmentObservationV2,
   observationIsConfirmationGrade,
@@ -60,12 +64,20 @@ export type V2QuarantineReason =
   | "invalid_polarity"
   | "missing_proposition"
   | "calculated_distance"
-  | "insufficient_evidence";
+  | "insufficient_evidence"
+  | "non_contiguous_evidence"
+  | "laterality_evidence_conflict"
+  | "proposition_payload_conflict";
 
 export interface V2ObservationQuarantine {
   observation_id?: string;
   reason: V2QuarantineReason;
   detail: string;
+  excerpt?: string;
+  locator?: string;
+  kind?: V2ObservationKind;
+  observation?: V2Observation;
+  evidence_status?: V2EvidenceStatus;
 }
 
 export interface V2AdapterResult {
@@ -78,7 +90,10 @@ export interface V2AdapterResult {
   suppressed_duplicates: number;
   entity_ids_stripped: number;
   diagnostics: string[];
+  normalizations: V2NormalizationAudit[];
   confirmation_grade_count: number;
+  evidence_gate_applied: boolean;
+  evidence_verified_count: number;
   compactness: {
     output_tokens: number;
     observation_count: number;
@@ -278,12 +293,6 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null;
 }
 
-function normalizeSourceKind(value: unknown): V2SourceKind | undefined {
-  if (typeof value !== "string") return undefined;
-  const key = value.trim().toLowerCase();
-  return V2_SOURCE_KINDS.includes(key as V2SourceKind) ? (key as V2SourceKind) : undefined;
-}
-
 function pickEnum<T extends string>(value: unknown, allowed: readonly T[], aliases: Record<string, T> = {}): T | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const key = value.trim().toLowerCase().replace(/\s+/g, "_");
@@ -301,34 +310,45 @@ function hasUnsafeAuthority(record: Record<string, unknown>): string | null {
   return null;
 }
 
-function normalizeProposition(row: Record<string, unknown>, payload: Record<string, unknown>): V2Proposition | { error: string } {
-  const nested = asRecord(row.proposition) ?? {};
-  const polarity = normalizePolarity(nested.polarity ?? row.polarity ?? payload.polarity);
-  if (row.polarity !== undefined && polarity === null && nested.polarity === undefined) {
-    return { error: "invalid polarity" };
+function resolveProposition(
+  kind: V2ObservationKind,
+  row: Record<string, unknown>,
+  payload: Record<string, unknown>,
+):
+  | { ok: true; proposition: V2Proposition; audit: V2NormalizationAudit | null }
+  | { ok: false; error: string } {
+  if (row.polarity !== undefined && normalizePolarity(row.polarity) === null && asRecord(row.proposition)?.polarity === undefined) {
+    return { ok: false, error: "invalid polarity" };
   }
-  const subject = firstString(nested, ["subject"]) ??
-    firstString(payload, ["speaker", "entity", "actor", "subject", "traveler", "surface_name"]) ??
-    firstString(row, ["subject"]);
-  const predicate = firstString(nested, ["predicate"]) ??
-    firstString(payload, ["proposition_topic", "topic", "action", "predicate", "capability_type", "relationship_type"]) ??
-    firstString(row, ["predicate"]);
-  const object = firstString(nested, ["object", "value"]) ??
-    firstString(payload, ["object", "claim_value", "location", "destination"]) ??
-    firstString(row, ["object", "value"]);
-  if (!subject || !predicate || !object) {
-    return { error: "proposition requires subject, predicate, and object" };
+  const recovered = recoverV2PropositionFromTypedPayload({
+    kind,
+    payload,
+    existingProposition: asRecord(row.proposition) ?? {
+      subject: row.subject,
+      predicate: row.predicate,
+      object: row.object ?? row.value,
+      polarity: row.polarity,
+      source_kind: row.source_kind,
+      temporal_scope: row.temporal_scope,
+    },
+  });
+  if (recovered.conflict) return { ok: false, error: "proposition_payload_conflict" };
+  if (!recovered.proposition) {
+    return { ok: false, error: recovered.error ?? "proposition requires subject, predicate, and object" };
   }
-  const sourceKind =
-    normalizeSourceKind(nested.source_kind ?? row.source_kind ?? payload.source) ?? "narration";
-  return omitEmpty({
-    subject,
-    predicate,
-    object,
-    polarity: polarity ?? "unknown",
-    temporal_scope: firstString(nested, ["temporal_scope"]),
-    source_kind: sourceKind,
-  }) as V2Proposition;
+  return {
+    ok: true,
+    proposition: recovered.proposition,
+    audit: recovered.recovered && recovered.audit
+      ? {
+          field: "proposition",
+          original: null,
+          normalized: recovered.proposition,
+          rule: recovered.audit.recovery_rule,
+          reason: `typed_payload_recovery fields=${recovered.audit.fields_used.join(",")}`,
+        }
+      : null,
+  };
 }
 
 function normalizeEvidence(
@@ -458,6 +478,7 @@ function quarantineReasonFromErrors(errors: string[]): V2QuarantineReason {
     return "invalid_evidence";
   }
   if (text.includes("polarity")) return "invalid_polarity";
+  if (text.includes("proposition_payload_conflict")) return "proposition_payload_conflict";
   if (text.includes("proposition")) return "missing_proposition";
   return "invalid_payload";
 }
@@ -480,14 +501,22 @@ function hardFail(reason: V2AdapterHardFailure, detail: string, diagnostics: str
     suppressed_duplicates: 0,
     entity_ids_stripped: 0,
     diagnostics: [...diagnostics, detail],
+    normalizations: [],
     confirmation_grade_count: 0,
+    evidence_gate_applied: false,
+    evidence_verified_count: 0,
     compactness: { output_tokens: 0, observation_count: 0 },
   };
+}
+
+export interface V2AdapterOptions {
+  segmentText?: string;
 }
 
 export function adaptV2ProviderOutput(
   raw: unknown,
   expectedSegmentId?: string,
+  options?: V2AdapterOptions,
 ): V2AdapterResult {
   const diagnostics: string[] = [];
   const parsed = parseProviderJson(raw);
@@ -542,6 +571,7 @@ export function adaptV2ProviderOutput(
 
   const quarantined: V2ObservationQuarantine[] = [];
   const retained: V2Observation[] = [];
+  const normalizations: V2NormalizationAudit[] = [];
 
   if (Array.isArray(record.local_continuity_concerns) && record.local_continuity_concerns.length) {
     diagnostics.push("editorial_output_stripped");
@@ -580,14 +610,25 @@ export function adaptV2ProviderOutput(
       });
       continue;
     }
-    const proposition = normalizeProposition(row, payload);
-    if ("error" in proposition) {
+    const proposition = resolveProposition(kind, row, payload);
+    if (!proposition.ok) {
+      const reason = proposition.error.includes("polarity")
+        ? "invalid_polarity"
+        : proposition.error.includes("proposition_payload_conflict")
+          ? "proposition_payload_conflict"
+          : "missing_proposition";
       quarantined.push({
         observation_id: id,
-        reason: proposition.error.includes("polarity") ? "invalid_polarity" : "missing_proposition",
+        reason,
         detail: proposition.error,
       });
       continue;
+    }
+    if (proposition.audit) {
+      normalizations.push({ observation_id: id, ...proposition.audit });
+      diagnostics.push(
+        `${id}: ${proposition.audit.rule} proposition recovered (${proposition.audit.reason})`,
+      );
     }
     const evidence = normalizeEvidence(row, record);
     if ("error" in evidence) {
@@ -609,11 +650,41 @@ export function adaptV2ProviderOutput(
         ? (confidenceRaw.toLowerCase() as ArchivistConfidence)
         : "medium";
 
+    const normalized = applySafeEnumNormalizations({
+      observationId: id,
+      kind,
+      payload,
+      proposition: proposition.proposition,
+      excerpt: evidence.excerpt,
+    });
+    if (normalized.error) {
+      const reason = normalized.error.includes("laterality")
+        ? "laterality_evidence_conflict"
+        : normalized.error.includes("polarity")
+          ? "invalid_polarity"
+          : "invalid_payload";
+      quarantined.push({
+        observation_id: id,
+        reason,
+        detail: normalized.error,
+        excerpt: evidence.excerpt,
+        locator: evidence.locator,
+        kind,
+      });
+      continue;
+    }
+    normalizations.push(...normalized.audits);
+    for (const audit of normalized.audits) {
+      diagnostics.push(
+        `${id}: ${audit.rule} ${String(audit.field)} ${JSON.stringify(audit.original)}→${JSON.stringify(audit.normalized)} (${audit.reason})`,
+      );
+    }
+
     const observation = {
       id,
       kind,
-      payload,
-      proposition,
+      payload: normalized.payload,
+      proposition: normalized.proposition,
       evidence,
       confidence,
       inferred,
@@ -625,8 +696,33 @@ export function adaptV2ProviderOutput(
         observation_id: id,
         reason: quarantineReasonFromErrors(errors),
         detail: errors.join("; "),
+        excerpt: evidence.excerpt,
+        locator: evidence.locator,
+        kind,
+        observation,
       });
       continue;
+    }
+
+    const gate = applySegmentEvidenceGate({
+      excerpt: evidence.excerpt,
+      segmentText: options?.segmentText,
+    });
+    if (gate.applied) {
+      observation.evidence = { ...evidence, evidence_status: gate.evidence_status };
+      if (!gate.contiguous) {
+        quarantined.push({
+          observation_id: id,
+          reason: "non_contiguous_evidence",
+          detail: "excerpt is not an exact contiguous substring of the supplied segment",
+          excerpt: evidence.excerpt,
+          locator: evidence.locator,
+          kind,
+          observation,
+          evidence_status: "unverified",
+        });
+        continue;
+      }
     }
     retained.push(observation);
   }
@@ -684,7 +780,12 @@ export function adaptV2ProviderOutput(
     suppressed_duplicates: deduped.suppressed,
     entity_ids_stripped: entityIdsStripped,
     diagnostics,
+    normalizations,
     confirmation_grade_count: validated.observation.observations.filter(observationIsConfirmationGrade).length,
+    evidence_gate_applied: options?.segmentText !== undefined,
+    evidence_verified_count: validated.observation.observations.filter(
+      (item) => item.evidence.evidence_status === "verified",
+    ).length,
     compactness: {
       output_tokens: estimateJsonTokens(validated.observation),
       observation_count: validated.observation.observations.length,

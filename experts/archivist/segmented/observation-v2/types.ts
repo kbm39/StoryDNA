@@ -44,6 +44,9 @@ export interface V2Evidence {
   manuscript_version_id?: string;
   content_hash?: string;
   evidence_status?: "verified" | "unverified";
+  evidence_match_method?: "exact" | "unicode_punctuation_equivalent";
+  normalized_punctuation?: boolean;
+  raw_source_match_window?: string;
 }
 
 export interface V2TimestampPayload {

@@ -47,6 +47,13 @@ export {
   adaptV2ProviderOutput,
 } from "./adapter.ts";
 export {
+  V2_TRUNCATED_PREFIX_RECOVERY_VERSION,
+  V2_TRUNCATION_RECOVERY_METHOD,
+  emptyV2TruncationRecoveryAudit,
+  recoverV2TruncatedObservations,
+  v2OutputLooksTruncated,
+} from "./truncated-prefix-recovery.ts";
+export {
   V2_PROPOSITION_RECOVERY_MATRIX,
   V2_PROPOSITION_RECOVERY_VERSION,
   recoverV2PropositionFromTypedPayload,
@@ -56,6 +63,12 @@ export {
   applySegmentEvidenceGate,
   excerptIsContiguousInSegment,
 } from "./evidence-contiguity.ts";
+export {
+  V2_TYPOGRAPHIC_PUNCTUATION_MAP,
+  V2_UNICODE_PUNCTUATION_EQUIVALENCE_VERSION,
+  canonicalizeTypographicPunctuation,
+  matchContiguousWithTypographicPunctuation,
+} from "./unicode-punctuation-equivalence.ts";
 export {
   V2_ENUM_NORMALIZATION_VERSION,
   applySafeEnumNormalizations,

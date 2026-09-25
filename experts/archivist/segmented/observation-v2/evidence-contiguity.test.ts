@@ -68,7 +68,13 @@ describe("v2 contiguous evidence gate", () => {
       excerpt: "Cole pointed at the crate and used the name gray lantern.",
       segmentText: V2_CAL2_SEGMENT_A_PROSE,
     });
-    assert.deepEqual(verified, { applied: true, contiguous: true, evidence_status: "verified" });
+    assert.equal(verified.applied, true);
+    if (verified.applied) {
+      assert.equal(verified.contiguous, true);
+      assert.equal(verified.evidence_status, "verified");
+      assert.equal(verified.evidence_match_method, "exact");
+      assert.equal(verified.normalized_punctuation, false);
+    }
   });
 
   it("rejects stitched, paraphrased, reordered, cross-segment, and omitted-middle excerpts", () => {
@@ -92,12 +98,13 @@ describe("v2 contiguous evidence gate", () => {
       ),
       false,
     );
-    assert.equal(
-      excerptIsContiguousInSegment(UNICODE_SOURCE, "The medic's note said the ribs were bruised."),
-      false,
-    );
     const gate = applySegmentEvidenceGate({ excerpt: STITCHED_TRAVEL, segmentText: V2_CAL2_SEGMENT_B_PROSE });
-    assert.deepEqual(gate, { applied: true, contiguous: false, evidence_status: "unverified" });
+    assert.equal(gate.applied, true);
+    if (gate.applied) {
+      assert.equal(gate.contiguous, false);
+      assert.equal(gate.evidence_status, "unverified");
+      assert.equal(gate.evidence_match_method, null);
+    }
   });
 
   it("quarantines noncontiguous excerpts without rewriting them and skips the gate when segment text is absent", () => {

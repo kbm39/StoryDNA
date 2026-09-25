@@ -35,6 +35,11 @@ import {
 import { recoverV2PropositionFromTypedPayload } from "./proposition-recovery.ts";
 import { applySegmentEvidenceGate, type V2EvidenceStatus } from "./evidence-contiguity.ts";
 import {
+  emptyV2TruncationRecoveryAudit,
+  recoverV2TruncatedObservations,
+  type V2TruncationRecoveryAudit,
+} from "./truncated-prefix-recovery.ts";
+import {
   emptySegmentObservationV2,
   observationIsConfirmationGrade,
   validateSegmentObservationV2,
@@ -98,6 +103,7 @@ export interface V2AdapterResult {
     output_tokens: number;
     observation_count: number;
   };
+  truncation_recovery: V2TruncationRecoveryAudit;
 }
 
 const KIND_ALIASES: Record<string, V2ObservationKind> = {
@@ -490,7 +496,12 @@ function validateOne(observation: V2Observation, segmentId: string): string[] {
   return result.ok ? [] : result.errors;
 }
 
-function hardFail(reason: V2AdapterHardFailure, detail: string, diagnostics: string[]): V2AdapterResult {
+function hardFail(
+  reason: V2AdapterHardFailure,
+  detail: string,
+  diagnostics: string[],
+  truncationRecovery?: V2TruncationRecoveryAudit,
+): V2AdapterResult {
   return {
     ok: false,
     hard_failure: reason,
@@ -506,11 +517,13 @@ function hardFail(reason: V2AdapterHardFailure, detail: string, diagnostics: str
     evidence_gate_applied: false,
     evidence_verified_count: 0,
     compactness: { output_tokens: 0, observation_count: 0 },
+    truncation_recovery: truncationRecovery ?? emptyV2TruncationRecoveryAudit(),
   };
 }
 
 export interface V2AdapterOptions {
   segmentText?: string;
+  finishReason?: string | null;
 }
 
 export function adaptV2ProviderOutput(
@@ -519,32 +532,65 @@ export function adaptV2ProviderOutput(
   options?: V2AdapterOptions,
 ): V2AdapterResult {
   const diagnostics: string[] = [];
-  const parsed = parseProviderJson(raw);
-  if (!parsed.ok) return hardFail("invalid_json", parsed.error, diagnostics);
+  let truncationRecovery = emptyV2TruncationRecoveryAudit(options?.finishReason);
+  let parsed = parseProviderJson(raw);
+  if (!parsed.ok) {
+    if (typeof raw === "string") {
+      const recovered = recoverV2TruncatedObservations(raw, { finishReason: options?.finishReason });
+      truncationRecovery = recovered.audit;
+      if (!recovered.invoked) {
+        return hardFail("invalid_json", parsed.error, diagnostics, truncationRecovery);
+      }
+      if (!recovered.ok || !recovered.value) {
+        return hardFail(
+          "invalid_json",
+          recovered.error ?? "truncated observations[] unrecoverable",
+          diagnostics,
+          truncationRecovery,
+        );
+      }
+      parsed = { ok: true, value: recovered.value };
+      diagnostics.push(
+        `truncated_prefix_recovery: ${recovered.audit.complete_objects_recovered} complete objects recovered`,
+      );
+    } else {
+      return hardFail("invalid_json", parsed.error, diagnostics, truncationRecovery);
+    }
+  }
 
   const record = asRecord(parsed.value);
-  if (!record) return hardFail("invalid_json", "provider output must be an object", diagnostics);
+  if (!record) return hardFail("invalid_json", "provider output must be an object", diagnostics, truncationRecovery);
 
   if (record.schema === ARCHIVIST_SEGMENT_OBSERVATION_SCHEMA_V1) {
-    return hardFail("v1_cannot_be_reinterpreted", "v1 observations cannot be reinterpreted as v2", diagnostics);
+    return hardFail(
+      "v1_cannot_be_reinterpreted",
+      "v1 observations cannot be reinterpreted as v2",
+      diagnostics,
+      truncationRecovery,
+    );
   }
   if (record.schema !== ARCHIVIST_SEGMENT_OBSERVATION_SCHEMA_V2) {
-    return hardFail("unsupported_schema", `schema must be ${ARCHIVIST_SEGMENT_OBSERVATION_SCHEMA_V2}`, diagnostics);
+    return hardFail(
+      "unsupported_schema",
+      `schema must be ${ARCHIVIST_SEGMENT_OBSERVATION_SCHEMA_V2}`,
+      diagnostics,
+      truncationRecovery,
+    );
   }
 
   const authority = hasUnsafeAuthority(record);
-  if (authority) return hardFail("accepted_canon", authority, diagnostics);
+  if (authority) return hardFail("accepted_canon", authority, diagnostics, truncationRecovery);
 
   const segmentId = nonEmptyString(record.segment_id) ?? expectedSegmentId;
   if (!segmentId) {
-    return hardFail("unsupported_schema", "segment_id is required", diagnostics);
+    return hardFail("unsupported_schema", "segment_id is required", diagnostics, truncationRecovery);
   }
   if (expectedSegmentId && segmentId !== expectedSegmentId) {
-    return hardFail("unsupported_schema", "segment_id does not match planned segment", diagnostics);
+    return hardFail("unsupported_schema", "segment_id does not match planned segment", diagnostics, truncationRecovery);
   }
 
   if (!Array.isArray(record.observations)) {
-    return hardFail("unsupported_schema", "observations must be an array", diagnostics);
+    return hardFail("unsupported_schema", "observations must be an array", diagnostics, truncationRecovery);
   }
 
   let entityIdsStripped = 0;
@@ -589,7 +635,7 @@ export function adaptV2ProviderOutput(
     }
     const id = firstString(row, ["id", "observation_id"]) ?? "observation";
     if (hasUnsafeAuthority(row)) {
-      return hardFail("accepted_canon", `${id}: accepted canon`, diagnostics);
+      return hardFail("accepted_canon", `${id}: accepted canon`, diagnostics, truncationRecovery);
     }
     if (row.entity_id !== undefined) {
       delete row.entity_id;
@@ -709,7 +755,13 @@ export function adaptV2ProviderOutput(
       segmentText: options?.segmentText,
     });
     if (gate.applied) {
-      observation.evidence = { ...evidence, evidence_status: gate.evidence_status };
+      observation.evidence = {
+        ...evidence,
+        evidence_status: gate.evidence_status,
+        evidence_match_method: gate.evidence_match_method ?? undefined,
+        normalized_punctuation: gate.normalized_punctuation,
+        raw_source_match_window: gate.raw_source_match_window ?? undefined,
+      };
       if (!gate.contiguous) {
         quarantined.push({
           observation_id: id,
@@ -767,7 +819,7 @@ export function adaptV2ProviderOutput(
 
   const validated = validateSegmentObservationV2(document, expectedSegmentId);
   if (!validated.ok) {
-    return hardFail("unsupported_schema", validated.errors.join("; "), diagnostics);
+    return hardFail("unsupported_schema", validated.errors.join("; "), diagnostics, truncationRecovery);
   }
 
   return {
@@ -790,5 +842,6 @@ export function adaptV2ProviderOutput(
       output_tokens: estimateJsonTokens(validated.observation),
       observation_count: validated.observation.observations.length,
     },
+    truncation_recovery: truncationRecovery,
   };
 }

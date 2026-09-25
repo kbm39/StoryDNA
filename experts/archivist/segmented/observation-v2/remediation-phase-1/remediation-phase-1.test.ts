@@ -17,7 +17,7 @@ import { RULE8_VERIFIED_CASES } from "@/experts/archivist/benchmarks/reckoning-r
 import { RULE8_V1_FROZEN_BASELINE } from "../constants.ts";
 import { V2_EVIDENCE_GATE_VERSION } from "../evidence-contiguity.ts";
 import { buildV2ObservationSystemPrompt } from "../prompt.ts";
-import { V2_EXTRACTION_PROMPT_VERSION } from "../prompt.ts";
+import { V2_EXTRACTION_PROMPT_V1_VERSION } from "../prompt.ts";
 import {
   PHASE1_OFFICIAL_BREADTH,
   PHASE1_OFFICIAL_COMBINED_DIAGNOSTIC,
@@ -105,7 +105,7 @@ describe("v2 remediaiton phase 1", () => {
   it("does not change the V2 prompt or evidence gate in Phase 1", () => {
     assert.equal(V2_REMEDIATION_PHASE1_PROMPT_CHANGED, false);
     assert.equal(V2_REMEDIATION_PHASE1_EVIDENCE_GATE_CHANGED, false);
-    assert.equal(V2_EXTRACTION_PROMPT_VERSION, "archivist_v2_extraction_prompt@v1");
+    assert.equal(V2_EXTRACTION_PROMPT_V1_VERSION, "archivist_v2_extraction_prompt@v1");
     assert.equal(V2_EVIDENCE_GATE_VERSION, "archivist_v2_contiguous_evidence@v1");
     assert.match(buildV2ObservationSystemPrompt(), /Do not stitch sentences across intervening prose/);
   });

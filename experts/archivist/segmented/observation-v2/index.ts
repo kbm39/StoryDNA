@@ -31,12 +31,16 @@ export {
 export { scoreV2Representability } from "./representability.ts";
 export { estimateV2TokenFootprint } from "./token-estimate.ts";
 export {
+  V2_EXTRACTION_PROMPT_V1_VERSION,
   V2_EXTRACTION_PROMPT_VERSION,
+  V2_PROMPT_MAX_TOKENS,
   V2_PROMPT_STATUS,
   V2_PROMPT_WIRED_TO_PAID_PATH,
   V2_REQUIRED_PROMPT_KINDS,
+  assertHistoricalV1PromptPreserved,
   assertV2PromptCoversObservationKinds,
   buildV2ObservationSystemPrompt,
+  buildV2ObservationSystemPromptV1,
   buildV2ObservationUserPrompt,
   v2PromptForbidsEditorialOutput,
 } from "./prompt.ts";

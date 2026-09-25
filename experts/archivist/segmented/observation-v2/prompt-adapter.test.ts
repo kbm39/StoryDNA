@@ -17,6 +17,7 @@ import {
   V2_FIXTURE_MODEL,
   V2_FIXTURE_PROVIDER,
   V2_OBSERVATION_KINDS,
+  V2_EXTRACTION_PROMPT_VERSION,
   V2_PROMPT_WIRED_TO_PAID_PATH,
   V2_REQUIRED_PROMPT_KINDS,
   V2_SANITIZED_EXAMPLE_CASES,
@@ -71,6 +72,7 @@ describe("archivist v2 prompt + compact adapter", () => {
       segmentText: "placeholder segment text for prompt contract",
     });
     assert.match(user, /segment_id: seg-01/);
+    assert.equal(V2_EXTRACTION_PROMPT_VERSION, "archivist_v2_extraction_prompt@v2");
     assert.equal(V2_PROMPT_WIRED_TO_PAID_PATH, false);
     assert.equal(V2_ADAPTER_WIRED_TO_PAID_PATH, false);
   });

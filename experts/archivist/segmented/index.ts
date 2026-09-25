@@ -27,6 +27,13 @@ export {
   validateSegmentObservation,
 } from "./observation-contract.ts";
 export {
+  ARCHIVIST_SEGMENT_OBSERVATION_SCHEMA_V2,
+  classifyV2PairingInterface,
+  diagnoseV2ObservationPair,
+  emptySegmentObservationV2,
+  validateSegmentObservationV2,
+} from "./observation-v2/index.ts";
+export {
   canReuseValidatedCheckpoint,
   createPendingCheckpoints,
   markCheckpointFailed,
@@ -41,6 +48,8 @@ export {
   recoverCompleteTopLevelArrays,
 } from "./nested-observation-adapter.ts";
 export { pairDeterministicContradictions } from "./contradiction-pairing.ts";
+export { buildComparisonKey } from "./comparison-key.ts";
+export { diagnoseCandidateFactPair, inventoryFactComparisons } from "./comparison-eligibility.ts";
 export { batchReconciliationItems, buildReconciliationItems } from "./reconciliation.ts";
 export { rehydrateEvidenceRecord, downgradeUnrehydratedConfirmed } from "./evidence-rehydration.ts";
 export { recoverContiguousManuscriptPassage } from "./contiguous-passage-recovery.ts";

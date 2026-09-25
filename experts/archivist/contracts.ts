@@ -204,6 +204,12 @@ export interface ArchivistFinding {
   suggested_resolution: string;
   author_action: ArchivistAuthorAction;
   author_challenge_supported: true;
+  subject_entity?: string;
+  compared_attribute?: string;
+  current_fact_value?: Record<string, unknown>;
+  compared_fact_value?: Record<string, unknown>;
+  comparison_key?: string;
+  comparison_reason?: string;
 }
 
 export interface ArchivistEntityRef {

@@ -21,6 +21,12 @@ export {
   classifyV2PairingInterface,
 } from "./pairing-interface.ts";
 export {
+  V2_OBSERVATION_COMPARISON_VERSION,
+  diagnoseV2ObservationPair,
+  pairV2Observations,
+  summarizeV2Comparisons,
+} from "./comparison.ts";
+export {
   RULE8_V2_FIXTURE_OBSERVATIONS,
   rule8V2FixtureDocument,
 } from "./fixtures.ts";

@@ -81,6 +81,12 @@ export function findingsFromContradictionPairs(
       suggested_resolution: "Author should reconcile the two observations.",
       author_action: "pending",
       author_challenge_supported: true,
+      subject_entity: pair.display_entity ?? pair.left.alias,
+      compared_attribute: pair.display_attribute ?? pair.issue_type,
+      current_fact_value: pair.right.value,
+      compared_fact_value: pair.left.value,
+      comparison_key: pair.comparison_key,
+      comparison_reason: pair.comparison_reason,
     };
   });
 }
@@ -151,7 +157,7 @@ export function assembleSegmentedArchivistReview(args: {
       possible_conflict_count: rawFindings.filter((item) => item.classification === "possible_continuity_conflict").length,
       author_verification_count: rawFindings.filter((item) => item.classification === "author_verification_needed").length,
       narrative:
-        "Segmented full-manuscript Archivist assembly from preserved checkpoints. Candidate-only. No accepted canon. Unpublished non-contiguous manuscript excerpts were recovered or dropped; manuscriptPassageLocated was not weakened.",
+        "Segmented full-manuscript Archivist assembly from preserved checkpoints. Candidate-only. No accepted canon. Contradiction pairs require comparable values of the same attribute. Unpublished non-contiguous manuscript excerpts were recovered or dropped; manuscriptPassageLocated was not weakened.",
     },
     findings: rawFindings,
     canon_delta,

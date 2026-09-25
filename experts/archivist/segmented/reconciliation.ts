@@ -40,7 +40,10 @@ export function buildReconciliationItems(
       left_value: pair.left.value,
       right_value: pair.right.value,
       kind: pair.kind,
+      comparison_interface: pair.comparison_interface ?? pair.left.fact_type,
     },
+    identity_status: pair.identity_status,
+    confirmation_blocked: pair.confirmation_blocked,
   }));
 }
 

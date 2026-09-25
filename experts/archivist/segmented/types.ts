@@ -261,6 +261,14 @@ export interface ContradictionPair {
   left: BookGraphFact;
   right: BookGraphFact;
   explanation: string;
+  comparison_key?: string;
+  comparison_eligibility?: "comparable";
+  comparison_reason?: string;
+  display_entity?: string;
+  display_attribute?: string;
+  identity_status?: "resolved" | "explicit_alias" | "ambiguous" | "unresolved";
+  confirmation_blocked?: boolean;
+  comparison_interface?: string;
 }
 
 export interface ReconciliationItem {
@@ -281,7 +289,10 @@ export interface ReconciliationItem {
     left_value: Record<string, unknown>;
     right_value: Record<string, unknown>;
     kind: ContradictionPair["kind"];
+    comparison_interface?: string;
   };
+  identity_status?: "resolved" | "explicit_alias" | "ambiguous" | "unresolved";
+  confirmation_blocked?: boolean;
 }
 
 export interface ReconciliationBatch {

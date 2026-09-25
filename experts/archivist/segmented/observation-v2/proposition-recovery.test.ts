@@ -189,6 +189,7 @@ describe("v2 compact proposition recovery", () => {
     assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "operational_capability")?.implemented, true);
     assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "injury")?.implemented, false);
     assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "travel_leg")?.implemented, false);
-    assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "timestamp")?.implemented, false);
+    assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "timestamp")?.implemented, true);
+    assert.equal(V2_PROPOSITION_RECOVERY_MATRIX.find((item) => item.kind === "object_equipment")?.implemented, true);
   });
 });

@@ -171,7 +171,7 @@ describe("archivist v2 phase 2 prompt", () => {
       assert.equal(available.filter((item) => item.replay_detection === "SUFFICIENT").length, 7);
     }
     assert.equal(V2_EVIDENCE_GATE_VERSION, "archivist_v2_contiguous_evidence@v1");
-    assert.equal(V2_PROPOSITION_RECOVERY_VERSION, "archivist_v2_proposition_recovery@v1");
+    assert.equal(V2_PROPOSITION_RECOVERY_VERSION, "archivist_v2_proposition_recovery@v2");
     assert.equal(V2_TRUNCATED_PREFIX_RECOVERY_VERSION, "archivist_v2_truncated_prefix_recovery@v1");
     assert.equal(V2_UNICODE_PUNCTUATION_EQUIVALENCE_VERSION, "archivist_v2_unicode_punctuation_equivalent@v1");
     assert.equal(isArchivistLiveExecutionAllowed(), false);

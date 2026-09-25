@@ -7,7 +7,7 @@
 import { V2_OBSERVATION_KINDS, V2_POLARITIES, V2_SOURCE_KINDS } from "./constants.ts";
 import type { V2ObservationKind, V2Polarity, V2Proposition, V2SourceKind } from "./types.ts";
 
-export const V2_PROPOSITION_RECOVERY_VERSION = "archivist_v2_proposition_recovery@v1" as const;
+export const V2_PROPOSITION_RECOVERY_VERSION = "archivist_v2_proposition_recovery@v2" as const;
 
 /**
  * Architecture (documented, not a silent schema change):
@@ -89,6 +89,63 @@ function existingProposition(value: unknown): V2Proposition | null {
     source_kind: sourceKindOf(row.source_kind) ?? "narration",
     ...(text(row.temporal_scope) ? { temporal_scope: text(row.temporal_scope) } : {}),
   };
+}
+
+function clockDigits(value: string): string {
+  return value.replace(/\D/g, "").replace(/^0+/, "");
+}
+
+function timestampSemantic(payload: Record<string, unknown>): { field: string; value: string } | null {
+  const order = [
+    "clock_time",
+    "date",
+    "day_reference",
+    "relative_time",
+    "duration",
+    "time_window",
+    "sequence_marker",
+    "raw_expression",
+  ] as const;
+  for (const field of order) {
+    const value = text(payload[field]);
+    if (value) return { field, value };
+  }
+  return null;
+}
+
+const TIMESTAMP_PREDICATES = new Set([
+  "clock_time",
+  "date",
+  "day_reference",
+  "relative_time",
+  "duration",
+  "time_window",
+  "sequence_marker",
+  "raw_expression",
+]);
+
+function timestampConflict(existing: V2Proposition, payload: Record<string, unknown>): boolean {
+  if (!TIMESTAMP_PREDICATES.has(existing.predicate)) return false;
+  const clock = text(payload.clock_time) ?? text(payload.date);
+  if (!clock) return false;
+  const payloadDigits = clockDigits(clock);
+  const existingDigits = clockDigits(existing.object);
+  return Boolean(payloadDigits && existingDigits && payloadDigits !== existingDigits);
+}
+
+function objectIdentityOf(payload: Record<string, unknown>): string | undefined {
+  return text(payload.object) ?? text(payload.object_identity);
+}
+
+function objectEquipmentConflict(existing: V2Proposition, payload: Record<string, unknown>): boolean {
+  const payloadObject = text(payload.object);
+  if (!payloadObject || text(payload.object_identity)) return false;
+  const a = norm(payloadObject);
+  const b = norm(existing.object);
+  if (a === b || a.includes(b) || b.includes(a)) return false;
+  const subject = norm(existing.subject);
+  if (subject === a || subject.includes(a) || a.includes(subject)) return false;
+  return true;
 }
 
 function capabilityStateConflict(existing: V2Proposition, payload: Record<string, unknown>): boolean {
@@ -235,16 +292,46 @@ function fromTypedPayload(
     };
   }
   if (kind === "object_equipment") {
-    const subject = text(payload.entity);
+    const identity = objectIdentityOf(payload);
     const predicate = text(payload.action_or_state);
-    const object = text(payload.object);
-    if (!subject || !predicate || !object) {
-      return { error: "object_equipment entity/action_or_state/object required" };
-    }
+    if (!identity) return { error: "object_equipment object/object_identity is required" };
+    if (!predicate) return { error: "object_equipment action_or_state is required" };
+    const subject = text(payload.entity) ?? identity;
+    const fields_used = [
+      ...(text(payload.entity) ? ["entity"] : []),
+      text(payload.object) ? "object" : "object_identity",
+      "action_or_state",
+    ];
     return {
-      proposition: { subject, predicate, object, polarity: "true", source_kind: "narration" },
+      proposition: {
+        subject,
+        predicate,
+        object: identity,
+        polarity: "true",
+        source_kind: "narration",
+      },
       rule: "object_equipment_typed_payload",
-      fields_used: ["entity", "action_or_state", "object"],
+      fields_used,
+    };
+  }
+  if (kind === "timestamp") {
+    const semantic = timestampSemantic(payload);
+    if (!semantic) return { error: "timestamp has no safe typed-payload proposition mapping" };
+    const fields_used = [semantic.field];
+    if (semantic.field !== "raw_expression" && text(payload.raw_expression)) fields_used.push("raw_expression");
+    return {
+      proposition: {
+        subject: "timestamp",
+        predicate: semantic.field,
+        object: semantic.value,
+        polarity: "true",
+        source_kind: "narration",
+        ...(text(payload.raw_expression) && semantic.field !== "raw_expression"
+          ? { temporal_scope: text(payload.raw_expression) }
+          : {}),
+      },
+      rule: "timestamp_typed_payload",
+      fields_used,
     };
   }
   return { error: `${kind} has no safe typed-payload proposition mapping` };
@@ -258,7 +345,11 @@ export function recoverV2PropositionFromTypedPayload(args: {
   const existing = existingProposition(args.existingProposition);
   const derived = fromTypedPayload(args.kind, args.payload);
   if ("proposition" in derived) {
-    if (existing && args.kind === "operational_capability" && capabilityStateConflict(existing, args.payload)) {
+    const conflict =
+      (args.kind === "operational_capability" && existing && capabilityStateConflict(existing, args.payload)) ||
+      (args.kind === "timestamp" && existing && timestampConflict(existing, args.payload)) ||
+      (args.kind === "object_equipment" && existing && objectEquipmentConflict(existing, args.payload));
+    if (conflict) {
       return {
         proposition: null,
         recovered: false,
@@ -297,6 +388,7 @@ export function recoverV2PropositionFromTypedPayload(args: {
 
 export const V2_PROPOSITION_RECOVERY_MATRIX: V2KindRecoveryMatrixRow[] = V2_OBSERVATION_KINDS.map((kind) => {
   const implemented = [
+    "timestamp",
     "operational_capability",
     "event",
     "statement",
@@ -307,7 +399,7 @@ export const V2_PROPOSITION_RECOVERY_MATRIX: V2KindRecoveryMatrixRow[] = V2_OBSE
     "object_equipment",
   ].includes(kind);
   const reasons: Record<V2ObservationKind, string> = {
-    timestamp: "typed payload has raw_expression but no unambiguous subject/predicate pair",
+    timestamp: "same-row clock_time/date/day_reference/relative_time/duration/time_window/sequence_marker/raw_expression; no invented clocks",
     event: "actor + action + object/target/result are a complete proposition",
     statement: "speaker + proposition_topic + claim_value/target + polarity are complete; missing speaker stays fail-closed",
     knowledge: "entity + knowledge_state + topic are complete typed fields",
@@ -317,7 +409,7 @@ export const V2_PROPOSITION_RECOVERY_MATRIX: V2KindRecoveryMatrixRow[] = V2_OBSE
     relationship: "subject + relationship_type + counterparty + state are complete",
     identity: "surface_name + identity_claim + alias/role are complete",
     location_presence: "entity + presence + location are complete",
-    object_equipment: "only when entity + action_or_state + object are all emitted",
+    object_equipment: "object/object_identity + action_or_state; entity/location only when already present",
   };
   return {
     kind,

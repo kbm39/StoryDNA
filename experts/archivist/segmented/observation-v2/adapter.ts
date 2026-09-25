@@ -438,6 +438,26 @@ function collectPayload(kind: V2ObservationKind, row: Record<string, unknown>): 
   if (kind === "timestamp" && typeof payload.clock_time === "string") {
     payload.clock_time = payload.clock_time.trim();
   }
+  if (kind === "object_equipment" && !nonEmptyString(payload.object) && nonEmptyString(payload.object_identity)) {
+    payload.object = payload.object_identity;
+  }
+  if (kind === "timestamp" && (payload.raw_expression === undefined || payload.raw_expression === "")) {
+    for (const field of [
+      "clock_time",
+      "date",
+      "day_reference",
+      "relative_time",
+      "duration",
+      "time_window",
+      "sequence_marker",
+    ] as const) {
+      const value = nonEmptyString(payload[field]);
+      if (value) {
+        payload.raw_expression = value;
+        break;
+      }
+    }
+  }
   if (kind === "injury") {
     const laterality = pickEnum(payload.laterality ?? merged.side, V2_LATERALITIES);
     if (laterality) payload.laterality = laterality;

@@ -314,6 +314,62 @@ function fromTypedPayload(
       fields_used,
     };
   }
+  if (kind === "injury") {
+    const subject = text(payload.entity);
+    const object = text(payload.body_region);
+    const predicate =
+      text(payload.condition) ?? text(payload.diagnosis) ?? text(payload.injury_type) ?? "injured";
+    if (!subject) return { error: "injury entity is required" };
+    if (!object) return { error: "injury body_region is required" };
+    const fields_used = [
+      "entity",
+      "body_region",
+      ...(text(payload.condition)
+        ? (["condition"] as const)
+        : text(payload.diagnosis)
+          ? (["diagnosis"] as const)
+          : text(payload.injury_type)
+            ? (["injury_type"] as const)
+            : []),
+      ...(text(payload.laterality) ? (["laterality"] as const) : []),
+    ];
+    return {
+      proposition: {
+        subject,
+        predicate,
+        object,
+        polarity: "true",
+        source_kind: "narration",
+      },
+      rule: "injury_typed_payload",
+      fields_used: [...fields_used],
+    };
+  }
+  if (kind === "travel_leg") {
+    const subject = text(payload.traveler);
+    const object = text(payload.destination);
+    const mode = text(payload.mode);
+    if (!subject) return { error: "travel_leg traveler is required" };
+    if (!object) return { error: "travel_leg destination is required" };
+    const predicate = mode ?? "travels";
+    const fields_used = [
+      "traveler",
+      "destination",
+      ...(mode ? (["mode"] as const) : []),
+      ...(text(payload.origin) ? (["origin"] as const) : []),
+    ];
+    return {
+      proposition: {
+        subject,
+        predicate,
+        object,
+        polarity: "true",
+        source_kind: "narration",
+      },
+      rule: "travel_leg_typed_payload",
+      fields_used: [...fields_used],
+    };
+  }
   if (kind === "timestamp") {
     const semantic = timestampSemantic(payload);
     if (!semantic) return { error: "timestamp has no safe typed-payload proposition mapping" };
@@ -397,15 +453,17 @@ export const V2_PROPOSITION_RECOVERY_MATRIX: V2KindRecoveryMatrixRow[] = V2_OBSE
     "identity",
     "location_presence",
     "object_equipment",
+    "injury",
+    "travel_leg",
   ].includes(kind);
   const reasons: Record<V2ObservationKind, string> = {
     timestamp: "same-row clock_time/date/day_reference/relative_time/duration/time_window/sequence_marker/raw_expression; no invented clocks",
     event: "actor + action + object/target/result are a complete proposition",
     statement: "speaker + proposition_topic + claim_value/target + polarity are complete; missing speaker stays fail-closed",
     knowledge: "entity + knowledge_state + topic are complete typed fields",
-    travel_leg: "origin/destination/mode are present but no emitted predicate; would invent 'travels'",
+    travel_leg: "traveler + destination; predicate is mode or kind-default travels; origin stays on typed payload",
     operational_capability: "entity + capability_type + state are a complete proposition",
-    injury: "entity + body_region are present but no emitted predicate; would invent 'injured'",
+    injury: "entity + body_region; predicate is condition/diagnosis/injury_type or kind-default injured",
     relationship: "subject + relationship_type + counterparty + state are complete",
     identity: "surface_name + identity_claim + alias/role are complete",
     location_presence: "entity + presence + location are complete",

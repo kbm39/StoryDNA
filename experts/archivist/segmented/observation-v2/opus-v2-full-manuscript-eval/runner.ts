@@ -30,6 +30,11 @@ import type {
   StructuralManuscriptUnit,
 } from "../../types.ts";
 import { diagnoseV2ObservationPair, type V2ComparisonDiagnosis } from "../comparison.ts";
+import {
+  v2ObservationEntityKey,
+  v2ObservationEntityLabel,
+  withNamespacedObservationId,
+} from "../entity-resolution.ts";
 import type { ArchivistSegmentObservationV2, V2Observation } from "../types.ts";
 import { emptySegmentObservationV2, observationIsConfirmationGrade, validateSegmentObservationV2 } from "../validate.ts";
 import {
@@ -317,14 +322,12 @@ export function diagnoseAllV2Pairs(observations: readonly V2Observation[]): V2Co
   const rows: V2ComparisonDiagnosis[] = [];
   for (let i = 0; i < observations.length; i++) {
     for (let j = i + 1; j < observations.length; j++) {
-      const left = observations[i]!;
-      const right = observations[j]!;
-      const subjects = [left.proposition.subject, right.proposition.subject].map((name) => name.toLowerCase());
+      const left = withNamespacedObservationId(observations[i]!);
+      const right = withNamespacedObservationId(observations[j]!);
+      const subjects = [v2ObservationEntityKey(left), v2ObservationEntityKey(right)];
       const ambiguous = subjects.includes("the captain") ? ["the captain"] : [];
-      const resolved = subjects.filter((name) => name !== "the captain");
       rows.push(diagnoseV2ObservationPair(left, right, {
         ambiguous_aliases: ambiguous,
-        resolved_aliases: resolved,
       }));
     }
   }
@@ -373,7 +376,7 @@ export function classifyRehearsalFinding(
     suggested_resolution: "Author should reconcile the two observations.",
     author_action: "pending",
     author_challenge_supported: true,
-    subject_entity: left.proposition.subject,
+    subject_entity: v2ObservationEntityLabel(left),
     compared_attribute: diagnosis.pairing_interface,
     comparison_key: diagnosis.pairing_interface,
     comparison_reason: diagnosis.reason,

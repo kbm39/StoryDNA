@@ -1,3 +1,4 @@
+import { v2ObservationEntityKey } from "./entity-resolution.ts";
 import type { V2Observation, V2PairingInterface } from "./types.ts";
 
 function topicOf(observation: V2Observation): string {
@@ -14,16 +15,7 @@ function topicOf(observation: V2Observation): string {
 }
 
 function entityOf(observation: V2Observation): string {
-  const payload = observation.payload as unknown as Record<string, unknown>;
-  return String(
-    payload.entity ??
-      payload.speaker ??
-      payload.actor ??
-      payload.subject ??
-      payload.traveler ??
-      payload.surface_name ??
-      observation.proposition.subject,
-  ).toLowerCase();
+  return v2ObservationEntityKey(observation);
 }
 
 /**

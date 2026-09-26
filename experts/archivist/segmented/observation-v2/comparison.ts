@@ -5,6 +5,7 @@
  */
 
 import { chapterOrdinalFromLocator } from "../comparison-key.ts";
+import { v2AliveDeadState, v2ObservationEntityKey } from "./entity-resolution.ts";
 import type { V2Observation, V2PairingInterface } from "./types.ts";
 import { classifyV2PairingInterface } from "./pairing-interface.ts";
 
@@ -50,16 +51,7 @@ function payload(observation: V2Observation): Record<string, unknown> {
 }
 
 function entityOf(observation: V2Observation): string {
-  const row = payload(observation);
-  return norm(
-    text(row.entity) ??
-      text(row.speaker) ??
-      text(row.actor) ??
-      text(row.subject) ??
-      text(row.traveler) ??
-      text(row.surface_name) ??
-      observation.proposition.subject,
-  );
+  return v2ObservationEntityKey(observation);
 }
 
 function topicOf(observation: V2Observation): string {
@@ -115,6 +107,7 @@ function identityStatusFor(
     );
   });
   if (linked) return "explicit_alias";
+  if (leftEntity && rightEntity && leftEntity === rightEntity) return "resolved";
   const resolved = aliasSet(context?.resolved_aliases);
   if (resolved.has(leftEntity) && resolved.has(rightEntity)) return "resolved";
   return "unresolved";
@@ -585,12 +578,12 @@ function diagnoseAliveOrChronology(
   left: V2Observation,
   right: V2Observation,
 ): Omit<V2ComparisonDiagnosis, "left_id" | "right_id" | "identity_status" | "confirmation_blocked"> | null {
-  const leftHay = `${left.proposition.object} ${left.proposition.predicate}`.toLowerCase();
-  const rightHay = `${right.proposition.object} ${right.proposition.predicate}`.toLowerCase();
-  const leftAlive = /\balive\b/.test(leftHay);
-  const rightAlive = /\balive\b/.test(rightHay);
-  const leftDead = /\b(dead|killed|died|deceased)\b/.test(leftHay);
-  const rightDead = /\b(dead|killed|died|deceased)\b/.test(rightHay);
+  const leftState = v2AliveDeadState(left);
+  const rightState = v2AliveDeadState(right);
+  const leftAlive = leftState === "alive";
+  const rightAlive = rightState === "alive";
+  const leftDead = leftState === "dead";
+  const rightDead = rightState === "dead";
   if ((leftAlive && rightDead) || (rightAlive && leftDead)) {
     const leftOrd = locatorOrder(left);
     const rightOrd = locatorOrder(right);

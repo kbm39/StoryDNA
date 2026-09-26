@@ -17,6 +17,17 @@ export {
   suppressDuplicateObservations,
 } from "./compactness.ts";
 export {
+  namespacedObservationId,
+  v2AliveDeadState,
+  v2ObservationEntityKey,
+  v2ObservationEntityLabel,
+  withNamespacedObservationId,
+} from "./entity-resolution.ts";
+export {
+  countRepeatedObjectContinuityChains,
+  objectContinuityKey,
+} from "./object-continuity.ts";
+export {
   V2_PAIRING_INTERFACE_CONTRACT,
   classifyV2PairingInterface,
 } from "./pairing-interface.ts";
@@ -66,6 +77,26 @@ export {
   v3PromptForbidsEditorialOutput,
   v3PromptRemovesClockFirstStarvation,
 } from "./prompt-v3.ts";
+export {
+  V4_EXTRACTION_PROMPT_VERSION,
+  V4_OBSERVATION_HARD_CAP,
+  V4_OBSERVATION_SOFT_MIN,
+  V4_ORGANIZATION_AFFILIATION_MAPPING,
+  V4_OUTPUT_ORDER_INSTRUCTION,
+  V4_PROMPT_MAX_TOKENS,
+  V4_PROMPT_SCHEMA_VERSION,
+  V4_PROMPT_STATUS,
+  V4_PROMPT_WIRED_TO_PAID_PATH,
+  V4_REQUIRED_PROMPT_KINDS,
+  assertHistoricalPromptsUnchangedByV4,
+  assertV4PromptCoversObservationKinds,
+  buildV4ObservationSystemPrompt,
+  buildV4ObservationUserPrompt,
+  v4PromptForbidsEditorialOutput,
+  v4PromptKeepsV3Balance,
+  v4PromptRemovesClockFirstStarvation,
+} from "./prompt-v4.ts";
+export { applyV4ObservationBudget } from "./observation-budget-v4.ts";
 export {
   V2_ADAPTER_STATUS,
   V2_ADAPTER_VERSION,

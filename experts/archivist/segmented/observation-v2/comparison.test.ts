@@ -419,6 +419,75 @@ describe("V2 observation comparison", () => {
     assert.equal(diagnoseV2ObservationPair(deadEarly, aliveLater).pairing_interface, "alive_dead");
   });
 
+  it("treats a speaker's death claim as about the target, not the speaker", () => {
+    const patterson = obs(
+      "o17",
+      {
+        kind: "statement",
+        payload: {
+          speaker: "Ari",
+          proposition_topic: "Patterson alive",
+          polarity: "false",
+          claim_value: "Patterson dead, shot in south lane",
+          target: "Patterson",
+        },
+      },
+      { subject: "Ari", predicate: "Patterson alive", object: "Patterson dead, shot in south lane", polarity: "false" },
+    );
+    const cyrus = obs(
+      "o17",
+      {
+        kind: "statement",
+        payload: {
+          speaker: "Ari",
+          proposition_topic: "Cyrus alive",
+          polarity: "false",
+          claim_value: "presumed dead, no body",
+          target: "Cyrus",
+        },
+      },
+      { subject: "Ari", predicate: "Cyrus alive", object: "presumed dead, no body", polarity: "false" },
+      "CHAPTER TWENTY-SIX",
+    );
+    const result = diagnoseV2ObservationPair(patterson, cyrus);
+    assert.equal(result.eligibility, "not_comparable");
+    assert.equal(result.reason, "different_subject");
+  });
+
+  it("does not treat two death statements as alive_vs_dead because the topic says alive", () => {
+    const kanaan = obs(
+      "st-a",
+      {
+        kind: "statement",
+        payload: {
+          speaker: "Avi",
+          proposition_topic: "Rashid Kanaan alive",
+          polarity: "false",
+          claim_value: "dead",
+          target: "Rashid Kanaan",
+        },
+      },
+      { subject: "Avi", predicate: "Rashid Kanaan alive", object: "dead", polarity: "false" },
+    );
+    const family = obs(
+      "st-b",
+      {
+        kind: "statement",
+        payload: {
+          speaker: "Avi",
+          proposition_topic: "Kanaan family alive",
+          polarity: "false",
+          claim_value: "killed the same night",
+          target: "Kanaan family",
+        },
+      },
+      { subject: "Avi", predicate: "Kanaan family alive", object: "killed the same night", polarity: "false" },
+    );
+    const result = diagnoseV2ObservationPair(kanaan, family);
+    assert.equal(result.eligibility, "not_comparable");
+    assert.notEqual(result.pairing_interface, "alive_dead");
+  });
+
   it("does not treat rank and profession as the same identity dimension", () => {
     const profession = obs(
       "rk-a",

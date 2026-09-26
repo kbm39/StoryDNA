@@ -32,6 +32,19 @@ export {
   OPUS_V2_EVAL_WORKFLOW_KIND,
 } from "./lock.ts";
 export {
+  OPUS_V2_EVAL_PAID_AUTHORIZATION,
+  OPUS_V2_EVAL_PAID_AUTHORIZATION_ID,
+  OPUS_V2_EVAL_PAID_AUTHORIZATION_STORAGE,
+  OpusV2EvalPaidAuthorizationError,
+  assertCanonicalPaidAuthorizationPrepared,
+  assertOpusV2EvalPaidAuthorizationGate,
+  cloneOpusV2EvalPaidAuthorization,
+  fenceOpusV2EvalPaidProvider,
+  matchingOpusV2EvalPaidGateRequest,
+  projectOpusV2EvalPaidAuthorization,
+  reachOpusV2EvalPaidProviderBoundary,
+} from "./paid-authorization.ts";
+export {
   OPUS_V2_EVAL_RECONCILIATION_CONTRACT,
   assembleOpusV2EvalReview,
   assertIncompatibleResumeRejected,

@@ -43,6 +43,8 @@ const MODULE_FILES = [
   "index.ts",
   "lock.ts",
   "opus-v2-full-manuscript-eval.test.ts",
+  "paid-authorization.ts",
+  "paid-authorization.test.ts",
   "runner.ts",
 ];
 

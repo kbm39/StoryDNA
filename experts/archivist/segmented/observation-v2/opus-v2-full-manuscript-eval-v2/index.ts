@@ -38,9 +38,15 @@ export {
   assertHistoricalEvalV1Unchanged,
 } from "./lock.ts";
 export {
+  OPUS_V2_EVAL_V2_EXPLICIT_GRANT,
+} from "./explicit-grant.ts";
+export {
   OPUS_V2_EVAL_V2_CALL_ORDER,
+  OPUS_V2_EVAL_V2_COMPLETION_SUCCESS_BAR,
   OPUS_V2_EVAL_V2_DEFAULT_REPAIR_ALLOWANCE,
   OPUS_V2_EVAL_V2_EMERGENCY_REPAIR_MAX,
+  OPUS_V2_EVAL_V2_EXPLICIT_AUTHORIZATION,
+  OPUS_V2_EVAL_V2_EXPLICIT_AUTHORIZATION_STORAGE,
   OPUS_V2_EVAL_V2_FORBIDDEN_WORKFLOW_IDS,
   OPUS_V2_EVAL_V2_PAID_AUTHORIZATION,
   OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID,
@@ -53,13 +59,19 @@ export {
   OPUS_V2_EVAL_V2_REQUIRED_FREEZE_HEAD,
   OpusV2EvalV2PaidAuthorizationError,
   assertCanonicalV2PaidAuthorizationPrepared,
+  assertGrantMatchesPreparedV2,
   assertHistoricalConsumedAuthorizationUnchanged,
   assertOpusV2EvalV2CandidateOnlySafety,
   assertOpusV2EvalV2PaidAuthorizationGate,
+  assertOpusV2EvalV2PaidCostGate,
+  assertValidV2AuthorizationState,
+  authorizeOpusV2EvalV2PaidAuthorization,
+  cloneOpusV2EvalV2PaidAuthorization,
   constructOpusV2EvalV2Provider,
   fenceOpusV2EvalV2PaidProvider,
   matchingOpusV2EvalV2PaidGateRequest,
   opusV2EvalV2ProviderConstructCount,
+  projectOpusV2EvalV2PaidAuthorization,
 } from "./paid-authorization.ts";
 export {
   assertRawArchivePrivacy,

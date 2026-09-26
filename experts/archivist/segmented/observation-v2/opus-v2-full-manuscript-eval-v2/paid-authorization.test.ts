@@ -49,9 +49,11 @@ const MODULE_FILES = [
   "fixtures.ts",
   "index.ts",
   "lock.ts",
+  "explicit-grant.ts",
   "opus-v2-full-manuscript-eval-v2.test.ts",
   "paid-authorization.ts",
   "paid-authorization.test.ts",
+  "paid-authorization-lifecycle.test.ts",
   "raw-persistence.ts",
 ];
 

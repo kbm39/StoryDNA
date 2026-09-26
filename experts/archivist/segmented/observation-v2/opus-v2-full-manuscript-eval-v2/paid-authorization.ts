@@ -1,7 +1,7 @@
 /**
- * Isolated prepared one-shot authorization for a future Opus eval @v2 rerun.
- * Status is prepared only. Spend is not authorized. No workflow is bound.
- * Does not mutate the consumed 20260925 authorization. No 0027. No migration.
+ * Isolated one-shot authorization for a future Opus eval @v2 rerun.
+ * Canonical prepared object stays prepared. Explicit grant derives authorized state.
+ * Does not execute. Does not mutate the consumed 20260925 authorization.
  */
 
 import { ARCHIVIST_CONSTITUTION } from "../../../constitution.ts";
@@ -16,6 +16,10 @@ import {
   OPUS_V2_EVAL_PAID_AUTHORIZATION,
   OPUS_V2_EVAL_PAID_AUTHORIZATION_ID,
 } from "../opus-v2-full-manuscript-eval/paid-authorization.ts";
+import {
+  OPUS_V2_EVAL_V2_EXPLICIT_GRANT,
+  type OpusV2EvalV2ExplicitGrant,
+} from "./explicit-grant.ts";
 import {
   OPUS_V2_EVAL_V2_CACHE,
   OPUS_V2_EVAL_V2_CEILING_AUTHORIZED,
@@ -208,6 +212,336 @@ export const OPUS_V2_EVAL_V2_PAID_AUTHORIZATION = {
   disposition_writes_allowed: false,
 } as const satisfies OpusV2EvalV2PreparedAuthorization;
 
+export interface OpusV2EvalV2ExplicitlyAuthorizedAuthorization
+  extends Omit<
+    OpusV2EvalV2PreparedAuthorization,
+    "status" | "spend_authorized" | "ceiling_authorized_for_spend" | "authorized_to_run"
+  > {
+  status: "explicitly_authorized";
+  spend_authorized: true;
+  ceiling_authorized_for_spend: true;
+  authorized_to_run: true;
+  bound_workflow_id: null;
+}
+
+export interface OpusV2EvalV2ConsumedAuthorization
+  extends Omit<
+    OpusV2EvalV2PreparedAuthorization,
+    "status" | "spend_authorized" | "ceiling_authorized_for_spend" | "authorized_to_run" | "bound_workflow_id"
+  > {
+  status: "consumed";
+  spend_authorized: true;
+  ceiling_authorized_for_spend: true;
+  authorized_to_run: true;
+  bound_workflow_id: string;
+}
+
+export interface OpusV2EvalV2RevokedAuthorization
+  extends Omit<
+    OpusV2EvalV2PreparedAuthorization,
+    "status" | "spend_authorized" | "ceiling_authorized_for_spend" | "authorized_to_run" | "bound_workflow_id"
+  > {
+  status: "revoked";
+  spend_authorized: boolean;
+  ceiling_authorized_for_spend: boolean;
+  authorized_to_run: false;
+  bound_workflow_id: string | null;
+}
+
+export type OpusV2EvalV2PaidAuthorization =
+  | OpusV2EvalV2PreparedAuthorization
+  | OpusV2EvalV2ExplicitlyAuthorizedAuthorization
+  | OpusV2EvalV2ConsumedAuthorization
+  | OpusV2EvalV2RevokedAuthorization;
+
+const WORKFLOW_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function pinMismatch(actual: unknown, expected: unknown, reason: string): void {
+  if (actual !== expected) {
+    throw new OpusV2EvalV2PaidAuthorizationError(reason);
+  }
+}
+
+export function assertValidV2AuthorizationState(
+  authorization: OpusV2EvalV2PaidAuthorization,
+): void {
+  pinMismatch(authorization.authorization_id, OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID, "authorization_id_mismatch");
+  pinMismatch(authorization.hard_cost_ceiling_usd, 5, "ceiling_mismatch");
+  pinMismatch(authorization.accepted_canon_writes_allowed, false, "accepted_canon_forbidden");
+  pinMismatch(authorization.series_bible_writes_allowed, false, "series_bible_forbidden");
+  if (authorization.status === "prepared") {
+    if (
+      authorization.spend_authorized !== false ||
+      authorization.ceiling_authorized_for_spend !== false ||
+      authorization.authorized_to_run !== false ||
+      authorization.bound_workflow_id !== null
+    ) {
+      throw new OpusV2EvalV2PaidAuthorizationError("prepared_invariant_violation");
+    }
+    return;
+  }
+  if (authorization.status === "explicitly_authorized") {
+    if (
+      authorization.spend_authorized !== true ||
+      authorization.ceiling_authorized_for_spend !== true ||
+      authorization.authorized_to_run !== true ||
+      authorization.bound_workflow_id !== null
+    ) {
+      throw new OpusV2EvalV2PaidAuthorizationError("explicitly_authorized_invariant_violation");
+    }
+    return;
+  }
+  if (authorization.status === "consumed") {
+    if (
+      authorization.spend_authorized !== true ||
+      authorization.ceiling_authorized_for_spend !== true ||
+      authorization.authorized_to_run !== true ||
+      !authorization.bound_workflow_id
+    ) {
+      throw new OpusV2EvalV2PaidAuthorizationError("consumed_invariant_violation");
+    }
+    return;
+  }
+  if (authorization.status === "revoked") {
+    if (authorization.authorized_to_run !== false) {
+      throw new OpusV2EvalV2PaidAuthorizationError("revoked_invariant_violation");
+    }
+    return;
+  }
+  throw new OpusV2EvalV2PaidAuthorizationError("unknown_authorization_status");
+}
+
+export function assertGrantMatchesPreparedV2(
+  grant: OpusV2EvalV2ExplicitGrant,
+  prepared: OpusV2EvalV2PreparedAuthorization = OPUS_V2_EVAL_V2_PAID_AUTHORIZATION,
+): void {
+  pinMismatch(grant.authorization_id, prepared.authorization_id, "authorization_id_mismatch");
+  pinMismatch(grant.hard_cost_ceiling_usd, prepared.hard_cost_ceiling_usd, "ceiling_mismatch");
+  pinMismatch(grant.manuscript_id, prepared.manuscript_id, "manuscript_id_mismatch");
+  pinMismatch(grant.manuscript_version_id, prepared.manuscript_version_id, "manuscript_version_id_mismatch");
+  pinMismatch(grant.content_hash, prepared.content_hash, "content_hash_mismatch");
+  pinMismatch(grant.analytical_word_count, prepared.analytical_word_count, "word_count_mismatch");
+  pinMismatch(grant.plan_fingerprint, prepared.plan_fingerprint, "plan_fingerprint_mismatch");
+  pinMismatch(grant.execution_fingerprint, prepared.execution_fingerprint, "execution_fingerprint_mismatch");
+  pinMismatch(grant.workflow_kind, prepared.workflow_kind, "workflow_kind_mismatch");
+  pinMismatch(grant.runner_id, prepared.runner_id, "runner_mismatch");
+  pinMismatch(grant.runner_version, prepared.runner_version, "runner_mismatch");
+  pinMismatch(grant.prompt_version, prepared.prompt_version, "prompt_version_mismatch");
+  pinMismatch(grant.schema_version, prepared.schema_version, "schema_version_mismatch");
+  pinMismatch(grant.provider, prepared.provider, "provider_mismatch");
+  pinMismatch(grant.model, prepared.model, "model_mismatch");
+  pinMismatch(grant.effort, prepared.effort, "effort_mismatch");
+  pinMismatch(grant.max_tokens, prepared.max_tokens, "max_tokens_mismatch");
+  pinMismatch(grant.cache, prepared.cache, "cache_or_fallback_forbidden");
+  pinMismatch(grant.fallback, prepared.fallback, "cache_or_fallback_forbidden");
+  pinMismatch(grant.environment, "staging", "staging_project_mismatch");
+  pinMismatch(grant.staging_supabase_project_ref, prepared.staging_supabase_project_ref, "staging_project_mismatch");
+  pinMismatch(
+    grant.production_supabase_project_ref,
+    OPUS_V2_EVAL_V2_PRODUCTION_PROJECT_REF,
+    "production_project_forbidden",
+  );
+}
+
+export function authorizeOpusV2EvalV2PaidAuthorization(
+  prepared: OpusV2EvalV2PreparedAuthorization,
+  grant: OpusV2EvalV2ExplicitGrant,
+): OpusV2EvalV2ExplicitlyAuthorizedAuthorization {
+  if (prepared.status !== "prepared") {
+    throw new OpusV2EvalV2PaidAuthorizationError("authorize_requires_prepared");
+  }
+  assertValidV2AuthorizationState(prepared);
+  assertGrantMatchesPreparedV2(grant, prepared);
+  const authorized = {
+    ...prepared,
+    status: "explicitly_authorized",
+    bound_workflow_id: null,
+    spend_authorized: true,
+    ceiling_authorized_for_spend: true,
+    authorized_to_run: true,
+  } as const satisfies OpusV2EvalV2ExplicitlyAuthorizedAuthorization;
+  assertValidV2AuthorizationState(authorized);
+  return authorized;
+}
+
+export const OPUS_V2_EVAL_V2_EXPLICIT_AUTHORIZATION = authorizeOpusV2EvalV2PaidAuthorization(
+  OPUS_V2_EVAL_V2_PAID_AUTHORIZATION,
+  OPUS_V2_EVAL_V2_EXPLICIT_GRANT,
+);
+
+export const OPUS_V2_EVAL_V2_EXPLICIT_AUTHORIZATION_STORAGE = {
+  kind: "code_bound_explicit_authorization",
+  derived_from: "OPUS_V2_EVAL_V2_PAID_AUTHORIZATION",
+  grant: "OPUS_V2_EVAL_V2_EXPLICIT_GRANT",
+  table: null,
+  existing_0027_usable: false,
+  migration_invented: false,
+  db_row_written: false,
+  parallel_overlay: false,
+  reused_consumed_20260925: false,
+  mutated_historical_authorization: false,
+} as const;
+
+export const OPUS_V2_EVAL_V2_COMPLETION_SUCCESS_BAR = {
+  units: "30/30",
+  planned_segments_validated: "14/14",
+  unique_coverage: "109887/109887",
+  coverage_percentage: 100,
+  unexplained_gaps: 0,
+  plan_pin_match: true,
+  candidate_canon_assembled: true,
+  v2_pairing_completes: true,
+  continuity_candidate_review_validates: true,
+  complete_cost_ledger: true,
+  accepted_canon_writes: 0,
+  series_bible_writes: 0,
+} as const;
+
+export function cloneOpusV2EvalV2PaidAuthorization(
+  overrides: Partial<OpusV2EvalV2PaidAuthorization> = {},
+  base: OpusV2EvalV2PaidAuthorization = OPUS_V2_EVAL_V2_PAID_AUTHORIZATION,
+): OpusV2EvalV2PaidAuthorization {
+  if (
+    base.status === "prepared" &&
+    (overrides.status === "explicitly_authorized" ||
+      overrides.status === "consumed" ||
+      overrides.spend_authorized === true ||
+      overrides.ceiling_authorized_for_spend === true ||
+      overrides.authorized_to_run === true)
+  ) {
+    throw new OpusV2EvalV2PaidAuthorizationError(
+      overrides.status === "consumed" ? "consume_requires_explicitly_authorized" : "authorize_requires_explicit_grant",
+    );
+  }
+  const merged = {
+    ...base,
+    ...overrides,
+    authorization_id: OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID,
+    hard_cost_ceiling_usd: OPUS_V2_EVAL_V2_RECOMMENDED_HARD_CEILING_USD,
+    accepted_canon_writes_allowed: false as const,
+    series_bible_writes_allowed: false as const,
+    retcon_writes_allowed: false as const,
+    supersession_writes_allowed: false as const,
+    disposition_writes_allowed: false as const,
+  };
+  let next: OpusV2EvalV2PaidAuthorization;
+  if (merged.status === "prepared") {
+    next = {
+      ...merged,
+      status: "prepared",
+      bound_workflow_id: null,
+      spend_authorized: false,
+      ceiling_authorized_for_spend: false,
+      authorized_to_run: false,
+    };
+  } else if (merged.status === "explicitly_authorized") {
+    next = {
+      ...merged,
+      status: "explicitly_authorized",
+      bound_workflow_id: null,
+      spend_authorized: true,
+      ceiling_authorized_for_spend: true,
+      authorized_to_run: true,
+    };
+  } else if (merged.status === "consumed") {
+    if (!merged.bound_workflow_id) {
+      throw new OpusV2EvalV2PaidAuthorizationError("consumed_invariant_violation");
+    }
+    next = {
+      ...merged,
+      status: "consumed",
+      bound_workflow_id: merged.bound_workflow_id,
+      spend_authorized: true,
+      ceiling_authorized_for_spend: true,
+      authorized_to_run: true,
+    };
+  } else {
+    next = {
+      ...merged,
+      status: "revoked",
+      authorized_to_run: false,
+      spend_authorized: merged.spend_authorized,
+      ceiling_authorized_for_spend: merged.ceiling_authorized_for_spend,
+      bound_workflow_id: merged.bound_workflow_id,
+    };
+  }
+  assertValidV2AuthorizationState(next);
+  return next;
+}
+
+export function projectOpusV2EvalV2PaidAuthorization(
+  current: OpusV2EvalV2PaidAuthorization,
+  action: "authorize" | "consume" | "revoke",
+  args: { workflow_id?: string | null; grant?: OpusV2EvalV2ExplicitGrant } = {},
+): OpusV2EvalV2PaidAuthorization {
+  if (current.authorization_id !== OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID) {
+    throw new OpusV2EvalV2PaidAuthorizationError("authorization_id_mismatch");
+  }
+  if (current === OPUS_V2_EVAL_V2_PAID_AUTHORIZATION) {
+    throw new OpusV2EvalV2PaidAuthorizationError("canonical_prepared_authorization_is_immutable");
+  }
+  assertValidV2AuthorizationState(current);
+  if (action === "authorize") {
+    if (!args.grant) {
+      throw new OpusV2EvalV2PaidAuthorizationError("authorize_requires_explicit_grant");
+    }
+    if (current.status !== "prepared") {
+      throw new OpusV2EvalV2PaidAuthorizationError("authorize_requires_prepared");
+    }
+    return authorizeOpusV2EvalV2PaidAuthorization(current, args.grant);
+  }
+  if (action === "revoke") {
+    if (current.status !== "prepared" && current.status !== "explicitly_authorized") {
+      throw new OpusV2EvalV2PaidAuthorizationError("revoke_requires_prepared_or_authorized");
+    }
+    return cloneOpusV2EvalV2PaidAuthorization(
+      {
+        status: "revoked",
+        authorized_to_run: false,
+        spend_authorized: current.status === "explicitly_authorized",
+        ceiling_authorized_for_spend: current.status === "explicitly_authorized",
+        bound_workflow_id: null,
+      },
+      current,
+    );
+  }
+  if (action === "consume") {
+    if (current.status === "consumed") {
+      if (!args.workflow_id || args.workflow_id !== current.bound_workflow_id) {
+        throw new OpusV2EvalV2PaidAuthorizationError("second_workflow_rejected");
+      }
+      return current;
+    }
+    if (current.status === "revoked") {
+      throw new OpusV2EvalV2PaidAuthorizationError("terminal_does_not_reopen");
+    }
+    if (current.status !== "explicitly_authorized") {
+      throw new OpusV2EvalV2PaidAuthorizationError("consume_requires_explicitly_authorized");
+    }
+    if (!args.workflow_id || !WORKFLOW_UUID.test(args.workflow_id)) {
+      throw new OpusV2EvalV2PaidAuthorizationError("consume_requires_workflow_id");
+    }
+    if (
+      args.workflow_id === OPUS_V2_EVAL_V2_COMPLETED_OPUS_WORKFLOW_ID ||
+      args.workflow_id === OPUS_V2_EVAL_V2_HISTORICAL_REVISED_13_WORKFLOW_ID
+    ) {
+      throw new OpusV2EvalV2PaidAuthorizationError("historical_workflow_reuse_forbidden");
+    }
+    return cloneOpusV2EvalV2PaidAuthorization(
+      {
+        status: "consumed",
+        bound_workflow_id: args.workflow_id,
+        spend_authorized: true,
+        ceiling_authorized_for_spend: true,
+        authorized_to_run: true,
+      },
+      current,
+    );
+  }
+  throw new OpusV2EvalV2PaidAuthorizationError("unknown_lifecycle_action");
+}
+
 export const OPUS_V2_EVAL_V2_PAID_COST_MODEL = {
   input_usd_per_mtok: OPUS_V2_EVAL_V2_INPUT_USD_PER_MTOK,
   output_usd_per_mtok: OPUS_V2_EVAL_V2_OUTPUT_USD_PER_MTOK,
@@ -240,6 +574,7 @@ export const OPUS_V2_EVAL_V2_FORBIDDEN_WORKFLOW_IDS = [
 ] as const;
 
 export interface OpusV2EvalV2PaidGateRequest {
+  authorization?: OpusV2EvalV2PaidAuthorization;
   authorization_id: string;
   action: "construct_provider" | "start_workflow" | "resume_workflow";
   manuscript_id: string;
@@ -345,7 +680,11 @@ export function assertOpusV2EvalV2PaidAuthorizationGate(
   if (request.authorization_id !== OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID) {
     throw new OpusV2EvalV2PaidAuthorizationError("authorization_id_mismatch");
   }
-  const auth = OPUS_V2_EVAL_V2_PAID_AUTHORIZATION;
+  const auth = request.authorization ?? OPUS_V2_EVAL_V2_PAID_AUTHORIZATION;
+  assertValidV2AuthorizationState(auth);
+  if (auth.authorization_id !== OPUS_V2_EVAL_V2_PAID_AUTHORIZATION_ID) {
+    throw new OpusV2EvalV2PaidAuthorizationError("authorization_id_mismatch");
+  }
   if (request.manuscript_id !== auth.manuscript_id) {
     throw new OpusV2EvalV2PaidAuthorizationError("manuscript_id_mismatch");
   }
@@ -408,6 +747,9 @@ export function assertOpusV2EvalV2PaidAuthorizationGate(
   ) {
     throw new OpusV2EvalV2PaidAuthorizationError("historical_workflow_reuse_forbidden");
   }
+  if (auth.status === "revoked") {
+    throw new OpusV2EvalV2PaidAuthorizationError("revoked_no_provider_calls");
+  }
   if (auth.status === "prepared") {
     if (request.action === "construct_provider") {
       throw new OpusV2EvalV2PaidAuthorizationError("prepared_cannot_construct_provider");
@@ -416,6 +758,37 @@ export function assertOpusV2EvalV2PaidAuthorizationGate(
       throw new OpusV2EvalV2PaidAuthorizationError("prepared_cannot_start_workflow");
     }
     throw new OpusV2EvalV2PaidAuthorizationError("prepared_cannot_resume_workflow");
+  }
+  if (request.action === "construct_provider") {
+    throw new OpusV2EvalV2PaidAuthorizationError("provider_construction_is_not_invoked_here");
+  }
+  if (request.action === "start_workflow") {
+    if (auth.status === "consumed") {
+      throw new OpusV2EvalV2PaidAuthorizationError("second_workflow_rejected");
+    }
+    if (auth.status !== "explicitly_authorized") {
+      throw new OpusV2EvalV2PaidAuthorizationError("start_requires_explicitly_authorized");
+    }
+    return;
+  }
+  if (request.action === "resume_workflow") {
+    const resumeId = request.resume_workflow_id ?? request.workflow_id;
+    if (auth.status !== "consumed" || !auth.bound_workflow_id) {
+      throw new OpusV2EvalV2PaidAuthorizationError("resume_requires_bound_workflow");
+    }
+    if (!resumeId || resumeId !== auth.bound_workflow_id) {
+      throw new OpusV2EvalV2PaidAuthorizationError("consumed_wrong_workflow_resume");
+    }
+    return;
+  }
+}
+
+export function assertOpusV2EvalV2PaidCostGate(args: {
+  accrued_usd: number;
+  next_call_high_usd: number;
+}): void {
+  if (args.accrued_usd + args.next_call_high_usd > OPUS_V2_EVAL_V2_RECOMMENDED_HARD_CEILING_USD) {
+    throw new OpusV2EvalV2PaidAuthorizationError("cost_gate");
   }
 }
 

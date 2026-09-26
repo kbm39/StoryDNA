@@ -31,13 +31,19 @@ export {
   OPUS_V2_EVAL_WIRED_TO_PUBLIC_LIVE,
   OPUS_V2_EVAL_WORKFLOW_KIND,
 } from "./lock.ts";
+export { OPUS_V2_EVAL_EXPLICIT_GRANT } from "./explicit-grant.ts";
 export {
+  OPUS_V2_EVAL_EXPLICIT_AUTHORIZATION,
+  OPUS_V2_EVAL_EXPLICIT_AUTHORIZATION_STORAGE,
   OPUS_V2_EVAL_PAID_AUTHORIZATION,
   OPUS_V2_EVAL_PAID_AUTHORIZATION_ID,
   OPUS_V2_EVAL_PAID_AUTHORIZATION_STORAGE,
   OpusV2EvalPaidAuthorizationError,
   assertCanonicalPaidAuthorizationPrepared,
+  assertGrantMatchesPrepared,
   assertOpusV2EvalPaidAuthorizationGate,
+  assertValidAuthorizationState,
+  authorizeOpusV2EvalPaidAuthorization,
   cloneOpusV2EvalPaidAuthorization,
   fenceOpusV2EvalPaidProvider,
   matchingOpusV2EvalPaidGateRequest,

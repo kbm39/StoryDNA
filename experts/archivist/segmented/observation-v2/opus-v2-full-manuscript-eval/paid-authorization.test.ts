@@ -14,6 +14,9 @@ import {
   opusV2EvalProviderConstructCount,
 } from "./index.ts";
 import {
+  OPUS_V2_EVAL_EXPLICIT_GRANT,
+} from "./explicit-grant.ts";
+import {
   OPUS_V2_EVAL_PAID_AUTHORIZATION,
   OPUS_V2_EVAL_PAID_AUTHORIZATION_ID,
   OPUS_V2_EVAL_PAID_AUTHORIZATION_STORAGE,
@@ -40,8 +43,10 @@ const MODULE_FILES = [
   "index.ts",
   "lock.ts",
   "opus-v2-full-manuscript-eval.test.ts",
+  "explicit-grant.ts",
   "paid-authorization.ts",
   "paid-authorization.test.ts",
+  "paid-authorization-lifecycle.test.ts",
   "runner.ts",
 ];
 
@@ -114,12 +119,24 @@ describe("prepared Opus V2 full-manuscript paid authorization", () => {
       matchingOpusV2EvalPaidGateRequest({ workflow_kind: "archivist-segmented-pilot" }),
       matchingOpusV2EvalPaidGateRequest({
         action: "start_workflow",
-        authorization: cloneOpusV2EvalPaidAuthorization({ status: "consumed", bound_workflow_id: "wf-a" }),
+        authorization: projectOpusV2EvalPaidAuthorization(
+          projectOpusV2EvalPaidAuthorization(cloneOpusV2EvalPaidAuthorization(), "authorize", {
+            grant: OPUS_V2_EVAL_EXPLICIT_GRANT,
+          }),
+          "consume",
+          { workflow_id: "11111111-1111-1111-1111-111111111111" },
+        ),
       }),
       matchingOpusV2EvalPaidGateRequest({
         action: "resume_workflow",
-        authorization: cloneOpusV2EvalPaidAuthorization({ status: "consumed", bound_workflow_id: "wf-a" }),
-        resume_workflow_id: "wf-other",
+        authorization: projectOpusV2EvalPaidAuthorization(
+          projectOpusV2EvalPaidAuthorization(cloneOpusV2EvalPaidAuthorization(), "authorize", {
+            grant: OPUS_V2_EVAL_EXPLICIT_GRANT,
+          }),
+          "consume",
+          { workflow_id: "11111111-1111-1111-1111-111111111111" },
+        ),
+        resume_workflow_id: "22222222-2222-2222-2222-222222222222",
       }),
       matchingOpusV2EvalPaidGateRequest({
         authorization: cloneOpusV2EvalPaidAuthorization({ status: "revoked" }),
@@ -140,10 +157,11 @@ describe("prepared Opus V2 full-manuscript paid authorization", () => {
     const authorized = projectOpusV2EvalPaidAuthorization(
       cloneOpusV2EvalPaidAuthorization(),
       "authorize",
+      { grant: OPUS_V2_EVAL_EXPLICIT_GRANT },
     );
     assert.equal(authorized.status, "explicitly_authorized");
     assert.equal(authorized.bound_workflow_id, null);
-    assert.equal(authorized.spend_authorized, false);
+    assert.equal(authorized.spend_authorized, true);
     const consumed = projectOpusV2EvalPaidAuthorization(authorized, "consume", {
       workflow_id: "11111111-1111-1111-1111-111111111111",
     });

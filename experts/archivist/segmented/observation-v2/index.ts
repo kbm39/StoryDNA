@@ -51,6 +51,22 @@ export {
   v2PromptForbidsEditorialOutput,
 } from "./prompt.ts";
 export {
+  V3_EXTRACTION_PROMPT_VERSION,
+  V3_ORGANIZATION_AFFILIATION_MAPPING,
+  V3_OUTPUT_ORDER_INSTRUCTION,
+  V3_PROMPT_MAX_TOKENS,
+  V3_PROMPT_SCHEMA_VERSION,
+  V3_PROMPT_STATUS,
+  V3_PROMPT_WIRED_TO_PAID_PATH,
+  V3_REQUIRED_PROMPT_KINDS,
+  assertHistoricalPromptsUnchangedByV3,
+  assertV3PromptCoversObservationKinds,
+  buildV3ObservationSystemPrompt,
+  buildV3ObservationUserPrompt,
+  v3PromptForbidsEditorialOutput,
+  v3PromptRemovesClockFirstStarvation,
+} from "./prompt-v3.ts";
+export {
   V2_ADAPTER_STATUS,
   V2_ADAPTER_VERSION,
   V2_ADAPTER_WIRED_TO_PAID_PATH,

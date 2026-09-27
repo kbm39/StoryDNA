@@ -44,8 +44,10 @@ import GenerateReviewsButton from "./GenerateReviewsButton";
 import LiteraryAgentPublishingSection from "./LiteraryAgentPublishingSection";
 import ArchivistDryRunPanel from "./ArchivistDryRunPanel";
 import ArchivistCandidateReviewPanel from "./ArchivistCandidateReviewPanel";
+import ArchivistReviewRecommendedSection from "./ArchivistReviewRecommendedSection";
 import { isArchivistDryRunUiAllowed } from "@/lib/archivist-dry-run/allow.ts";
 import { loadArchivistCandidateReviewForManuscript } from "@/lib/archivist-candidate-review/load.ts";
+import { loadArchivistReviewRecommendedForManuscript } from "@/lib/archivist-review-recommended/load.ts";
 import RevisionCandidatesPreview from "./RevisionCandidatesPreview";
 import { ReviewGradingPanel } from "./ReviewGradingPanel";
 import { RevisionImpactPanel } from "./RevisionImpactPanel";
@@ -342,6 +344,7 @@ export default async function ManuscriptPage({
   if (!manuscript) notFound();
   const showArchivistDryRun = isArchivistDryRunUiAllowed();
   const candidateReview = await loadArchivistCandidateReviewForManuscript(id);
+  const reviewRecommended = loadArchivistReviewRecommendedForManuscript(id);
 
   const currentVersionId = manuscript.current_version_id ?? null;
   const fallbackWordCount = manuscript.word_count;
@@ -557,6 +560,7 @@ export default async function ManuscriptPage({
           initialActiveWorkflow={activeWorkflow}
         />
         {candidateReview.ok ? <ArchivistCandidateReviewPanel model={candidateReview.model} /> : null}
+        {reviewRecommended.ok ? <ArchivistReviewRecommendedSection model={reviewRecommended.model} /> : null}
         {showArchivistDryRun ? <ArchivistDryRunPanel manuscriptId={id} /> : null}
         {(commercial || craft) && (
           <div className="mb-3 flex justify-end">

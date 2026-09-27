@@ -31,15 +31,44 @@ function isGenericObject(value: string): boolean {
   return GENERIC_OBJECTS.has(bare);
 }
 
+function compactForCanonical(value: string): string {
+  return norm(value).replace(/[\u2018\u2019]/g, "'");
+}
+
+function leadingPossessor(compact: string): string | null {
+  const match = compact.match(/^([a-z]+'s)\b/);
+  return match?.[1] ?? null;
+}
+
+/** High-confidence only: possessor + "team coin". Does not key a bare coin. */
+function possessorTeamCoinKey(compact: string): string | null {
+  if (!/\bteam coin\b/.test(compact)) return null;
+  const possessor = leadingPossessor(compact);
+  return possessor ? `${possessor} team coin` : null;
+}
+
+/** High-confidence only: possessor + insurance + laptop. Does not key a bare laptop. */
+function possessorInsuranceLaptopKey(compact: string): string | null {
+  if (!/\binsurance\b/.test(compact) || !/\blaptop\b/.test(compact)) return null;
+  const possessor = leadingPossessor(compact);
+  return possessor ? `${possessor} insurance laptop` : null;
+}
+
 export function objectContinuityKey(observation: V2Observation): string | null {
   if (observation.kind !== "object_equipment") return null;
   const payload = observation.payload as unknown as Record<string, unknown>;
   const identity = text(payload.object_identity);
   const object = text(payload.object);
+  const source = identity ?? object;
+  if (!source) return null;
+  const compact = compactForCanonical(source);
+  const teamCoin = possessorTeamCoinKey(compact);
+  if (teamCoin) return teamCoin;
+  const insuranceLaptop = possessorInsuranceLaptopKey(compact);
+  if (insuranceLaptop) return insuranceLaptop;
   if (identity) return norm(identity.split(",")[0] ?? identity);
-  if (!object) return null;
-  if (isGenericObject(object)) return null;
-  return norm(object);
+  if (isGenericObject(object ?? "")) return null;
+  return norm(object ?? source);
 }
 
 export function countRepeatedObjectContinuityChains(

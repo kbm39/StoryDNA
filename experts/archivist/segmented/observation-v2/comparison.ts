@@ -6,6 +6,7 @@
 
 import { chapterOrdinalFromLocator } from "../comparison-key.ts";
 import { v2AliveDeadState, v2ObservationEntityKey } from "./entity-resolution.ts";
+import { objectContinuityKey } from "./object-continuity.ts";
 import type { V2Observation, V2PairingInterface } from "./types.ts";
 import { classifyV2PairingInterface } from "./pairing-interface.ts";
 
@@ -489,9 +490,9 @@ function diagnoseLocation(left: V2Observation, right: V2Observation): Omit<V2Com
 }
 
 function diagnoseObject(left: V2Observation, right: V2Observation): Omit<V2ComparisonDiagnosis, "left_id" | "right_id" | "identity_status" | "confirmation_blocked"> {
-  const leftId = text(payload(left).object_identity);
-  const rightId = text(payload(right).object_identity);
-  if (!leftId || !rightId) {
+  const leftKey = objectContinuityKey(left);
+  const rightKey = objectContinuityKey(right);
+  if (!leftKey || !rightKey) {
     return {
       pairing_interface: "object_equipment",
       eligibility: "insufficient_semantic_specificity",
@@ -499,7 +500,7 @@ function diagnoseObject(left: V2Observation, right: V2Observation): Omit<V2Compa
       explanation: "Generic objects without stable identity are not compared.",
     };
   }
-  if (norm(leftId) !== norm(rightId)) {
+  if (leftKey !== rightKey) {
     return {
       pairing_interface: "object_equipment",
       eligibility: "not_comparable",

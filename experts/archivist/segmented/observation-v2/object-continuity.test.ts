@@ -91,6 +91,58 @@ describe("repeated-object continuity chains", () => {
     ];
     assert.equal(countRepeatedObjectContinuityChains(rows), 1);
   });
+
+  it("canonicalizes the da1cb4fb team-coin and insurance-laptop identity variants", () => {
+    const coinA = obj(
+      "obs-15",
+      {
+        object: "brass team coin, trident over flag, Ruth 1:16-17",
+        object_identity: "Preacher's team coin",
+        action_or_state: "given by Preacher to Cole; carried nine years",
+      },
+      "Ch28, Coronado birthday",
+      "seg-13-chapter-27-chapter-28",
+    );
+    const coinB = obj(
+      "o1",
+      {
+        object: "team coin",
+        object_identity: "Preacher's brass team coin, trident over flag, Ruth 1:16-17",
+        action_or_state: "given by Preacher to Cole; Cole picks it up",
+        location: "coffee table",
+      },
+      "pre-chapter, coin gift",
+      "seg-14-chapter-29-chapter-29",
+    );
+    const laptopA = obj(
+      "obs-15-laptop",
+      {
+        object: "laptop",
+        object_identity: "Cyrus's laptop labeled 'Insurance' in Farsi",
+        action_or_state: "found hidden under floor stone; taken by Ari",
+      },
+      "Chapter Nineteen, safe house",
+      "seg-09-chapter-17-chapter-19",
+    );
+    const laptopB = obj(
+      "obs-05",
+      {
+        object: "laptop",
+        object_identity: "Cyrus's hardware-encrypted laptop labeled Insurance in Farsi",
+        action_or_state: "taken by Ari from Hebron safe house",
+      },
+      "Chapter Nineteen, safe house",
+      "seg-10-chapter-20-chapter-21",
+    );
+    const bareLaptop = obj("bare", { object: "laptop", action_or_state: "opened" }, "CHAPTER TEN", "seg-10");
+    assert.equal(objectContinuityKey(coinA), "preacher's team coin");
+    assert.equal(objectContinuityKey(coinB), "preacher's team coin");
+    assert.equal(objectContinuityKey(laptopA), "cyrus's insurance laptop");
+    assert.equal(objectContinuityKey(laptopB), "cyrus's insurance laptop");
+    assert.equal(objectContinuityKey(bareLaptop), null);
+    assert.equal(countRepeatedObjectContinuityChains([coinA, coinB, laptopA, laptopB]), 2);
+    assert.equal(countRepeatedObjectContinuityChains([coinA, coinB, laptopA, laptopB, bareLaptop]), 2);
+  });
 });
 
 describe("namespaced local observation IDs", () => {

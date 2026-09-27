@@ -342,6 +342,71 @@ describe("V2 observation comparison", () => {
     assert.equal(diagnoseV2ObservationPair(genericBoat, otherBoat).eligibility, "insufficient_semantic_specificity");
   });
 
+  it("treats da1cb4fb coin and insurance-laptop identity variants as equivalent, not comparable", () => {
+    const coinA = obs(
+      "coin-a",
+      {
+        kind: "object_equipment",
+        payload: {
+          object: "brass team coin, trident over flag, Ruth 1:16-17",
+          object_identity: "Preacher's team coin",
+          action_or_state: "given by Preacher to Cole; carried nine years",
+        },
+      },
+      { subject: "team coin", predicate: "given", object: "Preacher's team coin" },
+      "Ch28, Coronado birthday",
+    );
+    const coinB = obs(
+      "coin-b",
+      {
+        kind: "object_equipment",
+        payload: {
+          object: "team coin",
+          object_identity: "Preacher's brass team coin, trident over flag, Ruth 1:16-17",
+          action_or_state: "given by Preacher to Cole; Cole picks it up",
+        },
+      },
+      { subject: "team coin", predicate: "picked_up", object: "Preacher's brass team coin" },
+      "pre-chapter, coin gift",
+    );
+    const laptopA = obs(
+      "laptop-a",
+      {
+        kind: "object_equipment",
+        payload: {
+          object: "laptop",
+          object_identity: "Cyrus's laptop labeled 'Insurance' in Farsi",
+          action_or_state: "found hidden under floor stone; taken by Ari",
+        },
+      },
+      { subject: "laptop", predicate: "found", object: "Cyrus's laptop labeled 'Insurance' in Farsi" },
+      "Chapter Nineteen, safe house",
+    );
+    const laptopB = obs(
+      "laptop-b",
+      {
+        kind: "object_equipment",
+        payload: {
+          object: "laptop",
+          object_identity: "Cyrus's hardware-encrypted laptop labeled Insurance in Farsi",
+          action_or_state: "taken by Ari from Hebron safe house",
+        },
+      },
+      { subject: "laptop", predicate: "taken", object: "Cyrus's hardware-encrypted laptop labeled Insurance in Farsi" },
+      "Chapter Nineteen, safe house",
+    );
+    const coin = diagnoseV2ObservationPair(coinA, coinB);
+    const laptop = diagnoseV2ObservationPair(laptopA, laptopB);
+    assert.equal(coin.reason, "object_state_transition_or_restatement");
+    assert.equal(coin.eligibility, "equivalent");
+    assert.notEqual(coin.reason, "different_object_identity");
+    assert.notEqual(coin.eligibility, "comparable");
+    assert.equal(laptop.reason, "object_state_transition_or_restatement");
+    assert.equal(laptop.eligibility, "equivalent");
+    assert.notEqual(laptop.reason, "different_object_identity");
+    assert.notEqual(laptop.eligibility, "comparable");
+  });
+
   it("compares the same operational capability and ignores unrelated ones", () => {
     const radiosDown = obs(
       "cap-a",
